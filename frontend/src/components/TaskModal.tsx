@@ -34,7 +34,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   useEffect(() => {
     if (task) {
       setTitle(task.title);
-      setStatus(task.status);
+      setStatus(task.status || initialStatus);
       setTagsInput(task.tags ? task.tags.join(', ') : '');
       setAssignee(task.assignee || '');
       setContent(task.content || '');

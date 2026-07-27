@@ -28,6 +28,7 @@ export async function fetchTasks(query?: string): Promise<Task[]> {
 export interface CreateTaskPayload {
   title: string;
   status: TaskStatus;
+  column_id?: string;
   tags?: string[];
   assignee?: string;
   content?: string;
@@ -48,6 +49,7 @@ export async function createTask(payload: CreateTaskPayload): Promise<Task> {
 export interface UpdateTaskPayload {
   title?: string;
   status?: TaskStatus;
+  column_id?: string;
   tags?: string[];
   assignee?: string;
   content?: string;

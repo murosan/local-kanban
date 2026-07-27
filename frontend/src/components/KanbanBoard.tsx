@@ -64,7 +64,9 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
     let targetColumnId: string | undefined;
     let targetStatus: TaskStatus | undefined;
 
-    const matchingColumn = columns.find((col) => col.id === overId);
+    const matchingColumn = columns.find(
+      (col) => col.id === overId || (col.status && col.status === overId)
+    );
     if (matchingColumn) {
       targetColumnId = matchingColumn.id;
       targetStatus = matchingColumn.status;
@@ -73,7 +75,9 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
       if (overTaskItem) {
         targetColumnId = overTaskItem.column_id;
         targetStatus = overTaskItem.status;
-        const parentCol = columns.find((col) => col.id === targetColumnId);
+        const parentCol = columns.find(
+          (col) => col.id === targetColumnId || (col.status && col.status === targetStatus)
+        );
         if (parentCol && !targetStatus) {
           targetStatus = parentCol.status;
         }
@@ -164,7 +168,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
       <DragOverlay>
         {activeTask ? (
           <div className="rotate-2 scale-105 shadow-2xl">
-            <TaskCard task={activeTask} onCardClick={() => {}} />
+            <TaskCard task={activeTask} isOverlay />
           </div>
         ) : null}
       </DragOverlay>

@@ -18,12 +18,13 @@ const statusColors: Record<string, { badge: string; border: string }> = {
 };
 
 export const KanbanColumn: React.FC<KanbanColumnProps> = ({ column, tasks, onCardClick }) => {
+  const columnDropId = column.id || column.status || '';
   const { setNodeRef, isOver } = useDroppable({
-    id: column.status,
+    id: columnDropId,
   });
 
   const taskIds = tasks.map((t) => t.id);
-  const colorStyle = statusColors[column.status] || { badge: 'bg-slate-800 text-slate-300', border: 'border-t-slate-600' };
+  const colorStyle = (column.status && statusColors[column.status]) || { badge: 'bg-slate-800 text-slate-300', border: 'border-t-slate-600' };
 
   return (
     <div

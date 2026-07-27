@@ -2,14 +2,15 @@ import React from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Task } from '../types/task';
-import { GripVertical, Tag, User, Clock } from 'lucide-react';
+import { Tag, User, Clock } from 'lucide-react';
 
 interface TaskCardProps {
   task: Task;
-  onCardClick: (task: Task) => void;
+  onCardClick?: (task: Task) => void;
+  isOverlay?: boolean;
 }
 
-export const TaskCard: React.FC<TaskCardProps> = ({ task, onCardClick }) => {
+export const TaskCard: React.FC<TaskCardProps> = ({ task, onCardClick, isOverlay }) => {
   const {
     attributes,
     listeners,
@@ -17,12 +18,14 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, onCardClick }) => {
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: task.id, data: { task } });
+  } = useSortable({ id: task.id, data: { task }, disabled: isOverlay });
 
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
+  const style = isOverlay
+    ? undefined
+    : {
+        transform: CSS.Transform.toString(transform),
+        transition,
+      };
 
   const formattedDate = new Date(task.updated_at).toLocaleDateString(undefined, {
     month: 'short',
@@ -35,25 +38,17 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, onCardClick }) => {
     <div
       ref={setNodeRef}
       style={style}
-      className={`glass-card group relative p-4 rounded-xl cursor-pointer ${
+      {...attributes}
+      {...listeners}
+      className={`glass-card group relative p-4 rounded-xl cursor-grab active:cursor-grabbing ${
         isDragging ? 'opacity-40 ring-2 ring-blue-500 scale-[1.02] z-50' : ''
       }`}
-      onClick={() => onCardClick(task)}
+      onClick={() => onCardClick && onCardClick(task)}
     >
       <div className="flex items-start justify-between gap-2">
         <h3 className="font-semibold text-[var(--text-primary)] text-sm leading-snug line-clamp-2 group-hover:text-blue-500 transition-colors">
           {task.title}
         </h3>
-        
-        {/* Drag Handle */}
-        <button
-          {...attributes}
-          {...listeners}
-          className="text-slate-400 hover:text-slate-600 p-1 rounded cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 transition-opacity"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <GripVertical className="w-4 h-4" />
-        </button>
       </div>
 
       {/* Content Preview if exists */}
