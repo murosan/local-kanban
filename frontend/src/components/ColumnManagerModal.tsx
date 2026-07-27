@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Column, StatusItem } from '../types/task';
 import { useI18n } from '../i18n/I18nContext';
+import { Maximize2, Minimize2, X } from 'lucide-react';
 
 interface ColumnManagerModalProps {
   isOpen: boolean;
@@ -26,6 +27,7 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
   const [newColumnTitle, setNewColumnTitle] = useState('');
   const [newStatusName, setNewStatusName] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [isMaximized, setIsMaximized] = useState(false);
 
   useEffect(() => {
     setLocalColumns(
@@ -165,20 +167,33 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
-      <div className="bg-[var(--modal-bg)] text-[var(--text-primary)] border border-[var(--border-color)] rounded-xl shadow-2xl w-full max-w-xl overflow-hidden flex flex-col max-h-[85vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-2 sm:p-3 animate-fade-in">
+      <div className={`bg-[var(--modal-bg)] text-[var(--text-primary)] border border-[var(--border-color)] rounded-xl shadow-2xl w-full overflow-hidden flex flex-col transition-all duration-300 ${
+        isMaximized ? 'w-[98vw] h-[96vh] max-w-none max-h-none' : 'max-w-3xl h-[90vh]'
+      }`}>
         {/* Modal Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-color)]">
           <h2 className="text-lg font-semibold flex items-center space-x-2">
             <span>⚙️</span>
             <span>{t('configModal.title')}</span>
           </h2>
-          <button
-            onClick={onClose}
-            className="text-[var(--text-secondary)] hover:opacity-80 transition-colors text-xl font-bold"
-          >
-            &times;
-          </button>
+          <div className="flex items-center space-x-1">
+            <button
+              type="button"
+              onClick={() => setIsMaximized(!isMaximized)}
+              className="text-[var(--text-secondary)] hover:opacity-80 p-1.5 rounded-lg transition-colors"
+              title={isMaximized ? t('modal.minimize') : t('modal.maximize')}
+            >
+              {isMaximized ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="text-[var(--text-secondary)] hover:opacity-80 p-1.5 rounded-lg transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Tab Header */}

@@ -71,6 +71,10 @@ export const translations = {
     'preset.cyberpunk': 'サイバーパンク',
     'preset.forest': 'フォレストダーク',
     'preset.light': 'クリーンライト',
+
+    // Modal Common
+    'modal.maximize': '全画面表示',
+    'modal.minimize': '元のサイズに戻す',
   },
   en: {
     // Header
@@ -142,5 +146,9 @@ export const translations = {
     'preset.cyberpunk': 'Cyberpunk Neon',
     'preset.forest': 'Forest Dark',
     'preset.light': 'Clean Light',
+
+    // Modal Common
+    'modal.maximize': 'Maximize',
+    'modal.minimize': 'Restore size',
   },
 };

@@ -28,8 +28,8 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   return (
-    <header className="sticky top-0 z-30 glass-panel border-b border-[var(--border-color)] px-6 py-3.5 mb-6">
-      <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
+    <header className="sticky top-0 z-30 glass-panel border-b border-[var(--border-color)] px-4 sm:px-6 py-3.5 mb-4">
+      <div className="w-full flex flex-col md:flex-row items-center justify-between gap-4">
         
         {/* Brand */}
         <div className="flex items-center space-x-3">

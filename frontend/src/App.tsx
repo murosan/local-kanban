@@ -195,7 +195,7 @@ export const App: React.FC = () => {
       />
 
       {/* Main Kanban Board Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-6">
+      <main className="flex-1 w-full px-3 sm:px-4 flex flex-col">
         <KanbanBoard
           columns={config.columns}
           tasks={tasks}

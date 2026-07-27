@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ThemeConfig } from '../types/task';
 import { useI18n } from '../i18n/I18nContext';
+import { Maximize2, Minimize2, X } from 'lucide-react';
 
 interface ThemeModalProps {
   isOpen: boolean;
@@ -29,6 +30,7 @@ export const ThemeModal: React.FC<ThemeModalProps> = ({
   const [customCardBg, setCustomCardBg] = useState<string>(currentTheme?.cardBg || '#1f293d');
   const [customAccent, setCustomAccent] = useState<string>(currentTheme?.accentColor || '#3b82f6');
   const [customText, setCustomText] = useState<string>(currentTheme?.textColor || '#f8fafc');
+  const [isMaximized, setIsMaximized] = useState(false);
 
   useEffect(() => {
     if (currentTheme) {
@@ -67,30 +69,43 @@ export const ThemeModal: React.FC<ThemeModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
-      <div className="bg-[var(--modal-bg)] text-[var(--text-primary)] border border-[var(--border-color)] rounded-xl shadow-2xl w-full max-w-lg overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-2 sm:p-3 animate-fade-in">
+      <div className={`bg-[var(--modal-bg)] text-[var(--text-primary)] border border-[var(--border-color)] rounded-xl shadow-2xl w-full overflow-hidden flex flex-col transition-all duration-300 ${
+        isMaximized ? 'w-[98vw] h-[96vh] max-w-none max-h-none' : 'max-w-3xl h-[88vh]'
+      }`}>
         {/* Modal Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-color)]">
           <h2 className="text-lg font-semibold flex items-center space-x-2">
             <span>🎨</span>
             <span>{t('themeModal.title')}</span>
           </h2>
-          <button
-            onClick={onClose}
-            className="text-[var(--text-secondary)] hover:opacity-80 transition-colors text-xl font-bold"
-          >
-            &times;
-          </button>
+          <div className="flex items-center space-x-1">
+            <button
+              type="button"
+              onClick={() => setIsMaximized(!isMaximized)}
+              className="text-[var(--text-secondary)] hover:opacity-80 p-1.5 rounded-lg transition-colors"
+              title={isMaximized ? t('modal.minimize') : t('modal.maximize')}
+            >
+              {isMaximized ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="text-[var(--text-secondary)] hover:opacity-80 p-1.5 rounded-lg transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Modal Content */}
-        <div className="p-6 space-y-6 max-h-[80vh] overflow-y-auto">
+        <div className="p-6 space-y-6 flex-1 overflow-y-auto">
           {/* Preset Themes Grid */}
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)] mb-3">
               {t('themeModal.presetThemes')}
             </label>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               {PRESET_THEMES.map((preset) => {
                 const isSelected = selectedPreset === preset.id;
                 return (

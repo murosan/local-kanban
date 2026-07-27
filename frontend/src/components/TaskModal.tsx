@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { StatusItem, Task, TaskStatus } from '../types/task';
-import { X, Trash2, Save, FileText, Tag, User, AlignLeft } from 'lucide-react';
+import { X, Trash2, Save, FileText, Tag, User, AlignLeft, Maximize2, Minimize2 } from 'lucide-react';
 import { useI18n } from '../i18n/I18nContext';
 
 interface TaskModalProps {
@@ -29,6 +29,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   const [assignee, setAssignee] = useState('');
   const [content, setContent] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [isMaximized, setIsMaximized] = useState(false);
 
   useEffect(() => {
     if (task) {
@@ -95,8 +96,10 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="w-full max-w-2xl bg-[var(--modal-bg)] text-[var(--text-primary)] rounded-2xl border border-[var(--border-color)] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-3 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className={`w-full bg-[var(--modal-bg)] text-[var(--text-primary)] rounded-2xl border border-[var(--border-color)] shadow-2xl overflow-hidden flex flex-col transition-all duration-300 ${
+        isMaximized ? 'w-[98vw] h-[96vh] max-w-none max-h-none' : 'max-w-4xl h-[90vh]'
+      }`}>
         
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-color)]">
@@ -106,16 +109,27 @@ export const TaskModal: React.FC<TaskModalProps> = ({
               {task ? t('taskModal.editTitle') : t('taskModal.createTitle')}
             </h2>
           </div>
-          <button
-            onClick={onClose}
-            className="text-[var(--text-secondary)] hover:opacity-80 p-1.5 rounded-lg transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center space-x-1">
+            <button
+              type="button"
+              onClick={() => setIsMaximized(!isMaximized)}
+              className="text-[var(--text-secondary)] hover:opacity-80 p-1.5 rounded-lg transition-colors"
+              title={isMaximized ? t('modal.minimize') : t('modal.maximize')}
+            >
+              {isMaximized ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="text-[var(--text-secondary)] hover:opacity-80 p-1.5 rounded-lg transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto flex-1">
+        <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto flex-1 flex flex-col">
           {/* Title */}
           <div>
             <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-1.5">
@@ -180,16 +194,15 @@ export const TaskModal: React.FC<TaskModalProps> = ({
           </div>
 
           {/* Content (Markdown Body) */}
-          <div>
+          <div className="flex-1 flex flex-col min-h-[200px]">
             <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-1.5 flex items-center gap-1">
               <AlignLeft className="w-3.5 h-3.5 text-[var(--text-muted)]" /> {t('taskModal.contentLabel')}
             </label>
             <textarea
-              rows={6}
               value={content}
               onChange={(e) => setContent(e.target.value)}
               placeholder={t('taskModal.contentPlaceholder')}
-              className="w-full px-3.5 py-2 text-sm bg-[var(--bg-input)] border border-[var(--border-color)] rounded-xl text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-blue-500 font-mono text-xs"
+              className="w-full flex-1 p-3.5 text-sm bg-[var(--bg-input)] border border-[var(--border-color)] rounded-xl text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-blue-500 font-mono text-xs min-h-[160px] resize-y"
             />
           </div>
 
