@@ -1,0 +1,29 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    ports:
+      - "3737:3737"
+    volumes:
+      - .:/app
+      - ./tasks:/app/tasks
+    environment:
+      - PORT=3737
+      - TASKS_DIR=/app/tasks
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      - VITE_API_BASE_URL=/api
+    depends_on:
+      - backend
+    restart: unless-stopped

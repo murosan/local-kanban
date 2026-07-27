@@ -1,0 +1,18 @@
+FROM golang:1.26-alpine
+
+WORKDIR /app
+
+# Install git & build tools
+RUN apk add --no-cache git gcc musl-dev bash
+
+COPY go.mod go.sum* ./
+COPY . .
+
+RUN go mod tidy
+
+EXPOSE 3737
+
+ENV PORT=3737
+ENV TASKS_DIR=/app/tasks
+
+CMD ["go", "run", "./cmd/server"]

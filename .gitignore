@@ -1,0 +1,59 @@
+# Operating System Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE & Editor Files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Go Build & Binary Output
+bin/
+*.exe
+*.exe shadow
+*.out
+*.app
+/server
+/app/server
+
+# SQLite Cache Databases
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+.local_cache.db
+
+# Node.js & Vite Frontend
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+*.tsbuildinfo
+.npm
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Environment & Local Secrets
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Temporary Files & Logs
+*.log
+tmp/
+scratch/
+
+# Local Kanban Task Markdown Files
+tasks/*.md
+!tasks/.gitkeep
