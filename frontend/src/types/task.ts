@@ -3,7 +3,8 @@ export type TaskStatus = string;
 export interface Task {
   id: string;
   title: string;
-  status: TaskStatus;
+  column_id?: string;
+  status?: TaskStatus;
   rank: string;
   tags?: string[];
   assignee?: string;
@@ -17,7 +18,7 @@ export interface Task {
 export interface Column {
   id: string;
   title: string;
-  status: TaskStatus;
+  status?: TaskStatus;
   visible?: boolean;
   color?: string;
   order?: number;

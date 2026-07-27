@@ -61,7 +61,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         .filter(Boolean);
 
       await onSave({
-        ...(task ? { id: task.id } : {}),
+        ...(task ? { id: task.id, column_id: task.column_id } : {}),
         title: title.trim(),
         status,
         tags,

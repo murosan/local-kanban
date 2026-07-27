@@ -84,6 +84,7 @@ func (s *Server) handleGetTasks(w http.ResponseWriter, r *http.Request) {
 
 type CreateTaskPayload struct {
 	Title    string           `json:"title"`
+	ColumnID string           `json:"column_id"`
 	Status   model.TaskStatus `json:"status"`
 	Tags     []string         `json:"tags"`
 	Assignee string           `json:"assignee"`
@@ -103,15 +104,13 @@ func (s *Server) handleCreateTask(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, "Title is required")
 		return
 	}
-	if payload.Status == "" {
-		payload.Status = model.StatusTodo
-	}
 
 	// Calculate LexoRank
-	rank := s.calculateRank(payload.Status, payload.PrevID, payload.NextID)
+	rank := s.calculateRank(payload.ColumnID, payload.Status, payload.PrevID, payload.NextID)
 
 	task := &model.Task{
 		Title:    payload.Title,
+		ColumnID: payload.ColumnID,
 		Status:   payload.Status,
 		Rank:     rank,
 		Tags:     payload.Tags,
@@ -129,6 +128,7 @@ func (s *Server) handleCreateTask(w http.ResponseWriter, r *http.Request) {
 
 type UpdateTaskPayload struct {
 	Title    *string           `json:"title"`
+	ColumnID *string           `json:"column_id"`
 	Status   *model.TaskStatus `json:"status"`
 	Tags     []string          `json:"tags"`
 	Assignee *string           `json:"assignee"`
@@ -160,6 +160,12 @@ func (s *Server) handleUpdateTask(w http.ResponseWriter, r *http.Request) {
 	if payload.Title != nil {
 		task.Title = *payload.Title
 	}
+	if payload.ColumnID != nil {
+		task.ColumnID = *payload.ColumnID
+	}
+	if payload.Status != nil {
+		task.Status = *payload.Status
+	}
 	if payload.Tags != nil {
 		task.Tags = payload.Tags
 	}
@@ -170,19 +176,15 @@ func (s *Server) handleUpdateTask(w http.ResponseWriter, r *http.Request) {
 		task.Content = *payload.Content
 	}
 
+	targetColumnID := task.ColumnID
 	targetStatus := task.Status
-	statusChanged := false
-	if payload.Status != nil && *payload.Status != task.Status {
-		targetStatus = *payload.Status
-		task.Status = targetStatus
-		statusChanged = true
-	}
+	columnChanged := payload.ColumnID != nil && *payload.ColumnID != task.ColumnID
 
-	// Calculate new Rank if explicit rank, or prev_id / next_id provided, or status changed
+	// Calculate new Rank if explicit rank, or prev_id / next_id provided, or column changed
 	if payload.Rank != nil {
 		task.Rank = *payload.Rank
-	} else if payload.PrevID != "" || payload.NextID != "" || statusChanged {
-		task.Rank = s.calculateRank(targetStatus, payload.PrevID, payload.NextID)
+	} else if payload.PrevID != "" || payload.NextID != "" || columnChanged {
+		task.Rank = s.calculateRank(targetColumnID, targetStatus, payload.PrevID, payload.NextID)
 	}
 
 	if err := s.store.SaveTask(task); err != nil {
@@ -208,7 +210,7 @@ func (s *Server) handleDeleteTask(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) calculateRank(status model.TaskStatus, prevID, nextID string) string {
+func (s *Server) calculateRank(columnID string, status model.TaskStatus, prevID, nextID string) string {
 	tasks, err := s.store.GetAllTasks()
 	if err != nil {
 		return lexorank.Between("", "")
@@ -216,8 +218,15 @@ func (s *Server) calculateRank(status model.TaskStatus, prevID, nextID string) s
 
 	var prevRank, nextRank string
 	for _, t := range tasks {
-		if t.Status != status {
-			continue
+		// Group tasks by columnID if provided, otherwise by status
+		if columnID != "" {
+			if t.ColumnID != columnID {
+				continue
+			}
+		} else if status != "" {
+			if t.Status != status {
+				continue
+			}
 		}
 		if prevID != "" && t.ID == prevID {
 			prevRank = t.Rank

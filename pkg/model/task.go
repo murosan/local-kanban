@@ -24,7 +24,8 @@ var DefaultStatuses = []TaskStatus{
 type Task struct {
 	ID         string     `json:"id" yaml:"id"`
 	Title      string     `json:"title" yaml:"title"`
-	Status     TaskStatus `json:"status" yaml:"status"`
+	ColumnID   string     `json:"column_id,omitempty" yaml:"column_id,omitempty"`
+	Status     TaskStatus `json:"status,omitempty" yaml:"status,omitempty"`
 	Rank       string     `json:"rank" yaml:"rank"`
 	Tags       []string   `json:"tags,omitempty" yaml:"tags,omitempty"`
 	Assignee   string     `json:"assignee,omitempty" yaml:"assignee,omitempty"`
@@ -61,7 +62,7 @@ type BoardConfig struct {
 type Column struct {
 	ID      string     `json:"id"`
 	Title   string     `json:"title"`
-	Status  TaskStatus `json:"status"`
+	Status  TaskStatus `json:"status,omitempty"`
 	Visible bool       `json:"visible"`
 	Color   string     `json:"color,omitempty"`
 	Order   int        `json:"order,omitempty"`

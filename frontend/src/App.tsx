@@ -109,12 +109,14 @@ export const App: React.FC = () => {
   };
 
   const handleSaveTask = async (taskData: Partial<Task>) => {
-    const defaultStatus = config?.columns[0]?.status ?? 'Todo';
+    const defaultColumnId = config?.columns[0]?.id;
+    const defaultStatus = config?.columns[0]?.status || 'Todo';
     if (taskData.id) {
       await updateTask(taskData.id, taskData);
     } else {
       await createTask({
         title: taskData.title || 'Untitled',
+        column_id: taskData.column_id || defaultColumnId,
         status: taskData.status || defaultStatus,
         tags: taskData.tags,
         assignee: taskData.assignee,
@@ -130,17 +132,19 @@ export const App: React.FC = () => {
   };
 
   const handleSaveConfig = async (newColumns: Column[], newStatuses: StatusItem[]) => {
-    if (!config || newColumns.length === 0 || newStatuses.length === 0) return;
+    if (!config || newColumns.length === 0) return;
 
-    // Check for deleted status items
-    const validStatusNames = new Set(newStatuses.map((s) => s.name));
-    const fallbackStatus = newStatuses[0].name;
+    const validColumnIds = new Set(newColumns.map((c) => c.id));
+    const fallbackColumn = newColumns[0];
 
-    // Reassign orphan tasks whose status was deleted
-    const orphanTasks = tasks.filter((t) => !validStatusNames.has(t.status));
+    // Reassign orphan tasks whose column was deleted
+    const orphanTasks = tasks.filter((t) => t.column_id && !validColumnIds.has(t.column_id));
     for (const t of orphanTasks) {
       try {
-        await updateTask(t.id, { status: fallbackStatus });
+        await updateTask(t.id, {
+          column_id: fallbackColumn.id,
+          status: fallbackColumn.status || t.status,
+        });
       } catch (err) {
         console.error(`Failed to reassign task ${t.id}:`, err);
       }

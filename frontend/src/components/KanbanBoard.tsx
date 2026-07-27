@@ -60,23 +60,36 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
     const activeTaskItem = findTask(activeId);
     if (!activeTaskItem) return;
 
-    // Determine target status
-    let targetStatus: TaskStatus = activeTaskItem.status;
-    const matchingColumn = columns.find((col) => col.id === overId || col.status === overId);
-    
+    // Determine target column and status
+    let targetColumnId: string | undefined;
+    let targetStatus: TaskStatus | undefined;
+
+    const matchingColumn = columns.find((col) => col.id === overId);
     if (matchingColumn) {
+      targetColumnId = matchingColumn.id;
       targetStatus = matchingColumn.status;
     } else {
       const overTaskItem = findTask(overId);
       if (overTaskItem) {
+        targetColumnId = overTaskItem.column_id;
         targetStatus = overTaskItem.status;
+        const parentCol = columns.find((col) => col.id === targetColumnId);
+        if (parentCol && !targetStatus) {
+          targetStatus = parentCol.status;
+        }
       }
     }
 
+    if (!targetColumnId && !targetStatus) return;
+
     // Get ordered tasks in target column
-    const targetTasks = tasks.filter(
-      (t) => t.status === targetStatus && t.id !== activeId
-    );
+    const targetTasks = tasks.filter((t) => {
+      if (t.id === activeId) return false;
+      if (targetColumnId && t.column_id) {
+        return t.column_id === targetColumnId;
+      }
+      return targetStatus && t.status === targetStatus;
+    });
 
     // Find position where active item was dropped
     let prevId = '';
@@ -99,6 +112,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
 
     try {
       await updateTask(activeId, {
+        column_id: targetColumnId,
         status: targetStatus,
         prev_id: prevId,
         next_id: nextId,
@@ -130,7 +144,12 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
     >
       <div className="flex space-x-4 overflow-x-auto pb-8 pt-1 items-start min-h-[calc(100vh-120px)] w-full px-1">
         {visibleColumns.map((column) => {
-          const colTasks = tasks.filter((t) => t.status === column.status);
+          const colTasks = tasks.filter((t) => {
+            if (t.column_id) {
+              return t.column_id === column.id;
+            }
+            return column.status && t.status === column.status;
+          });
           return (
             <KanbanColumn
               key={column.id}
