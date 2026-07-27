@@ -41,7 +41,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, onCardClick }) => {
       onClick={() => onCardClick(task)}
     >
       <div className="flex items-start justify-between gap-2">
-        <h3 className="font-semibold text-slate-100 text-sm leading-snug line-clamp-2 group-hover:text-blue-400 transition-colors">
+        <h3 className="font-semibold text-[var(--text-primary)] text-sm leading-snug line-clamp-2 group-hover:text-blue-500 transition-colors">
           {task.title}
         </h3>
         
@@ -49,7 +49,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, onCardClick }) => {
         <button
           {...attributes}
           {...listeners}
-          className="text-slate-600 hover:text-slate-300 p-1 rounded cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 transition-opacity"
+          className="text-slate-400 hover:text-slate-600 p-1 rounded cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 transition-opacity"
           onClick={(e) => e.stopPropagation()}
         >
           <GripVertical className="w-4 h-4" />
@@ -58,7 +58,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, onCardClick }) => {
 
       {/* Content Preview if exists */}
       {task.content && (
-        <p className="text-xs text-slate-400 mt-1.5 line-clamp-2 font-normal leading-relaxed">
+        <p className="text-xs text-[var(--text-secondary)] mt-1.5 line-clamp-2 font-normal leading-relaxed">
           {task.content.replace(/^#+\s+/gm, '')}
         </p>
       )}
@@ -69,9 +69,9 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, onCardClick }) => {
           {task.tags.map((tag) => (
             <span
               key={tag}
-              className="inline-flex items-center space-x-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-slate-800/80 text-blue-300 border border-slate-700/50"
+              className="inline-flex items-center space-x-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-500 border border-blue-500/20"
             >
-              <Tag className="w-3 h-3 text-blue-400" />
+              <Tag className="w-3 h-3 text-blue-500" />
               <span>{tag}</span>
             </span>
           ))}
@@ -79,9 +79,9 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, onCardClick }) => {
       )}
 
       {/* Footer Info */}
-      <div className="flex items-center justify-between mt-3.5 pt-2.5 border-t border-slate-800/60 text-xs text-slate-400">
+      <div className="flex items-center justify-between mt-3.5 pt-2.5 border-t border-[var(--border-color)] text-xs text-[var(--text-secondary)]">
         {task.assignee ? (
-          <div className="flex items-center space-x-1 text-slate-300">
+          <div className="flex items-center space-x-1 text-[var(--text-secondary)]">
             <User className="w-3.5 h-3.5 text-indigo-400" />
             <span>{task.assignee}</span>
           </div>
@@ -89,7 +89,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, onCardClick }) => {
           <span />
         )}
 
-        <div className="flex items-center space-x-1 text-slate-500 font-mono text-[10px]">
+        <div className="flex items-center space-x-1 text-[var(--text-muted)] font-mono text-[10px]">
           <Clock className="w-3 h-3" />
           <span>{formattedDate}</span>
         </div>

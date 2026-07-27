@@ -8,6 +8,16 @@ export async function fetchBoardConfig(): Promise<BoardConfig> {
   return res.json();
 }
 
+export async function saveBoardConfig(config: BoardConfig): Promise<BoardConfig> {
+  const res = await fetch(`${API_BASE}/config`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(config),
+  });
+  if (!res.ok) throw new Error('Failed to save board config');
+  return res.json();
+}
+
 export async function fetchTasks(query?: string): Promise<Task[]> {
   const url = query ? `${API_BASE}/tasks?q=${encodeURIComponent(query)}` : `${API_BASE}/tasks`;
   const res = await fetch(url);

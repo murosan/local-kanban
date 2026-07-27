@@ -1,20 +1,50 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { BoardConfig, Task, TaskStatus } from './types/task';
-import { fetchBoardConfig, fetchTasks, createTask, updateTask, deleteTask } from './services/api';
+import { BoardConfig, Column, StatusItem, Task, TaskStatus, ThemeConfig } from './types/task';
+import { fetchBoardConfig, fetchTasks, createTask, updateTask, deleteTask, saveBoardConfig } from './services/api';
 import { Header } from './components/Header';
 import { KanbanBoard } from './components/KanbanBoard';
 import { TaskModal } from './components/TaskModal';
+import { ThemeModal } from './components/ThemeModal';
+import { ColumnManagerModal } from './components/ColumnManagerModal';
+import { useI18n } from './i18n/I18nContext';
 
 export const App: React.FC = () => {
+  const { language, setLanguage } = useI18n();
   const [config, setConfig] = useState<BoardConfig | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSyncing, setIsSyncing] = useState(false);
 
-  // Modal State
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  // Modal States
+  const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
+  const [isThemeModalOpen, setIsThemeModalOpen] = useState(false);
+  const [isColumnModalOpen, setIsColumnModalOpen] = useState(false);
+
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [initialStatus, setInitialStatus] = useState<TaskStatus>('Todo');
+
+  const applyTheme = useCallback((theme?: ThemeConfig) => {
+    const root = document.documentElement;
+    if (!theme || theme.name === 'dark') {
+      root.removeAttribute('data-theme');
+      root.style.removeProperty('--bg-primary');
+      root.style.removeProperty('--bg-card');
+      root.style.removeProperty('--accent-color');
+      root.style.removeProperty('--text-primary');
+    } else if (theme.name === 'custom') {
+      root.setAttribute('data-theme', 'custom');
+      if (theme.primaryBg) root.style.setProperty('--bg-primary', theme.primaryBg);
+      if (theme.cardBg) root.style.setProperty('--bg-card', theme.cardBg);
+      if (theme.accentColor) root.style.setProperty('--accent-color', theme.accentColor);
+      if (theme.textColor) root.style.setProperty('--text-primary', theme.textColor);
+    } else {
+      root.setAttribute('data-theme', theme.name);
+      root.style.removeProperty('--bg-primary');
+      root.style.removeProperty('--bg-card');
+      root.style.removeProperty('--accent-color');
+      root.style.removeProperty('--text-primary');
+    }
+  }, []);
 
   const loadData = useCallback(async () => {
     setIsSyncing(true);
@@ -25,12 +55,31 @@ export const App: React.FC = () => {
       ]);
       setConfig(cfg);
       setTasks(taskList);
+
+      if (cfg.language === 'ja' || cfg.language === 'en') {
+        setLanguage(cfg.language);
+      }
+
+      if (cfg.theme && cfg.theme.name) {
+        applyTheme(cfg.theme);
+        localStorage.setItem('localkanban_theme', JSON.stringify(cfg.theme));
+      } else {
+        const storedTheme = localStorage.getItem('localkanban_theme');
+        if (storedTheme) {
+          try {
+            const parsedTheme = JSON.parse(storedTheme);
+            applyTheme(parsedTheme);
+          } catch {
+            // ignore
+          }
+        }
+      }
     } catch (err) {
       console.error('Error fetching kanban data:', err);
     } finally {
       setIsSyncing(false);
     }
-  }, [searchQuery]);
+  }, [searchQuery, applyTheme, setLanguage]);
 
   useEffect(() => {
     loadData();
@@ -47,26 +96,26 @@ export const App: React.FC = () => {
     };
   }, [loadData]);
 
-  const handleOpenNewTaskModal = (status: TaskStatus = 'Todo') => {
+  const handleOpenNewTaskModal = (status?: TaskStatus) => {
+    const defaultStatus = status || (config?.columns[0]?.status ?? 'Todo');
     setSelectedTask(null);
-    setInitialStatus(status);
-    setIsModalOpen(true);
+    setInitialStatus(defaultStatus);
+    setIsTaskModalOpen(true);
   };
 
   const handleCardClick = (task: Task) => {
     setSelectedTask(task);
-    setIsModalOpen(true);
+    setIsTaskModalOpen(true);
   };
 
   const handleSaveTask = async (taskData: Partial<Task>) => {
+    const defaultStatus = config?.columns[0]?.status ?? 'Todo';
     if (taskData.id) {
-      // Update
       await updateTask(taskData.id, taskData);
     } else {
-      // Create
       await createTask({
         title: taskData.title || 'Untitled',
-        status: taskData.status || 'Todo',
+        status: taskData.status || defaultStatus,
         tags: taskData.tags,
         assignee: taskData.assignee,
         content: taskData.content,
@@ -78,6 +127,47 @@ export const App: React.FC = () => {
   const handleDeleteTask = async (id: string) => {
     await deleteTask(id);
     await loadData();
+  };
+
+  const handleSaveConfig = async (newColumns: Column[], newStatuses: StatusItem[]) => {
+    if (!config || newColumns.length === 0 || newStatuses.length === 0) return;
+
+    // Check for deleted status items
+    const validStatusNames = new Set(newStatuses.map((s) => s.name));
+    const fallbackStatus = newStatuses[0].name;
+
+    // Reassign orphan tasks whose status was deleted
+    const orphanTasks = tasks.filter((t) => !validStatusNames.has(t.status));
+    for (const t of orphanTasks) {
+      try {
+        await updateTask(t.id, { status: fallbackStatus });
+      } catch (err) {
+        console.error(`Failed to reassign task ${t.id}:`, err);
+      }
+    }
+
+    const updatedConfig: BoardConfig = {
+      ...config,
+      columns: newColumns,
+      statuses: newStatuses,
+      language,
+    };
+    const saved = await saveBoardConfig(updatedConfig);
+    setConfig(saved);
+    await loadData();
+  };
+
+  const handleSelectTheme = async (theme: ThemeConfig) => {
+    applyTheme(theme);
+    localStorage.setItem('localkanban_theme', JSON.stringify(theme));
+    if (!config) return;
+    const updatedConfig: BoardConfig = { ...config, theme, language };
+    try {
+      const saved = await saveBoardConfig(updatedConfig);
+      setConfig(saved);
+    } catch (err) {
+      console.error('Failed to save theme to config:', err);
+    }
   };
 
   if (!config) {
@@ -92,13 +182,15 @@ export const App: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-dark-bg text-slate-100">
+    <div className="min-h-screen flex flex-col transition-colors duration-300">
       {/* Header */}
       <Header
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         onReload={loadData}
-        onOpenNewTaskModal={() => handleOpenNewTaskModal('Todo')}
+        onOpenNewTaskModal={() => handleOpenNewTaskModal()}
+        onOpenThemeModal={() => setIsThemeModalOpen(true)}
+        onOpenColumnManagerModal={() => setIsColumnModalOpen(true)}
         isSyncing={isSyncing}
       />
 
@@ -114,12 +206,30 @@ export const App: React.FC = () => {
 
       {/* Create / Edit Modal */}
       <TaskModal
-        isOpen={isModalOpen}
+        isOpen={isTaskModalOpen}
         task={selectedTask}
         initialStatus={initialStatus}
-        onClose={() => setIsModalOpen(false)}
+        statuses={config.statuses}
+        onClose={() => setIsTaskModalOpen(false)}
         onSave={handleSaveTask}
         onDelete={handleDeleteTask}
+      />
+
+      {/* Theme Selection Modal */}
+      <ThemeModal
+        isOpen={isThemeModalOpen}
+        onClose={() => setIsThemeModalOpen(false)}
+        currentTheme={config.theme}
+        onSelectTheme={handleSelectTheme}
+      />
+
+      {/* Board Column Configuration Modal */}
+      <ColumnManagerModal
+        isOpen={isColumnModalOpen}
+        onClose={() => setIsColumnModalOpen(false)}
+        columns={config.columns}
+        statuses={config.statuses || []}
+        onSaveConfig={handleSaveConfig}
       />
     </div>
   );

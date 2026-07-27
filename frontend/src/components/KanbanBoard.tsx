@@ -13,6 +13,7 @@ import { Column, Task, TaskStatus } from '../types/task';
 import { KanbanColumn } from './KanbanColumn';
 import { TaskCard } from './TaskCard';
 import { updateTask } from '../services/api';
+import { useI18n } from '../i18n/I18nContext';
 
 interface KanbanBoardProps {
   columns: Column[];
@@ -27,6 +28,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   onTaskUpdated,
   onCardClick,
 }) => {
+  const { t } = useI18n();
   const [activeTask, setActiveTask] = useState<Task | null>(null);
 
   const sensors = useSensors(
@@ -60,10 +62,10 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
 
     // Determine target status
     let targetStatus: TaskStatus = activeTaskItem.status;
-    const isOverColumn = columns.some((col) => col.status === overId);
+    const matchingColumn = columns.find((col) => col.id === overId || col.status === overId);
     
-    if (isOverColumn) {
-      targetStatus = overId as TaskStatus;
+    if (matchingColumn) {
+      targetStatus = matchingColumn.status;
     } else {
       const overTaskItem = findTask(overId);
       if (overTaskItem) {
@@ -80,7 +82,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
     let prevId = '';
     let nextId = '';
 
-    if (isOverColumn) {
+    if (matchingColumn) {
       // Dropped at end of column
       if (targetTasks.length > 0) {
         prevId = targetTasks[targetTasks.length - 1].id;
@@ -107,6 +109,18 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
     }
   };
 
+  const visibleColumns = columns
+    .filter((col) => col.visible !== false)
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
+  if (visibleColumns.length === 0) {
+    return (
+      <div className="flex items-center justify-center min-h-[50vh] border border-dashed border-slate-700/80 rounded-2xl p-8 text-center text-slate-400">
+        <p className="text-sm">{t('board.noColumns')}</p>
+      </div>
+    );
+  }
+
   return (
     <DndContext
       sensors={sensors}
@@ -115,7 +129,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
       onDragEnd={handleDragEnd}
     >
       <div className="flex space-x-6 overflow-x-auto pb-8 pt-2 items-start min-h-[calc(100vh-140px)]">
-        {columns.map((column) => {
+        {visibleColumns.map((column) => {
           const colTasks = tasks.filter((t) => t.status === column.status);
           return (
             <KanbanColumn

@@ -29,13 +29,13 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({ column, tasks, onCar
     <div
       ref={setNodeRef}
       className={`flex flex-col w-80 flex-shrink-0 glass-panel rounded-2xl border-t-2 ${colorStyle.border} ${
-        isOver ? 'ring-2 ring-blue-500/50 bg-slate-900/80' : ''
+        isOver ? 'ring-2 ring-blue-500/50 opacity-90' : ''
       } transition-all duration-200`}
     >
       {/* Column Header */}
-      <div className="flex items-center justify-between p-4 border-b border-slate-800/60">
+      <div className="flex items-center justify-between p-4 border-b border-[var(--border-color)]">
         <div className="flex items-center space-x-2.5">
-          <h2 className="font-bold text-slate-100 text-sm">{column.title}</h2>
+          <h2 className="font-bold text-[var(--text-primary)] text-sm">{column.title}</h2>
           <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${colorStyle.badge}`}>
             {tasks.length}
           </span>
@@ -51,7 +51,7 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({ column, tasks, onCar
         </SortableContext>
 
         {tasks.length === 0 && (
-          <div className="flex items-center justify-center h-32 border-2 border-dashed border-slate-800 rounded-xl text-slate-600 text-xs font-medium">
+          <div className="flex items-center justify-center h-32 border-2 border-dashed border-[var(--border-color)] rounded-xl text-[var(--text-muted)] text-xs font-medium">
             Drop tasks here
           </div>
         )}

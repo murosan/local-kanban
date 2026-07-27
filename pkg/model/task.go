@@ -37,12 +37,32 @@ type Task struct {
 	FilePath string `json:"file_path,omitempty" yaml:"-"`
 }
 
+type StatusItem struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Color string `json:"color,omitempty"`
+}
+
+type ThemeConfig struct {
+	Name        string `json:"name,omitempty"`
+	PrimaryBg   string `json:"primaryBg,omitempty"`
+	CardBg      string `json:"cardBg,omitempty"`
+	AccentColor string `json:"accentColor,omitempty"`
+	TextColor   string `json:"textColor,omitempty"`
+}
+
 type BoardConfig struct {
-	Columns []Column `json:"columns"`
+	Columns  []Column     `json:"columns"`
+	Statuses []StatusItem `json:"statuses,omitempty"`
+	Theme    *ThemeConfig `json:"theme,omitempty"`
+	Language string       `json:"language,omitempty"`
 }
 
 type Column struct {
-	ID    string     `json:"id"`
-	Title string     `json:"title"`
-	Status TaskStatus `json:"status"`
+	ID      string     `json:"id"`
+	Title   string     `json:"title"`
+	Status  TaskStatus `json:"status"`
+	Visible bool       `json:"visible"`
+	Color   string     `json:"color,omitempty"`
+	Order   int        `json:"order,omitempty"`
 }

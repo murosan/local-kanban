@@ -1,4 +1,4 @@
-export type TaskStatus = 'Todo' | 'In Progress' | 'Review' | 'Done';
+export type TaskStatus = string;
 
 export interface Task {
   id: string;
@@ -18,8 +18,28 @@ export interface Column {
   id: string;
   title: string;
   status: TaskStatus;
+  visible?: boolean;
+  color?: string;
+  order?: number;
+}
+
+export interface ThemeConfig {
+  name: string;
+  primaryBg?: string;
+  cardBg?: string;
+  accentColor?: string;
+  textColor?: string;
+}
+
+export interface StatusItem {
+  id: string;
+  name: string;
+  color?: string;
 }
 
 export interface BoardConfig {
   columns: Column[];
+  statuses?: StatusItem[];
+  theme?: ThemeConfig;
+  language?: string;
 }

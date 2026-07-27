@@ -55,5 +55,5 @@ tmp/
 scratch/
 
 # Local Kanban Task Markdown Files
-tasks/*.md
+tasks/*
 !tasks/.gitkeep

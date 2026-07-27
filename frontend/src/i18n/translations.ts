@@ -1,0 +1,146 @@
+export type Language = 'ja' | 'en';
+
+export const translations = {
+  ja: {
+    // Header
+    'header.title': 'LocalKanban',
+    'header.subtitle': 'ローカルファースト カンバン',
+    'header.searchPlaceholder': 'タスク、タグ、本文を検索...',
+    'header.theme': 'テーマ',
+    'header.columns': '設定',
+    'header.sync': '同期',
+    'header.newTask': 'タスク作成',
+
+    // Board & Columns
+    'board.noColumns': '表示可能なカラムがありません。「設定」からカラムを追加または表示に切り替えてください。',
+    'board.moveLeft': '左へ移動',
+    'board.moveRight': '右へ移動',
+
+    // Column & Status Manager Modal
+    'configModal.title': 'ボード＆ステータス設定',
+    'configModal.tabColumns': 'カラム設定',
+    'configModal.tabStatuses': 'ステータスマスター',
+    'configModal.columnsDesc': 'ボード上の表示順序・名前・紐づくステータス・表示/非表示を設定します。',
+    'configModal.statusesDesc': 'タスクのライフサイクル（状態マスター）を追加・編集・削除できます。',
+    'configModal.addColumn': '新規カラムを追加',
+    'configModal.columnTitlePlaceholder': 'カラム名（例: To Do）',
+    'configModal.selectStatus': '紐づくステータス',
+    'configModal.addStatus': '新規ステータスを追加',
+    'configModal.statusNamePlaceholder': 'ステータス名（例: Blocked）',
+    'configModal.visible': '表示',
+    'configModal.hidden': '非表示',
+    'configModal.deleteColumnConfirm': 'カラム "{title}" を削除してもよろしいですか？',
+    'configModal.deleteStatusConfirm': 'ステータス "{name}" を削除してもよろしいですか？（このステータスのタスクは自動的に移管されます）',
+    'configModal.atLeastOneColumn': 'ボードには最低1つのカラムが必要です。',
+    'configModal.atLeastOneStatus': '最低1つのステータスが必要です。',
+    'configModal.cancel': 'キャンセル',
+    'configModal.save': '設定を保存',
+    'configModal.saving': '保存中...',
+    'configModal.add': '+ 追加',
+
+    // Theme Modal
+    'themeModal.title': 'デザインテーマ設定',
+    'themeModal.presetThemes': 'プリセットテーマ',
+    'themeModal.customPalette': 'カスタムカラーパレット',
+    'themeModal.background': 'メイン背景色',
+    'themeModal.cardBackground': 'カード背景色',
+    'themeModal.accentColor': 'アクセントカラー',
+    'themeModal.textColor': 'テキストカラー',
+    'themeModal.applyCustom': 'カスタムテーマを適用',
+    'themeModal.done': '完了',
+    'themeModal.active': '使用中',
+
+    // Task Modal
+    'taskModal.createTitle': '新規タスク作成',
+    'taskModal.editTitle': 'タスクの編集',
+    'taskModal.titleLabel': 'タイトル',
+    'taskModal.statusLabel': 'ステータス',
+    'taskModal.assigneeLabel': '担当者',
+    'taskModal.tagsLabel': 'タグ（カンマ区切り）',
+    'taskModal.tagsPlaceholder': '例: frontend, bug, auth',
+    'taskModal.contentLabel': 'タスク詳細 (Markdown)',
+    'taskModal.contentPlaceholder': 'タスクの詳細説明やチェックリストを記入...',
+    'taskModal.delete': '削除',
+    'taskModal.cancel': 'キャンセル',
+    'taskModal.save': '保存',
+    'taskModal.saving': '保存中...',
+
+    // Presets Names
+    'preset.dark': '標準ダーク',
+    'preset.midnight': 'ミッドナイトブルー',
+    'preset.cyberpunk': 'サイバーパンク',
+    'preset.forest': 'フォレストダーク',
+    'preset.light': 'クリーンライト',
+  },
+  en: {
+    // Header
+    'header.title': 'LocalKanban',
+    'header.subtitle': 'Local-First Kanban',
+    'header.searchPlaceholder': 'Search tasks, tags, content...',
+    'header.theme': 'Theme',
+    'header.columns': 'Config',
+    'header.sync': 'Sync',
+    'header.newTask': 'New Task',
+
+    // Board & Columns
+    'board.noColumns': 'No visible columns. Please add or unhide columns in Config.',
+    'board.moveLeft': 'Move Left',
+    'board.moveRight': 'Move Right',
+
+    // Column & Status Manager Modal
+    'configModal.title': 'Board & Status Configuration',
+    'configModal.tabColumns': 'Columns',
+    'configModal.tabStatuses': 'Statuses Master',
+    'configModal.columnsDesc': 'Configure display order, title, linked status, and visibility for board columns.',
+    'configModal.statusesDesc': 'Add, edit, or remove task lifecycle status items.',
+    'configModal.addColumn': 'Add New Column',
+    'configModal.columnTitlePlaceholder': 'Column Title (e.g. To Do)',
+    'configModal.selectStatus': 'Linked Status',
+    'configModal.addStatus': 'Add New Status',
+    'configModal.statusNamePlaceholder': 'Status Name (e.g. Blocked)',
+    'configModal.visible': 'Visible',
+    'configModal.hidden': 'Hidden',
+    'configModal.deleteColumnConfirm': 'Are you sure you want to delete column "{title}"?',
+    'configModal.deleteStatusConfirm': 'Are you sure you want to delete status "{name}"? (Associated tasks will be reassigned automatically)',
+    'configModal.atLeastOneColumn': 'At least one column is required on the board.',
+    'configModal.atLeastOneStatus': 'At least one status is required.',
+    'configModal.cancel': 'Cancel',
+    'configModal.save': 'Save Configuration',
+    'configModal.saving': 'Saving...',
+    'configModal.add': '+ Add',
+
+    // Theme Modal
+    'themeModal.title': 'Design Theme Settings',
+    'themeModal.presetThemes': 'Preset Themes',
+    'themeModal.customPalette': 'Custom Color Palette',
+    'themeModal.background': 'Background',
+    'themeModal.cardBackground': 'Card Background',
+    'themeModal.accentColor': 'Accent Color',
+    'themeModal.textColor': 'Text Color',
+    'themeModal.applyCustom': 'Apply Custom Theme',
+    'themeModal.done': 'Done',
+    'themeModal.active': 'Active',
+
+    // Task Modal
+    'taskModal.createTitle': 'Create New Task',
+    'taskModal.editTitle': 'Edit Task',
+    'taskModal.titleLabel': 'Title',
+    'taskModal.statusLabel': 'Status',
+    'taskModal.assigneeLabel': 'Assignee',
+    'taskModal.tagsLabel': 'Tags (comma separated)',
+    'taskModal.tagsPlaceholder': 'e.g. frontend, bug, auth',
+    'taskModal.contentLabel': 'Task Content (Markdown)',
+    'taskModal.contentPlaceholder': 'Task description or checklists...',
+    'taskModal.delete': 'Delete',
+    'taskModal.cancel': 'Cancel',
+    'taskModal.save': 'Save',
+    'taskModal.saving': 'Saving...',
+
+    // Presets Names
+    'preset.dark': 'Default Dark',
+    'preset.midnight': 'Midnight Blue',
+    'preset.cyberpunk': 'Cyberpunk Neon',
+    'preset.forest': 'Forest Dark',
+    'preset.light': 'Clean Light',
+  },
+};

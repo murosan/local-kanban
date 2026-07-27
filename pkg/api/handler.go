@@ -20,6 +20,7 @@ func NewServer(store *markdown.Store) *Server {
 
 func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/config", s.handleGetConfig)
+	mux.HandleFunc("PUT /api/config", s.handleSaveConfig)
 	mux.HandleFunc("GET /api/tasks", s.handleGetTasks)
 	mux.HandleFunc("POST /api/tasks", s.handleCreateTask)
 	mux.HandleFunc("PUT /api/tasks/{id}", s.handleUpdateTask)
@@ -27,13 +28,27 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 }
 
 func (s *Server) handleGetConfig(w http.ResponseWriter, r *http.Request) {
-	columns := []model.Column{
-		{ID: "col-todo", Title: "Todo", Status: model.StatusTodo},
-		{ID: "col-in-progress", Title: "In Progress", Status: model.StatusInProgress},
-		{ID: "col-review", Title: "Review", Status: model.StatusReview},
-		{ID: "col-done", Title: "Done", Status: model.StatusDone},
+	cfg, err := s.store.GetBoardConfig()
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
 	}
-	respondJSON(w, http.StatusOK, model.BoardConfig{Columns: columns})
+	respondJSON(w, http.StatusOK, cfg)
+}
+
+func (s *Server) handleSaveConfig(w http.ResponseWriter, r *http.Request) {
+	var cfg model.BoardConfig
+	if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
+		respondError(w, http.StatusBadRequest, "Invalid payload")
+		return
+	}
+
+	if err := s.store.SaveBoardConfig(&cfg); err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	respondJSON(w, http.StatusOK, cfg)
 }
 
 func (s *Server) handleGetTasks(w http.ResponseWriter, r *http.Request) {

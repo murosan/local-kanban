@@ -3,6 +3,7 @@ package markdown
 import (
 	"bytes"
 	"crypto/rand"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -25,6 +26,69 @@ func NewStore(dir string) (*Store, error) {
 		return nil, fmt.Errorf("failed to create tasks directory: %w", err)
 	}
 	return &Store{dir: dir}, nil
+}
+
+// GetBoardConfig reads .kanban_config.json or returns default columns and statuses.
+func (s *Store) GetBoardConfig() (*model.BoardConfig, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	defaultStatuses := []model.StatusItem{
+		{ID: "Todo", Name: "Todo"},
+		{ID: "In Progress", Name: "In Progress"},
+		{ID: "Review", Name: "Review"},
+		{ID: "Done", Name: "Done"},
+	}
+
+	configPath := filepath.Join(s.dir, ".kanban_config.json")
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return &model.BoardConfig{
+				Columns: []model.Column{
+					{ID: "col-todo", Title: "Todo", Status: model.StatusTodo, Visible: true, Order: 1},
+					{ID: "col-in-progress", Title: "In Progress", Status: model.StatusInProgress, Visible: true, Order: 2},
+					{ID: "col-review", Title: "Review", Status: model.StatusReview, Visible: true, Order: 3},
+					{ID: "col-done", Title: "Done", Status: model.StatusDone, Visible: true, Order: 4},
+				},
+				Statuses: defaultStatuses,
+				Language: "ja",
+			}, nil
+		}
+		return nil, err
+	}
+
+	var cfg model.BoardConfig
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return nil, fmt.Errorf("failed to parse board config: %w", err)
+	}
+
+	if len(cfg.Statuses) == 0 {
+		cfg.Statuses = defaultStatuses
+	}
+	if cfg.Language == "" {
+		cfg.Language = "ja"
+	}
+
+	return &cfg, nil
+}
+
+// SaveBoardConfig writes BoardConfig to .kanban_config.json.
+func (s *Store) SaveBoardConfig(cfg *model.BoardConfig) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	configPath := filepath.Join(s.dir, ".kanban_config.json")
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal board config: %w", err)
+	}
+
+	if err := os.WriteFile(configPath, data, 0644); err != nil {
+		return fmt.Errorf("failed to write board config: %w", err)
+	}
+
+	return nil
 }
 
 // GetAllTasks reads all .md files in the store directory and parses them into Task structs.
