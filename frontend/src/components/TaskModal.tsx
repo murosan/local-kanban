@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Column, CustomFieldDef, CustomFieldValue, Task } from '../types/task';
 import { X, Trash2, Save, FileText, Tag, AlignLeft, Maximize2, Minimize2, Sliders, ChevronDown, Eye, EyeOff, Columns } from 'lucide-react';
-
+import { MarkdownEditor } from './MarkdownEditor';
 import { useI18n } from '../i18n/I18nContext';
 
 interface TaskModalProps {
@@ -122,7 +122,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-3 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
       <div className={`w-full bg-[var(--modal-bg)] text-[var(--text-primary)] rounded-2xl border border-[var(--border-color)] shadow-2xl overflow-hidden flex flex-col transition-all duration-300 ${
-        isMaximized ? 'w-[98vw] h-[96vh] max-w-none max-h-none' : 'max-w-4xl h-[90vh]'
+        isMaximized ? 'w-[99vw] h-[98vh] max-w-none max-h-none' : 'w-[96vw] max-w-6xl h-[93vh]'
       }`}>
         
         {/* Header */}
@@ -153,7 +153,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto flex-1 flex flex-col">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1 flex flex-col">
           {/* Title */}
           <div>
             <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-1.5">
@@ -339,15 +339,14 @@ export const TaskModal: React.FC<TaskModalProps> = ({
           </div>
 
           {/* Content (Markdown Body) */}
-          <div className="flex-1 flex flex-col min-h-[200px]">
+          <div className="flex-1 flex flex-col min-h-[480px]">
             <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-1.5 flex items-center gap-1">
               <AlignLeft className="w-3.5 h-3.5 text-[var(--text-muted)]" /> {t('taskModal.contentLabel')}
             </label>
-            <textarea
+            <MarkdownEditor
               value={content}
-              onChange={(e) => setContent(e.target.value)}
+              onChange={setContent}
               placeholder={t('taskModal.contentPlaceholder')}
-              className="w-full flex-1 p-3.5 text-sm bg-[var(--bg-input)] border border-[var(--border-color)] rounded-xl text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-blue-500 font-mono text-xs min-h-[160px] resize-y"
             />
           </div>
 

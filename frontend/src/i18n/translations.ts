@@ -75,6 +75,26 @@ export const translations = {
     'taskModal.save': '保存',
     'taskModal.saving': '保存中...',
 
+    // Editor & Markdown Toolbar
+    'editor.modeEdit': '編集',
+    'editor.modeSplit': '分割表示',
+    'editor.modePreview': 'リッチ表示',
+    'editor.bold': '太字',
+    'editor.italic': '斜体',
+    'editor.strikethrough': '打ち消し線',
+    'editor.h1': '見出し 1',
+    'editor.h2': '見出し 2',
+    'editor.h3': '見出し 3',
+    'editor.bulletList': '箇条書きリスト',
+    'editor.numberList': '番号付きリスト',
+    'editor.checkList': 'タスクチェックリスト',
+    'editor.quote': '引用',
+    'editor.codeBlock': 'コードブロック',
+    'editor.table': 'テーブル',
+    'editor.link': 'リンク',
+    'editor.horizontalRule': '水平線',
+    'editor.timestamp': '現在日時',
+
     // Presets Names
     'preset.dark': '標準ダーク',
     'preset.midnight': 'ミッドナイトブルー',
@@ -159,6 +179,26 @@ export const translations = {
     'taskModal.cancel': 'Cancel',
     'taskModal.save': 'Save',
     'taskModal.saving': 'Saving...',
+
+    // Editor & Markdown Toolbar
+    'editor.modeEdit': 'Edit',
+    'editor.modeSplit': 'Split',
+    'editor.modePreview': 'Preview',
+    'editor.bold': 'Bold',
+    'editor.italic': 'Italic',
+    'editor.strikethrough': 'Strikethrough',
+    'editor.h1': 'Heading 1',
+    'editor.h2': 'Heading 2',
+    'editor.h3': 'Heading 3',
+    'editor.bulletList': 'Bullet List',
+    'editor.numberList': 'Numbered List',
+    'editor.checkList': 'Task Checklist',
+    'editor.quote': 'Quote',
+    'editor.codeBlock': 'Code Block',
+    'editor.table': 'Table',
+    'editor.link': 'Link',
+    'editor.horizontalRule': 'Horizontal Line',
+    'editor.timestamp': 'Timestamp',
 
     // Presets Names
     'preset.dark': 'Default Dark',
