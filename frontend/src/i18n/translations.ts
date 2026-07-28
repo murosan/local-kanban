@@ -97,10 +97,12 @@ export const translations = {
 
     // Presets Names
     'preset.dark': '標準ダーク',
+    'preset.dimDark': '明るめダーク',
     'preset.midnight': 'ミッドナイトブルー',
     'preset.cyberpunk': 'サイバーパンク',
     'preset.forest': 'フォレストダーク',
     'preset.light': 'クリーンライト',
+    'preset.dimLight': '暗めライト',
 
     // Modal Common
     'modal.maximize': '全画面表示',
@@ -202,10 +204,12 @@ export const translations = {
 
     // Presets Names
     'preset.dark': 'Default Dark',
+    'preset.dimDark': 'Dim Dark',
     'preset.midnight': 'Midnight Blue',
     'preset.cyberpunk': 'Cyberpunk Neon',
     'preset.forest': 'Forest Dark',
     'preset.light': 'Clean Light',
+    'preset.dimLight': 'Dim Light',
 
     // Modal Common
     'modal.maximize': 'Maximize',

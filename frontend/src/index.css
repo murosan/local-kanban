@@ -13,6 +13,7 @@
   --text-muted: #64748b;
   --border-color: rgba(255, 255, 255, 0.08);
   --modal-bg: #0f172a;
+  --card-shadow-hover: 0 4px 20px -2px rgba(59, 130, 246, 0.35);
 }
 
 [data-theme="midnight"] {
@@ -26,6 +27,7 @@
   --text-muted: #64748b;
   --border-color: rgba(255, 255, 255, 0.1);
   --modal-bg: #0f172a;
+  --card-shadow-hover: 0 4px 20px -2px rgba(99, 102, 241, 0.35);
 }
 
 [data-theme="cyberpunk"] {
@@ -39,6 +41,7 @@
   --text-muted: #a100ff;
   --border-color: rgba(255, 0, 127, 0.3);
   --modal-bg: #1a0033;
+  --card-shadow-hover: 0 4px 20px -2px rgba(255, 0, 127, 0.4);
 }
 
 [data-theme="forest"] {
@@ -52,6 +55,7 @@
   --text-muted: #34d399;
   --border-color: rgba(16, 185, 129, 0.2);
   --modal-bg: #0b231c;
+  --card-shadow-hover: 0 4px 20px -2px rgba(16, 185, 129, 0.35);
 }
 
 [data-theme="light"] {
@@ -65,7 +69,37 @@
   --text-muted: #94a3b8;
   --border-color: #cbd5e1;
   --modal-bg: #ffffff;
+  --card-shadow-hover: 0 6px 16px -2px rgba(37, 99, 235, 0.2), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
 }
+
+[data-theme="dim-light"] {
+  --bg-primary: #94a3b8;
+  --bg-surface: #cbd5e1;
+  --bg-card: #bfcbda;
+  --bg-input: #e2e8f0;
+  --accent-color: #2563eb;
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #475569;
+  --border-color: #94a3b8;
+  --modal-bg: #cbd5e1;
+  --card-shadow-hover: 0 6px 20px -2px rgba(15, 23, 42, 0.15);
+}
+
+[data-theme="dim-dark"] {
+  --bg-primary: #1f2937;
+  --bg-surface: #374151;
+  --bg-card: #252e3d;
+  --bg-input: #1e293b;
+  --accent-color: #38bdf8;
+  --text-primary: #f9fafb;
+  --text-secondary: #d1d5db;
+  --text-muted: #9ca3af;
+  --border-color: rgba(255, 255, 255, 0.16);
+  --modal-bg: #374151;
+  --card-shadow-hover: 0 6px 20px -2px rgba(0, 0, 0, 0.4);
+}
+
 
 @layer base {
   body {
@@ -109,12 +143,13 @@
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   border: 1px solid var(--border-color);
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.08), 0 1px 2px -1px rgba(0, 0, 0, 0.08);
   transition: all 0.2s ease-in-out;
 }
 
 .glass-card:hover {
   border-color: var(--accent-color);
-  box-shadow: 0 4px 20px -2px var(--accent-color);
+  box-shadow: var(--card-shadow-hover);
 }
 
 /* Rich Markdown Preview Styles */

@@ -764,14 +764,14 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
               }
               onKeyDown={handleKeyDown}
               placeholder={placeholder || 'Markdown形式で入力...'}
-              className="w-full flex-1 h-full p-4 bg-transparent text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none font-mono text-sm leading-relaxed resize-none overflow-y-auto"
+              className="w-full flex-1 h-full p-4 bg-[var(--bg-input)] text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none font-mono text-sm leading-relaxed resize-none overflow-y-auto"
             />
           </div>
         )}
 
         {/* Rich Preview Area */}
         {(mode === 'preview' || mode === 'split') && (
-          <div className={`flex-1 h-full p-5 overflow-y-auto bg-[var(--bg-input)]/40 ${mode === 'split' ? 'w-1/2' : 'w-full'}`}>
+          <div className={`flex-1 h-full p-5 overflow-y-auto bg-[var(--bg-input)] ${mode === 'split' ? 'w-1/2' : 'w-full'}`}>
             {value.trim() ? (
               <div className="markdown-preview">
                 <ReactMarkdown
