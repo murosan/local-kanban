@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -11,18 +12,52 @@ import (
 	"localkanban/pkg/model"
 )
 
+type config struct {
+	host     string
+	port     string
+	tasksDir string
+}
+
+func parseConfig(args []string) (*config, error) {
+	fs := flag.NewFlagSet("server", flag.ContinueOnError)
+
+	defaultHost := os.Getenv("HOST")
+	if defaultHost == "" {
+		defaultHost = "127.0.0.1"
+	}
+
+	defaultPort := os.Getenv("PORT")
+	if defaultPort == "" {
+		defaultPort = "3737"
+	}
+
+	defaultTasksDir := os.Getenv("TASKS_DIR")
+	if defaultTasksDir == "" {
+		defaultTasksDir = "./tasks"
+	}
+
+	host := fs.String("host", defaultHost, "Host address to listen on (e.g. 127.0.0.1, localhost, 0.0.0.0)")
+	port := fs.String("port", defaultPort, "Port number to listen on")
+	tasksDir := fs.String("tasks-dir", defaultTasksDir, "Directory to store task markdown files")
+
+	if err := fs.Parse(args); err != nil {
+		return nil, err
+	}
+
+	return &config{
+		host:     *host,
+		port:     *port,
+		tasksDir: *tasksDir,
+	}, nil
+}
+
 func main() {
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "3737"
+	cfg, err := parseConfig(os.Args[1:])
+	if err != nil {
+		log.Fatalf("Failed to parse config: %v", err)
 	}
 
-	tasksDir := os.Getenv("TASKS_DIR")
-	if tasksDir == "" {
-		tasksDir = "./tasks"
-	}
-
-	store, err := markdown.NewStore(tasksDir)
+	store, err := markdown.NewStore(cfg.tasksDir)
 	if err != nil {
 		log.Fatalf("Failed to initialize store: %v", err)
 	}
@@ -40,8 +75,8 @@ func main() {
 	// Add CORS middleware
 	handler := corsMiddleware(mux)
 
-	addr := fmt.Sprintf("0.0.0.0:%s", port)
-	log.Printf("LocalKanban Server running on http://127.0.0.1:%s (TASKS_DIR=%s)", port, tasksDir)
+	addr := fmt.Sprintf("%s:%s", cfg.host, cfg.port)
+	log.Printf("LocalKanban Server running on http://%s:%s (TASKS_DIR=%s)", cfg.host, cfg.port, cfg.tasksDir)
 	if err := http.ListenAndServe(addr, handler); err != nil {
 		log.Fatalf("Server stopped: %v", err)
 	}

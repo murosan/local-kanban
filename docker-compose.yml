@@ -10,6 +10,7 @@ services:
       - ./tasks:/app/tasks
     environment:
       - PORT=3737
+      - HOST=0.0.0.0
       - TASKS_DIR=/app/tasks
     restart: unless-stopped
 
