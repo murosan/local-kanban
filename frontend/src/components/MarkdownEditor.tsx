@@ -37,13 +37,25 @@ import {
   Check,
   Maximize2,
   Minimize2,
+  Undo,
+  Redo,
 } from 'lucide-react';
 import { useI18n } from '../i18n/I18nContext';
 
+export interface ChangeOptions {
+  immediate?: boolean;
+  selectionStart?: number;
+  selectionEnd?: number;
+}
+
 interface MarkdownEditorProps {
   value: string;
-  onChange: (value: string) => void;
+  onChange: (value: string, options?: ChangeOptions) => void;
   placeholder?: string;
+  onUndo?: () => void;
+  onRedo?: () => void;
+  canUndo?: boolean;
+  canRedo?: boolean;
 }
 
 type Mode = 'edit' | 'split' | 'preview';
@@ -54,6 +66,10 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   value,
   onChange,
   placeholder,
+  onUndo,
+  onRedo,
+  canUndo = false,
+  canRedo = false,
 }) => {
   const { t } = useI18n();
   const [isFocusMode, setIsFocusMode] = useState(false);
@@ -98,14 +114,13 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
     const replacement = `${before}${selectedText}${after}`;
 
     const newValue = value.substring(0, start) + replacement + value.substring(end);
-    onChange(newValue);
+    const newStart = start + before.length;
+    const newEnd = start + before.length + selectedText.length;
+    onChange(newValue, { immediate: true, selectionStart: newStart, selectionEnd: newEnd });
 
     setTimeout(() => {
       textarea.focus();
-      textarea.setSelectionRange(
-        start + before.length,
-        start + before.length + selectedText.length
-      );
+      textarea.setSelectionRange(newStart, newEnd);
       textarea.scrollTop = scrollTop;
     }, 0);
   };
@@ -155,14 +170,14 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
     }
 
     const newValue = value.substring(0, lineStart) + newLine + value.substring(lineEnd);
-    onChange(newValue);
-
     const lengthDiff = newLine.length - currentLine.length;
+    const newStart = Math.max(lineStart, start + lengthDiff);
+    const newEnd = Math.max(lineStart, end + lengthDiff);
+
+    onChange(newValue, { immediate: true, selectionStart: newStart, selectionEnd: newEnd });
 
     setTimeout(() => {
       textarea.focus();
-      const newStart = Math.max(lineStart, start + lengthDiff);
-      const newEnd = Math.max(lineStart, end + lengthDiff);
       textarea.setSelectionRange(newStart, newEnd);
       textarea.scrollTop = scrollTop;
     }, 0);
@@ -183,6 +198,27 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     const isMod = e.metaKey || e.ctrlKey;
     if (isMod) {
+      if (!e.nativeEvent.isComposing) {
+        if (e.key === 'z' || e.key === 'Z') {
+          if (onUndo && onRedo) {
+            e.preventDefault();
+            if (e.shiftKey) {
+              onRedo();
+            } else {
+              onUndo();
+            }
+            return;
+          }
+        }
+        if (e.key === 'y' || e.key === 'Y') {
+          if (onRedo) {
+            e.preventDefault();
+            onRedo();
+            return;
+          }
+        }
+      }
+
       if (e.key === 'b' || e.key === 'B') {
         e.preventDefault();
         insertFormat('**', '**', '太字');
@@ -213,19 +249,23 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
         const lineText = value.substring(lineStart, end);
         if (lineText.startsWith('  ')) {
           const newValue = value.substring(0, lineStart) + lineText.substring(2) + value.substring(end);
-          onChange(newValue);
+          const newStart = Math.max(lineStart, start - 2);
+          const newEnd = Math.max(lineStart, end - 2);
+          onChange(newValue, { immediate: true, selectionStart: newStart, selectionEnd: newEnd });
           setTimeout(() => {
             textarea.focus();
-            textarea.setSelectionRange(Math.max(lineStart, start - 2), Math.max(lineStart, end - 2));
+            textarea.setSelectionRange(newStart, newEnd);
             textarea.scrollTop = scrollTop;
           }, 0);
         }
       } else {
         const newValue = value.substring(0, start) + '  ' + value.substring(end);
-        onChange(newValue);
+        const newStart = start + 2;
+        const newEnd = end + 2;
+        onChange(newValue, { immediate: true, selectionStart: newStart, selectionEnd: newEnd });
         setTimeout(() => {
           textarea.focus();
-          textarea.setSelectionRange(start + 2, end + 2);
+          textarea.setSelectionRange(newStart, newEnd);
           textarea.scrollTop = scrollTop;
         }, 0);
       }
@@ -252,7 +292,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
           const [, prefix, rest] = taskMatch;
           if (rest.trim() === '') {
             const newValue = value.substring(0, lineStart) + value.substring(start);
-            onChange(newValue);
+            onChange(newValue, { immediate: true, selectionStart: lineStart, selectionEnd: lineStart });
             setTimeout(() => {
               textarea.focus();
               textarea.setSelectionRange(lineStart, lineStart);
@@ -260,10 +300,10 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
           } else {
             const newPrefix = '\n' + prefix.replace(/\[[xX]\]/, '[ ]');
             const newValue = value.substring(0, start) + newPrefix + value.substring(start);
-            onChange(newValue);
+            const nextPos = start + newPrefix.length;
+            onChange(newValue, { immediate: true, selectionStart: nextPos, selectionEnd: nextPos });
             setTimeout(() => {
               textarea.focus();
-              const nextPos = start + newPrefix.length;
               textarea.setSelectionRange(nextPos, nextPos);
             }, 0);
           }
@@ -275,7 +315,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
           const [, prefix, rest] = bulletMatch;
           if (rest.trim() === '') {
             const newValue = value.substring(0, lineStart) + value.substring(start);
-            onChange(newValue);
+            onChange(newValue, { immediate: true, selectionStart: lineStart, selectionEnd: lineStart });
             setTimeout(() => {
               textarea.focus();
               textarea.setSelectionRange(lineStart, lineStart);
@@ -283,10 +323,10 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
           } else {
             const newPrefix = '\n' + prefix;
             const newValue = value.substring(0, start) + newPrefix + value.substring(start);
-            onChange(newValue);
+            const nextPos = start + newPrefix.length;
+            onChange(newValue, { immediate: true, selectionStart: nextPos, selectionEnd: nextPos });
             setTimeout(() => {
               textarea.focus();
-              const nextPos = start + newPrefix.length;
               textarea.setSelectionRange(nextPos, nextPos);
             }, 0);
           }
@@ -340,7 +380,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
             }
 
             const newValue = lines.join('\n');
-            onChange(newValue);
+            onChange(newValue, { immediate: true, selectionStart: lineStart, selectionEnd: lineStart });
             setTimeout(() => {
               textarea.focus();
               textarea.setSelectionRange(lineStart, lineStart);
@@ -372,8 +412,8 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
             }
 
             const newValue = lines.join('\n');
-            onChange(newValue);
             const nextPos = start + 1 + newPrefix.length;
+            onChange(newValue, { immediate: true, selectionStart: nextPos, selectionEnd: nextPos });
             setTimeout(() => {
               textarea.focus();
               textarea.setSelectionRange(nextPos, nextPos);
@@ -387,7 +427,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
           const [, prefix, rest] = quoteMatch;
           if (rest.trim() === '') {
             const newValue = value.substring(0, lineStart) + value.substring(start);
-            onChange(newValue);
+            onChange(newValue, { immediate: true, selectionStart: lineStart, selectionEnd: lineStart });
             setTimeout(() => {
               textarea.focus();
               textarea.setSelectionRange(lineStart, lineStart);
@@ -395,10 +435,10 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
           } else {
             const newPrefix = '\n' + prefix;
             const newValue = value.substring(0, start) + newPrefix + value.substring(start);
-            onChange(newValue);
+            const nextPos = start + newPrefix.length;
+            onChange(newValue, { immediate: true, selectionStart: nextPos, selectionEnd: nextPos });
             setTimeout(() => {
               textarea.focus();
-              const nextPos = start + newPrefix.length;
               textarea.setSelectionRange(nextPos, nextPos);
             }, 0);
           }
@@ -444,7 +484,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
       if (match) {
         const nextMark = match[2] === ' ' ? 'x' : ' ';
         lines[targetIdx] = `${match[1]}${nextMark}${match[3]}`;
-        onChange(lines.join('\n'));
+        onChange(lines.join('\n'), { immediate: true });
       }
     }
   };
@@ -498,6 +538,35 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
         {/* Formatting Actions Toolbar (Visible in Edit & Split mode) */}
         {mode !== 'preview' && (
           <div className="flex items-center flex-wrap gap-1">
+            {(onUndo || onRedo) && (
+              <div className="flex items-center space-x-0.5 border-r border-[var(--border-color)] pr-1.5 mr-1">
+                {onUndo && (
+                  <button
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={onUndo}
+                    disabled={!canUndo}
+                    className="p-1.5 text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--border-color)]/40 rounded-lg transition-colors disabled:opacity-30 disabled:pointer-events-none"
+                    title="元に戻す (Cmd+Z / Ctrl+Z)"
+                  >
+                    <Undo className="w-4 h-4" />
+                  </button>
+                )}
+                {onRedo && (
+                  <button
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={onRedo}
+                    disabled={!canRedo}
+                    className="p-1.5 text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--border-color)]/40 rounded-lg transition-colors disabled:opacity-30 disabled:pointer-events-none"
+                    title="やり直す (Cmd+Shift+Z / Ctrl+Y)"
+                  >
+                    <Redo className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            )}
+
             <div className="flex items-center space-x-0.5 border-r border-[var(--border-color)] pr-1.5 mr-1">
               <button
                 type="button"
@@ -687,7 +756,12 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
             <textarea
               ref={textareaRef}
               value={value}
-              onChange={(e) => onChange(e.target.value)}
+              onChange={(e) =>
+                onChange(e.target.value, {
+                  selectionStart: e.target.selectionStart,
+                  selectionEnd: e.target.selectionEnd,
+                })
+              }
               onKeyDown={handleKeyDown}
               placeholder={placeholder || 'Markdown形式で入力...'}
               className="w-full flex-1 h-full p-4 bg-transparent text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none font-mono text-sm leading-relaxed resize-none overflow-y-auto"

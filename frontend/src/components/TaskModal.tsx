@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Column, CustomFieldDef, CustomFieldValue, Task } from '../types/task';
 import { X, Trash2, Save, FileText, Tag, AlignLeft, Maximize2, Minimize2, Sliders, ChevronDown, Eye, EyeOff, Columns } from 'lucide-react';
-import { MarkdownEditor } from './MarkdownEditor';
+import { MarkdownEditor, ChangeOptions } from './MarkdownEditor';
 import { useI18n } from '../i18n/I18nContext';
 
 interface TaskModalProps {
@@ -13,6 +13,16 @@ interface TaskModalProps {
   onClose: () => void;
   onSave: (taskData: Partial<Task>) => Promise<void>;
   onDelete?: (id: string) => Promise<void>;
+}
+
+interface FormState {
+  title: string;
+  columnId: string;
+  tagsInput: string;
+  content: string;
+  customFieldsState: Record<string, CustomFieldValue>;
+  selectionStart?: number;
+  selectionEnd?: number;
 }
 
 export const TaskModal: React.FC<TaskModalProps> = ({
@@ -35,10 +45,125 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
 
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
+
+  const historyRef = useRef<FormState[]>([]);
+  const historyIndexRef = useRef<number>(-1);
+  const lastPushTimeRef = useRef<number>(0);
+
+  useEffect(() => {
+    if (isOpen) {
+      const initialTitle = task ? task.title : '';
+      const initialCol = task ? task.column_id || initialColumnId : initialColumnId || columns[0]?.id || '';
+      const initialTags = task && task.tags ? task.tags.join(', ') : '';
+      const initialContent = task ? task.content || '' : '';
+      const initialFields = task ? task.custom_fields || {} : {};
+
+      setTitle(initialTitle);
+      setColumnId(initialCol);
+      setTagsInput(initialTags);
+      setContent(initialContent);
+      setCustomFieldsState(initialFields);
+
+      const initial: FormState = {
+        title: initialTitle,
+        columnId: initialCol,
+        tagsInput: initialTags,
+        content: initialContent,
+        customFieldsState: initialFields,
+      };
+      historyRef.current = [initial];
+      historyIndexRef.current = 0;
+      setCanUndo(false);
+      setCanRedo(false);
+    }
+  }, [isOpen, task, initialColumnId, columns]);
+
+  const recordHistory = useCallback(
+    (newState: FormState, options?: ChangeOptions) => {
+      const now = Date.now();
+      const isImmediate = options?.immediate ?? false;
+      const history = historyRef.current;
+      const index = historyIndexRef.current;
+
+      let newHistory = index >= 0 ? history.slice(0, index + 1) : [];
+
+      if (!isImmediate && newHistory.length > 0 && now - lastPushTimeRef.current < 400) {
+        newHistory[newHistory.length - 1] = newState;
+      } else {
+        newHistory.push(newState);
+        lastPushTimeRef.current = now;
+      }
+
+      historyRef.current = newHistory;
+      historyIndexRef.current = newHistory.length - 1;
+      setCanUndo(historyIndexRef.current > 0);
+      setCanRedo(false);
+    },
+    []
+  );
+
+  const handleUndo = useCallback(() => {
+    const history = historyRef.current;
+    const index = historyIndexRef.current;
+    if (index > 0) {
+      const prevIndex = index - 1;
+      const prevState = history[prevIndex];
+      historyIndexRef.current = prevIndex;
+
+      setTitle(prevState.title);
+      setColumnId(prevState.columnId);
+      setTagsInput(prevState.tagsInput);
+      setContent(prevState.content);
+      setCustomFieldsState(prevState.customFieldsState);
+
+      setCanUndo(prevIndex > 0);
+      setCanRedo(prevIndex < history.length - 1);
+    }
+  }, []);
+
+  const handleRedo = useCallback(() => {
+    const history = historyRef.current;
+    const index = historyIndexRef.current;
+    if (index < history.length - 1) {
+      const nextIndex = index + 1;
+      const nextState = history[nextIndex];
+      historyIndexRef.current = nextIndex;
+
+      setTitle(nextState.title);
+      setColumnId(nextState.columnId);
+      setTagsInput(nextState.tagsInput);
+      setContent(nextState.content);
+      setCustomFieldsState(nextState.customFieldsState);
+
+      setCanUndo(nextIndex > 0);
+      setCanRedo(nextIndex < history.length - 1);
+    }
+  }, []);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         onClose();
+        return;
+      }
+
+      const isMod = e.metaKey || e.ctrlKey;
+      if (isMod && !e.isComposing) {
+        if (e.key === 'z' || e.key === 'Z') {
+          e.preventDefault();
+          e.stopPropagation();
+          if (e.shiftKey) {
+            handleRedo();
+          } else {
+            handleUndo();
+          }
+        } else if (e.key === 'y' || e.key === 'Y') {
+          e.preventDefault();
+          e.stopPropagation();
+          handleRedo();
+        }
       }
     };
 
@@ -49,27 +174,74 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, handleUndo, handleRedo]);
 
   if (!isOpen) return null;
+
+  const handleTitleChange = (newTitle: string) => {
+    setTitle(newTitle);
+    recordHistory({
+      title: newTitle,
+      columnId,
+      tagsInput,
+      content,
+      customFieldsState,
+    });
+  };
+
+  const handleColumnIdChange = (newColumnId: string) => {
+    setColumnId(newColumnId);
+    recordHistory(
+      {
+        title,
+        columnId: newColumnId,
+        tagsInput,
+        content,
+        customFieldsState,
+      },
+      { immediate: true }
+    );
+  };
+
+  const handleTagsChange = (newTagsInput: string) => {
+    setTagsInput(newTagsInput);
+    recordHistory({
+      title,
+      columnId,
+      tagsInput: newTagsInput,
+      content,
+      customFieldsState,
+    });
+  };
 
   const handleToggleCustomField = (fieldId: string) => {
     setCustomFieldsState((prev) => {
       const current = prev[fieldId] || { field_id: fieldId, value: '', enabled: false };
-      return {
+      const nextCustomFields = {
         ...prev,
         [fieldId]: {
           ...current,
           enabled: !current.enabled,
         },
       };
+      recordHistory(
+        {
+          title,
+          columnId,
+          tagsInput,
+          content,
+          customFieldsState: nextCustomFields,
+        },
+        { immediate: true }
+      );
+      return nextCustomFields;
     });
   };
 
   const handleCustomFieldValueChange = (fieldId: string, value: any) => {
     setCustomFieldsState((prev) => {
       const current = prev[fieldId] || { field_id: fieldId, value: '', enabled: true };
-      return {
+      const nextCustomFields = {
         ...prev,
         [fieldId]: {
           ...current,
@@ -77,7 +249,35 @@ export const TaskModal: React.FC<TaskModalProps> = ({
           enabled: true,
         },
       };
+      const isImmediate = typeof value === 'boolean';
+      recordHistory(
+        {
+          title,
+          columnId,
+          tagsInput,
+          content,
+          customFieldsState: nextCustomFields,
+        },
+        { immediate: isImmediate }
+      );
+      return nextCustomFields;
     });
+  };
+
+  const handleContentChange = (newContent: string, options?: ChangeOptions) => {
+    setContent(newContent);
+    recordHistory(
+      {
+        title,
+        columnId,
+        tagsInput,
+        content: newContent,
+        customFieldsState,
+        selectionStart: options?.selectionStart,
+        selectionEnd: options?.selectionEnd,
+      },
+      options
+    );
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -163,7 +363,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
               type="text"
               required
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={(e) => handleTitleChange(e.target.value)}
               placeholder="e.g. Implement authentication logic"
               className="w-full px-3.5 py-2 text-sm bg-[var(--bg-input)] border border-[var(--border-color)] rounded-xl text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
             />
@@ -178,7 +378,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
               <div className="relative flex items-center">
                 <select
                   value={columnId}
-                  onChange={(e) => setColumnId(e.target.value)}
+                  onChange={(e) => handleColumnIdChange(e.target.value)}
                   className="w-full py-2 px-3.5 pr-9 text-sm bg-[var(--bg-input)] border border-[var(--border-color)] rounded-xl text-[var(--text-primary)] focus:outline-none focus:border-blue-500 appearance-none cursor-pointer font-medium"
                 >
                   {columns.map((col) => (
@@ -332,7 +532,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
             <input
               type="text"
               value={tagsInput}
-              onChange={(e) => setTagsInput(e.target.value)}
+              onChange={(e) => handleTagsChange(e.target.value)}
               placeholder={t('taskModal.tagsPlaceholder')}
               className="w-full px-3.5 py-2 text-sm bg-[var(--bg-input)] border border-[var(--border-color)] rounded-xl text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-blue-500"
             />
@@ -345,8 +545,12 @@ export const TaskModal: React.FC<TaskModalProps> = ({
             </label>
             <MarkdownEditor
               value={content}
-              onChange={setContent}
+              onChange={handleContentChange}
               placeholder={t('taskModal.contentPlaceholder')}
+              onUndo={handleUndo}
+              onRedo={handleRedo}
+              canUndo={canUndo}
+              canRedo={canRedo}
             />
           </div>
 
