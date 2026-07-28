@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { StatusItem, Task, TaskStatus } from '../types/task';
-import { X, Trash2, Save, FileText, Tag, User, AlignLeft, Maximize2, Minimize2 } from 'lucide-react';
+import { Column, CustomFieldDef, CustomFieldValue, Task } from '../types/task';
+import { X, Trash2, Save, FileText, Tag, AlignLeft, Maximize2, Minimize2, Sliders, ChevronDown, Eye, EyeOff, Columns } from 'lucide-react';
+
 import { useI18n } from '../i18n/I18nContext';
 
 interface TaskModalProps {
   isOpen: boolean;
   task: Task | null; // Null means create mode
-  initialStatus?: TaskStatus;
-  statuses?: StatusItem[];
+  columns?: Column[];
+  initialColumnId?: string;
+  customFields?: CustomFieldDef[];
   onClose: () => void;
   onSave: (taskData: Partial<Task>) => Promise<void>;
   onDelete?: (id: string) => Promise<void>;
@@ -16,36 +18,22 @@ interface TaskModalProps {
 export const TaskModal: React.FC<TaskModalProps> = ({
   isOpen,
   task,
-  initialStatus = 'Todo',
-  statuses = [],
+  columns = [],
+  initialColumnId = '',
+  customFields = [],
   onClose,
   onSave,
   onDelete,
 }) => {
   const { t } = useI18n();
-  const [title, setTitle] = useState('');
-  const [status, setStatus] = useState<TaskStatus>(initialStatus);
-  const [tagsInput, setTagsInput] = useState('');
-  const [assignee, setAssignee] = useState('');
-  const [content, setContent] = useState('');
+  const [title, setTitle] = useState(() => (task ? task.title : ''));
+  const [columnId, setColumnId] = useState<string>(() => (task ? task.column_id || initialColumnId : initialColumnId || columns[0]?.id || ''));
+  const [tagsInput, setTagsInput] = useState(() => (task && task.tags ? task.tags.join(', ') : ''));
+  const [content, setContent] = useState(() => (task ? task.content || '' : ''));
+  const [customFieldsState, setCustomFieldsState] = useState<Record<string, CustomFieldValue>>(() => (task ? task.custom_fields || {} : {}));
+
   const [isSaving, setIsSaving] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
-
-  useEffect(() => {
-    if (task) {
-      setTitle(task.title);
-      setStatus(task.status || initialStatus);
-      setTagsInput(task.tags ? task.tags.join(', ') : '');
-      setAssignee(task.assignee || '');
-      setContent(task.content || '');
-    } else {
-      setTitle('');
-      setStatus(initialStatus);
-      setTagsInput('');
-      setAssignee('');
-      setContent('');
-    }
-  }, [task, initialStatus, isOpen]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -65,6 +53,33 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 
   if (!isOpen) return null;
 
+  const handleToggleCustomField = (fieldId: string) => {
+    setCustomFieldsState((prev) => {
+      const current = prev[fieldId] || { field_id: fieldId, value: '', enabled: false };
+      return {
+        ...prev,
+        [fieldId]: {
+          ...current,
+          enabled: !current.enabled,
+        },
+      };
+    });
+  };
+
+  const handleCustomFieldValueChange = (fieldId: string, value: any) => {
+    setCustomFieldsState((prev) => {
+      const current = prev[fieldId] || { field_id: fieldId, value: '', enabled: true };
+      return {
+        ...prev,
+        [fieldId]: {
+          ...current,
+          value,
+          enabled: true,
+        },
+      };
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
@@ -77,13 +92,14 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         .filter(Boolean);
 
       await onSave({
-        ...(task ? { id: task.id, column_id: task.column_id } : {}),
+        ...(task ? { id: task.id } : {}),
         title: title.trim(),
-        status,
+        column_id: columnId || columns[0]?.id,
         tags,
-        assignee: assignee.trim(),
+        custom_fields: customFieldsState,
         content: content.trim(),
       });
+
       onClose();
     } finally {
       setIsSaving(false);
@@ -102,14 +118,6 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       }
     }
   };
-
-  // Available status items fallback
-  const availableStatuses = statuses.length > 0 ? statuses : [
-    { id: 'Todo', name: 'Todo' },
-    { id: 'In Progress', name: 'In Progress' },
-    { id: 'Review', name: 'Review' },
-    { id: 'Done', name: 'Done' },
-  ];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-3 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
@@ -161,39 +169,160 @@ export const TaskModal: React.FC<TaskModalProps> = ({
             />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {/* Status */}
-            <div>
-              <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-1.5">
-                {t('taskModal.statusLabel')}
-              </label>
-              <select
-                value={status}
-                onChange={(e) => setStatus(e.target.value as TaskStatus)}
-                className="w-full px-3.5 py-2 text-sm bg-[var(--bg-input)] border border-[var(--border-color)] rounded-xl text-[var(--text-primary)] focus:outline-none focus:border-blue-500"
-              >
-                {availableStatuses.map((st) => (
-                  <option key={st.id} value={st.name}>
-                    {st.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Assignee */}
+          {/* Column Selector */}
+          {columns.length > 0 && (
             <div>
               <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-1.5 flex items-center gap-1">
-                <User className="w-3.5 h-3.5 text-[var(--text-muted)]" /> {t('taskModal.assigneeLabel')}
+                <Columns className="w-3.5 h-3.5 text-[var(--text-muted)]" /> カラム
               </label>
-              <input
-                type="text"
-                value={assignee}
-                onChange={(e) => setAssignee(e.target.value)}
-                placeholder="e.g. developer"
-                className="w-full px-3.5 py-2 text-sm bg-[var(--bg-input)] border border-[var(--border-color)] rounded-xl text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-blue-500"
-              />
+              <div className="relative flex items-center">
+                <select
+                  value={columnId}
+                  onChange={(e) => setColumnId(e.target.value)}
+                  className="w-full py-2 px-3.5 pr-9 text-sm bg-[var(--bg-input)] border border-[var(--border-color)] rounded-xl text-[var(--text-primary)] focus:outline-none focus:border-blue-500 appearance-none cursor-pointer font-medium"
+                >
+                  {columns.map((col) => (
+                    <option key={col.id} value={col.id} className="bg-[var(--modal-bg)] text-[var(--text-primary)]">
+                      {col.title}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-3 w-4 h-4 text-[var(--text-secondary)] pointer-events-none" />
+              </div>
             </div>
-          </div>
+          )}
+
+          {/* Custom Fields Section (Trello Style) */}
+          {customFields.length > 0 && (
+            <div className="bg-[var(--bg-surface)] p-4 rounded-xl border border-[var(--border-color)]/70 space-y-3">
+              <div className="flex items-center space-x-2 text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider">
+                <Sliders className="w-4 h-4 text-blue-500" />
+                <span>{t('taskModal.customFieldsLabel')}</span>
+              </div>
+
+              <div className="flex flex-col space-y-4 pt-1">
+                {customFields.map((field) => {
+                  const fieldState = customFieldsState[field.id] || { field_id: field.id, value: '', enabled: false };
+                  const isEnabled = fieldState.enabled;
+
+                  return (
+                    <div key={field.id} className="flex flex-col space-y-1.5 border-b border-[var(--border-color)]/30 pb-3 last:border-b-0 last:pb-0">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-semibold text-[var(--text-secondary)] flex items-center space-x-1.5">
+                          <span>{field.name}</span>
+                          <span className="text-[10px] uppercase font-mono text-[var(--text-muted)]">({field.type})</span>
+                        </label>
+
+                        {/* ON/OFF Toggle Switch & Clear Button */}
+                        <div className="flex items-center space-x-1.5">
+                          {isEnabled && (
+                            <button
+                              type="button"
+                              onClick={() => handleToggleCustomField(field.id)}
+                              className="text-[11px] text-rose-400 hover:text-rose-500 font-medium underline px-1"
+                              title="このカードからフィールドを削除 (OFF)"
+                            >
+                              削除
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleToggleCustomField(field.id)}
+                            className={`inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border transition-all ${
+                              isEnabled
+                                ? 'bg-blue-600/10 text-blue-500 border-blue-500/30'
+                                : 'bg-[var(--bg-input)] text-[var(--text-muted)] border-[var(--border-color)]'
+                            }`}
+                            title={isEnabled ? t('taskModal.fieldEnabled') : t('taskModal.fieldDisabled')}
+                          >
+                            {isEnabled ? <Eye className="w-3 h-3 text-blue-500" /> : <EyeOff className="w-3 h-3 text-[var(--text-muted)]" />}
+                            <span>{isEnabled ? t('taskModal.fieldEnabled') : t('taskModal.fieldDisabled')}</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Field Control (Visible only when ON) */}
+                      {isEnabled && (
+                        <div>
+                          {field.type === 'dropdown' && (() => {
+                            const selectedOpt = field.options?.find((opt) => opt.value === fieldState.value);
+                            const optionColor = selectedOpt?.color;
+
+                            return (
+                              <div className="relative flex items-center">
+                                {optionColor && (
+                                  <span
+                                    className="absolute left-3.5 w-3 h-3 rounded-full pointer-events-none transition-colors shadow-sm"
+                                    style={{ backgroundColor: optionColor }}
+                                  />
+                                )}
+                                <select
+                                  value={fieldState.value || ''}
+                                  onChange={(e) => handleCustomFieldValueChange(field.id, e.target.value)}
+                                  className={`w-full py-2 text-sm bg-[var(--bg-input)] border border-[var(--border-color)] rounded-xl text-[var(--text-primary)] focus:outline-none focus:border-blue-500 appearance-none cursor-pointer ${
+                                    optionColor ? 'pl-9 pr-9 font-medium' : 'px-3 pr-9'
+                                  }`}
+                                >
+                                  <option value="">-- {t('configModal.typeDropdown')} --</option>
+                                  {field.options?.map((opt) => (
+                                    <option key={opt.id} value={opt.value} className="bg-[var(--modal-bg)] text-[var(--text-primary)]">
+                                      {opt.value}
+                                    </option>
+                                  ))}
+                                </select>
+                                <ChevronDown className="absolute right-3 w-4 h-4 text-[var(--text-secondary)] pointer-events-none" />
+                              </div>
+                            );
+                          })()}
+
+                          {field.type === 'text' && (
+                            <input
+                              type="text"
+                              value={fieldState.value || ''}
+                              onChange={(e) => handleCustomFieldValueChange(field.id, e.target.value)}
+                              placeholder={field.name}
+                              className="w-full px-3 py-2 text-sm bg-[var(--bg-input)] border border-[var(--border-color)] rounded-xl text-[var(--text-primary)] focus:outline-none focus:border-blue-500"
+                            />
+                          )}
+
+                          {field.type === 'number' && (
+                            <input
+                              type="number"
+                              value={fieldState.value ?? ''}
+                              onChange={(e) => handleCustomFieldValueChange(field.id, e.target.value)}
+                              placeholder="0"
+                              className="w-full px-3 py-2 text-sm bg-[var(--bg-input)] border border-[var(--border-color)] rounded-xl text-[var(--text-primary)] focus:outline-none focus:border-blue-500"
+                            />
+                          )}
+
+                          {field.type === 'date' && (
+                            <input
+                              type="date"
+                              value={fieldState.value || ''}
+                              onChange={(e) => handleCustomFieldValueChange(field.id, e.target.value)}
+                              className="w-full px-3 py-2 text-sm bg-[var(--bg-input)] border border-[var(--border-color)] rounded-xl text-[var(--text-primary)] focus:outline-none focus:border-blue-500"
+                            />
+                          )}
+
+                          {field.type === 'checkbox' && (
+                            <label className="flex items-center space-x-2 p-2 bg-[var(--bg-input)] border border-[var(--border-color)] rounded-xl cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={!!fieldState.value}
+                                onChange={(e) => handleCustomFieldValueChange(field.id, e.target.checked)}
+                                className="w-4 h-4 text-blue-600 rounded border-[var(--border-color)] focus:ring-blue-500"
+                              />
+                              <span className="text-xs text-[var(--text-primary)]">{field.name}</span>
+                            </label>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Tags */}
           <div>

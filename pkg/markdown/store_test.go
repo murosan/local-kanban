@@ -20,11 +20,11 @@ func TestStoreCRUD(t *testing.T) {
 	}
 
 	task := &model.Task{
-		Title:   "Test Task 1",
-		Status:  model.StatusTodo,
-		Rank:    "0|m",
-		Tags:    []string{"go", "test"},
-		Content: "## Details\n- Test item",
+		Title:    "Test Task 1",
+		ColumnID: "col-todo",
+		Rank:     "0|m",
+		Tags:     []string{"go", "test"},
+		Content:  "## Details\n- Test item",
 	}
 
 	// 1. Create
@@ -52,7 +52,7 @@ func TestStoreCRUD(t *testing.T) {
 	}
 
 	// 3. Update
-	tasks[0].Status = model.StatusInProgress
+	tasks[0].ColumnID = "col-in-progress"
 	tasks[0].Rank = "0|t"
 	if err := store.SaveTask(tasks[0]); err != nil {
 		t.Fatalf("failed to update task: %v", err)
@@ -62,8 +62,8 @@ func TestStoreCRUD(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to get task by ID: %v", err)
 	}
-	if updatedTask.Status != model.StatusInProgress {
-		t.Errorf("expected status 'In Progress', got '%s'", updatedTask.Status)
+	if updatedTask.ColumnID != "col-in-progress" {
+		t.Errorf("expected ColumnID 'col-in-progress', got '%s'", updatedTask.ColumnID)
 	}
 
 	// 4. Delete

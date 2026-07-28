@@ -83,14 +83,13 @@ func (s *Server) handleGetTasks(w http.ResponseWriter, r *http.Request) {
 }
 
 type CreateTaskPayload struct {
-	Title    string           `json:"title"`
-	ColumnID string           `json:"column_id"`
-	Status   model.TaskStatus `json:"status"`
-	Tags     []string         `json:"tags"`
-	Assignee string           `json:"assignee"`
-	Content  string           `json:"content"`
-	PrevID   string           `json:"prev_id"`
-	NextID   string           `json:"next_id"`
+	Title        string                            `json:"title"`
+	ColumnID     string                            `json:"column_id"`
+	Tags         []string                          `json:"tags"`
+	CustomFields map[string]model.CustomFieldValue `json:"custom_fields,omitempty"`
+	Content      string                            `json:"content"`
+	PrevID       string                            `json:"prev_id"`
+	NextID       string                            `json:"next_id"`
 }
 
 func (s *Server) handleCreateTask(w http.ResponseWriter, r *http.Request) {
@@ -106,16 +105,15 @@ func (s *Server) handleCreateTask(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Calculate LexoRank
-	rank := s.calculateRank(payload.ColumnID, payload.Status, payload.PrevID, payload.NextID)
+	rank := s.calculateRank(payload.ColumnID, payload.PrevID, payload.NextID)
 
 	task := &model.Task{
-		Title:    payload.Title,
-		ColumnID: payload.ColumnID,
-		Status:   payload.Status,
-		Rank:     rank,
-		Tags:     payload.Tags,
-		Assignee: payload.Assignee,
-		Content:  payload.Content,
+		Title:        payload.Title,
+		ColumnID:     payload.ColumnID,
+		Rank:         rank,
+		Tags:         payload.Tags,
+		CustomFields: payload.CustomFields,
+		Content:      payload.Content,
 	}
 
 	if err := s.store.SaveTask(task); err != nil {
@@ -127,15 +125,14 @@ func (s *Server) handleCreateTask(w http.ResponseWriter, r *http.Request) {
 }
 
 type UpdateTaskPayload struct {
-	Title    *string           `json:"title"`
-	ColumnID *string           `json:"column_id"`
-	Status   *model.TaskStatus `json:"status"`
-	Tags     []string          `json:"tags"`
-	Assignee *string           `json:"assignee"`
-	Content  *string           `json:"content"`
-	Rank     *string           `json:"rank"`
-	PrevID   string            `json:"prev_id"`
-	NextID   string            `json:"next_id"`
+	Title        *string                           `json:"title"`
+	ColumnID     *string                           `json:"column_id"`
+	Tags         []string                          `json:"tags"`
+	CustomFields map[string]model.CustomFieldValue `json:"custom_fields,omitempty"`
+	Content      *string                           `json:"content"`
+	Rank         *string                           `json:"rank"`
+	PrevID       string                            `json:"prev_id"`
+	NextID       string                            `json:"next_id"`
 }
 
 func (s *Server) handleUpdateTask(w http.ResponseWriter, r *http.Request) {
@@ -163,28 +160,24 @@ func (s *Server) handleUpdateTask(w http.ResponseWriter, r *http.Request) {
 	if payload.ColumnID != nil {
 		task.ColumnID = *payload.ColumnID
 	}
-	if payload.Status != nil {
-		task.Status = *payload.Status
-	}
 	if payload.Tags != nil {
 		task.Tags = payload.Tags
 	}
-	if payload.Assignee != nil {
-		task.Assignee = *payload.Assignee
+	if payload.CustomFields != nil {
+		task.CustomFields = payload.CustomFields
 	}
 	if payload.Content != nil {
 		task.Content = *payload.Content
 	}
 
 	targetColumnID := task.ColumnID
-	targetStatus := task.Status
 	columnChanged := payload.ColumnID != nil && *payload.ColumnID != task.ColumnID
 
 	// Calculate new Rank if explicit rank, or prev_id / next_id provided, or column changed
 	if payload.Rank != nil {
 		task.Rank = *payload.Rank
 	} else if payload.PrevID != "" || payload.NextID != "" || columnChanged {
-		task.Rank = s.calculateRank(targetColumnID, targetStatus, payload.PrevID, payload.NextID)
+		task.Rank = s.calculateRank(targetColumnID, payload.PrevID, payload.NextID)
 	}
 
 	if err := s.store.SaveTask(task); err != nil {
@@ -210,7 +203,7 @@ func (s *Server) handleDeleteTask(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) calculateRank(columnID string, status model.TaskStatus, prevID, nextID string) string {
+func (s *Server) calculateRank(columnID string, prevID, nextID string) string {
 	tasks, err := s.store.GetAllTasks()
 	if err != nil {
 		return lexorank.Between("", "")
@@ -218,15 +211,8 @@ func (s *Server) calculateRank(columnID string, status model.TaskStatus, prevID,
 
 	var prevRank, nextRank string
 	for _, t := range tasks {
-		// Group tasks by columnID if provided, otherwise by status
-		if columnID != "" {
-			if t.ColumnID != columnID {
-				continue
-			}
-		} else if status != "" {
-			if t.Status != status {
-				continue
-			}
+		if columnID != "" && t.ColumnID != columnID {
+			continue
 		}
 		if prevID != "" && t.ID == prevID {
 			prevRank = t.Rank

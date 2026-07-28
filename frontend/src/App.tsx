@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { BoardConfig, Column, StatusItem, Task, TaskStatus, ThemeConfig } from './types/task';
+import { BoardConfig, Column, CustomFieldDef, Task, ThemeConfig } from './types/task';
 import { fetchBoardConfig, fetchTasks, createTask, updateTask, deleteTask, saveBoardConfig } from './services/api';
 import { Header } from './components/Header';
 import { KanbanBoard } from './components/KanbanBoard';
@@ -9,7 +9,7 @@ import { ColumnManagerModal } from './components/ColumnManagerModal';
 import { useI18n } from './i18n/I18nContext';
 
 export const App: React.FC = () => {
-  const { language, setLanguage } = useI18n();
+  const { language } = useI18n();
   const [config, setConfig] = useState<BoardConfig | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -21,7 +21,7 @@ export const App: React.FC = () => {
   const [isColumnModalOpen, setIsColumnModalOpen] = useState(false);
 
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
-  const [initialStatus, setInitialStatus] = useState<TaskStatus>('Todo');
+  const [initialColumnId, setInitialColumnId] = useState<string>('');
 
   const applyTheme = useCallback((theme?: ThemeConfig) => {
     const root = document.documentElement;
@@ -56,10 +56,6 @@ export const App: React.FC = () => {
       setConfig(cfg);
       setTasks(taskList);
 
-      if (cfg.language === 'ja' || cfg.language === 'en') {
-        setLanguage(cfg.language);
-      }
-
       if (cfg.theme && cfg.theme.name) {
         applyTheme(cfg.theme);
         localStorage.setItem('localkanban_theme', JSON.stringify(cfg.theme));
@@ -79,8 +75,9 @@ export const App: React.FC = () => {
     } finally {
       setIsSyncing(false);
     }
-  }, [searchQuery, applyTheme, setLanguage]);
+  }, [searchQuery, applyTheme]);
 
+  // Initial load & Search query change effect
   useEffect(() => {
     loadData();
   }, [loadData]);
@@ -96,10 +93,10 @@ export const App: React.FC = () => {
     };
   }, [loadData]);
 
-  const handleOpenNewTaskModal = (status?: TaskStatus) => {
-    const defaultStatus = status || (config?.columns[0]?.status ?? 'Todo');
+  const handleOpenNewTaskModal = (columnId?: string) => {
+    const defaultColumnId = columnId || config?.columns[0]?.id || '';
     setSelectedTask(null);
-    setInitialStatus(defaultStatus);
+    setInitialColumnId(defaultColumnId);
     setIsTaskModalOpen(true);
   };
 
@@ -110,18 +107,17 @@ export const App: React.FC = () => {
 
   const handleSaveTask = async (taskData: Partial<Task>) => {
     const defaultColumnId = config?.columns[0]?.id;
-    const defaultStatus = config?.columns[0]?.status || 'Todo';
     if (taskData.id) {
       await updateTask(taskData.id, taskData);
     } else {
       await createTask({
         title: taskData.title || 'Untitled',
         column_id: taskData.column_id || defaultColumnId,
-        status: taskData.status || defaultStatus,
         tags: taskData.tags,
-        assignee: taskData.assignee,
+        custom_fields: taskData.custom_fields,
         content: taskData.content,
       });
+
     }
     await loadData();
   };
@@ -131,7 +127,10 @@ export const App: React.FC = () => {
     await loadData();
   };
 
-  const handleSaveConfig = async (newColumns: Column[], newStatuses: StatusItem[]) => {
+  const handleSaveConfig = async (
+    newColumns: Column[],
+    newCustomFields?: CustomFieldDef[]
+  ) => {
     if (!config || newColumns.length === 0) return;
 
     const validColumnIds = new Set(newColumns.map((c) => c.id));
@@ -143,7 +142,6 @@ export const App: React.FC = () => {
       try {
         await updateTask(t.id, {
           column_id: fallbackColumn.id,
-          status: fallbackColumn.status || t.status,
         });
       } catch (err) {
         console.error(`Failed to reassign task ${t.id}:`, err);
@@ -153,7 +151,7 @@ export const App: React.FC = () => {
     const updatedConfig: BoardConfig = {
       ...config,
       columns: newColumns,
-      statuses: newStatuses,
+      custom_fields: newCustomFields,
       language,
     };
     const saved = await saveBoardConfig(updatedConfig);
@@ -202,6 +200,7 @@ export const App: React.FC = () => {
       <main className="flex-1 w-full px-3 sm:px-4 flex flex-col">
         <KanbanBoard
           columns={config.columns}
+          customFields={config.custom_fields}
           tasks={tasks}
           onTaskUpdated={loadData}
           onCardClick={handleCardClick}
@@ -209,32 +208,39 @@ export const App: React.FC = () => {
       </main>
 
       {/* Create / Edit Modal */}
-      <TaskModal
-        isOpen={isTaskModalOpen}
-        task={selectedTask}
-        initialStatus={initialStatus}
-        statuses={config.statuses}
-        onClose={() => setIsTaskModalOpen(false)}
-        onSave={handleSaveTask}
-        onDelete={handleDeleteTask}
-      />
+      {isTaskModalOpen && (
+        <TaskModal
+          isOpen={isTaskModalOpen}
+          task={selectedTask}
+          columns={config.columns}
+          initialColumnId={initialColumnId}
+          customFields={config.custom_fields}
+          onClose={() => setIsTaskModalOpen(false)}
+          onSave={handleSaveTask}
+          onDelete={handleDeleteTask}
+        />
+      )}
 
       {/* Theme Selection Modal */}
-      <ThemeModal
-        isOpen={isThemeModalOpen}
-        onClose={() => setIsThemeModalOpen(false)}
-        currentTheme={config.theme}
-        onSelectTheme={handleSelectTheme}
-      />
+      {isThemeModalOpen && (
+        <ThemeModal
+          isOpen={isThemeModalOpen}
+          onClose={() => setIsThemeModalOpen(false)}
+          currentTheme={config.theme}
+          onSelectTheme={handleSelectTheme}
+        />
+      )}
 
       {/* Board Column Configuration Modal */}
-      <ColumnManagerModal
-        isOpen={isColumnModalOpen}
-        onClose={() => setIsColumnModalOpen(false)}
-        columns={config.columns}
-        statuses={config.statuses || []}
-        onSaveConfig={handleSaveConfig}
-      />
+      {isColumnModalOpen && (
+        <ColumnManagerModal
+          isOpen={isColumnModalOpen}
+          onClose={() => setIsColumnModalOpen(false)}
+          columns={config.columns}
+          customFields={config.custom_fields}
+          onSaveConfig={handleSaveConfig}
+        />
+      )}
     </div>
   );
 };

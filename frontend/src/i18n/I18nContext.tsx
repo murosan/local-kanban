@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
 import { Language, translations } from './translations';
 
 interface I18nContextType {
@@ -26,12 +26,15 @@ export const I18nProvider: React.FC<{ initialLanguage?: string; children: ReactN
     }
   }, [initialLanguage]);
 
-  const setLanguage = (lang: Language) => {
-    setLanguageState(lang);
-    localStorage.setItem('localkanban_lang', lang);
-  };
+  const setLanguage = useCallback((lang: Language) => {
+    setLanguageState((prev) => {
+      if (prev === lang) return prev;
+      localStorage.setItem('localkanban_lang', lang);
+      return lang;
+    });
+  }, []);
 
-  const t = (key: string, params?: Record<string, string>): string => {
+  const t = useCallback((key: string, params?: Record<string, string>): string => {
     const dict = translations[language] || translations.ja;
     let text = (dict as Record<string, string>)[key] || (translations.ja as Record<string, string>)[key] || key;
 
@@ -42,10 +45,16 @@ export const I18nProvider: React.FC<{ initialLanguage?: string; children: ReactN
     }
 
     return text;
-  };
+  }, [language]);
+
+  const contextValue = useMemo(() => ({
+    language,
+    setLanguage,
+    t,
+  }), [language, setLanguage, t]);
 
   return (
-    <I18nContext.Provider value={{ language, setLanguage, t }}>
+    <I18nContext.Provider value={contextValue}>
       {children}
     </I18nContext.Provider>
   );

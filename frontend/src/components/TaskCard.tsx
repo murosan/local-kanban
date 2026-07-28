@@ -1,16 +1,22 @@
 import React from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Task } from '../types/task';
-import { Tag, User, Clock } from 'lucide-react';
+import { CustomFieldDef, Task } from '../types/task';
+import { Tag, Clock } from 'lucide-react';
 
 interface TaskCardProps {
   task: Task;
+  customFields?: CustomFieldDef[];
   onCardClick?: (task: Task) => void;
   isOverlay?: boolean;
 }
 
-export const TaskCard: React.FC<TaskCardProps> = ({ task, onCardClick, isOverlay }) => {
+export const TaskCard: React.FC<TaskCardProps> = ({
+  task,
+  customFields = [],
+  onCardClick,
+  isOverlay,
+}) => {
   const {
     attributes,
     listeners,
@@ -34,6 +40,29 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, onCardClick, isOverlay
     minute: '2-digit',
   });
 
+  const displayFields = task.custom_fields
+    ? Object.entries(task.custom_fields)
+        .filter(([_, cf]) => cf && cf.enabled && cf.value !== undefined && cf.value !== '' && cf.value !== false)
+        .map(([fieldId, cf]) => {
+          // Resolve option color if dropdown field definition exists
+          const fieldDef = customFields.find((f) => f.id === fieldId);
+          let resolvedColor: string | undefined;
+          if (fieldDef && fieldDef.type === 'dropdown' && fieldDef.options) {
+            const matchedOpt = fieldDef.options.find((opt) => opt.value === cf.value);
+            if (matchedOpt) {
+              resolvedColor = matchedOpt.color;
+            }
+          }
+
+          return {
+            id: fieldId,
+            name: fieldDef ? fieldDef.name : fieldId.replace('cf-', ''),
+            value: cf.value,
+            color: resolvedColor,
+          };
+        })
+    : [];
+
   return (
     <div
       ref={setNodeRef}
@@ -45,6 +74,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, onCardClick, isOverlay
       }`}
       onClick={() => onCardClick && onCardClick(task)}
     >
+      {/* Title */}
       <div className="flex items-start justify-between gap-2">
         <h3 className="font-semibold text-[var(--text-primary)] text-sm leading-snug line-clamp-2 group-hover:text-blue-500 transition-colors">
           {task.title}
@@ -60,7 +90,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, onCardClick, isOverlay
 
       {/* Tags */}
       {task.tags && task.tags.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 mt-3">
+        <div className="flex flex-wrap gap-1.5 mt-2.5">
           {task.tags.map((tag) => (
             <span
               key={tag}
@@ -73,17 +103,48 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, onCardClick, isOverlay
         </div>
       )}
 
-      {/* Footer Info */}
-      <div className="flex items-center justify-between mt-3.5 pt-2.5 border-t border-[var(--border-color)] text-xs text-[var(--text-secondary)]">
-        {task.assignee ? (
-          <div className="flex items-center space-x-1 text-[var(--text-secondary)]">
-            <User className="w-3.5 h-3.5 text-indigo-400" />
-            <span>{task.assignee}</span>
-          </div>
-        ) : (
-          <span />
-        )}
+      {/* User Custom Fields with Color Badges */}
+      {displayFields.length > 0 && (
+        <div className="flex flex-col space-y-1 mt-3">
+          {displayFields.map((field) => {
+            const hasColor = !!field.color;
+            return (
+              <div
+                key={field.id}
+                className="flex items-center justify-between text-[11px] px-2.5 py-1 rounded-md bg-[var(--bg-surface)] text-[var(--text-secondary)] border border-[var(--border-color)]/80"
+              >
+                <span className="text-[var(--text-muted)] font-medium truncate max-w-[50%]">
+                  {field.name}
+                </span>
+                <span
+                  className={`font-semibold text-right flex items-center justify-end space-x-1.5 px-2 py-0.5 rounded-md ${
+                    hasColor ? '' : 'text-[var(--text-primary)]'
+                  }`}
+                  style={
+                    hasColor
+                      ? {
+                          backgroundColor: `${field.color}22`,
+                          color: field.color,
+                          border: `1px solid ${field.color}44`,
+                        }
+                      : undefined
+                  }
+                >
+                  {hasColor && (
+                    <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: field.color }} />
+                  )}
+                  <span className="truncate max-w-[120px]">
+                    {typeof field.value === 'boolean' ? (field.value ? '✓' : '✗') : String(field.value)}
+                  </span>
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
+      {/* Footer Info */}
+      <div className="flex items-center justify-end mt-3.5 pt-2.5 border-t border-[var(--border-color)] text-xs text-[var(--text-secondary)]">
         <div className="flex items-center space-x-1 text-[var(--text-muted)] font-mono text-[10px]">
           <Clock className="w-3 h-3" />
           <span>{formattedDate}</span>

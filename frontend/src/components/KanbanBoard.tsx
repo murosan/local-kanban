@@ -9,7 +9,7 @@ import {
   useSensors,
   closestCorners,
 } from '@dnd-kit/core';
-import { Column, Task, TaskStatus } from '../types/task';
+import { Column, CustomFieldDef, Task } from '../types/task';
 import { KanbanColumn } from './KanbanColumn';
 import { TaskCard } from './TaskCard';
 import { updateTask } from '../services/api';
@@ -17,6 +17,7 @@ import { useI18n } from '../i18n/I18nContext';
 
 interface KanbanBoardProps {
   columns: Column[];
+  customFields?: CustomFieldDef[];
   tasks: Task[];
   onTaskUpdated: () => void;
   onCardClick: (task: Task) => void;
@@ -24,6 +25,7 @@ interface KanbanBoardProps {
 
 export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   columns,
+  customFields = [],
   tasks,
   onTaskUpdated,
   onCardClick,
@@ -60,39 +62,25 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
     const activeTaskItem = findTask(activeId);
     if (!activeTaskItem) return;
 
-    // Determine target column and status
+    // Determine target column
     let targetColumnId: string | undefined;
-    let targetStatus: TaskStatus | undefined;
 
-    const matchingColumn = columns.find(
-      (col) => col.id === overId || (col.status && col.status === overId)
-    );
+    const matchingColumn = columns.find((col) => col.id === overId);
     if (matchingColumn) {
       targetColumnId = matchingColumn.id;
-      targetStatus = matchingColumn.status;
     } else {
       const overTaskItem = findTask(overId);
       if (overTaskItem) {
         targetColumnId = overTaskItem.column_id;
-        targetStatus = overTaskItem.status;
-        const parentCol = columns.find(
-          (col) => col.id === targetColumnId || (col.status && col.status === targetStatus)
-        );
-        if (parentCol && !targetStatus) {
-          targetStatus = parentCol.status;
-        }
       }
     }
 
-    if (!targetColumnId && !targetStatus) return;
+    if (!targetColumnId) return;
 
     // Get ordered tasks in target column
     const targetTasks = tasks.filter((t) => {
       if (t.id === activeId) return false;
-      if (targetColumnId && t.column_id) {
-        return t.column_id === targetColumnId;
-      }
-      return targetStatus && t.status === targetStatus;
+      return t.column_id === targetColumnId;
     });
 
     // Find position where active item was dropped
@@ -117,7 +105,6 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
     try {
       await updateTask(activeId, {
         column_id: targetColumnId,
-        status: targetStatus,
         prev_id: prevId,
         next_id: nextId,
       });
@@ -148,16 +135,12 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
     >
       <div className="flex space-x-4 overflow-x-auto pb-8 pt-1 items-start min-h-[calc(100vh-120px)] w-full px-1">
         {visibleColumns.map((column) => {
-          const colTasks = tasks.filter((t) => {
-            if (t.column_id) {
-              return t.column_id === column.id;
-            }
-            return column.status && t.status === column.status;
-          });
+          const colTasks = tasks.filter((t) => t.column_id === column.id);
           return (
             <KanbanColumn
               key={column.id}
               column={column}
+              customFields={customFields}
               tasks={colTasks}
               onCardClick={onCardClick}
             />
@@ -168,9 +151,10 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
       <DragOverlay>
         {activeTask ? (
           <div className="rotate-2 scale-105 shadow-2xl">
-            <TaskCard task={activeTask} isOverlay />
+            <TaskCard task={activeTask} customFields={customFields} isOverlay />
           </div>
         ) : null}
+
       </DragOverlay>
     </DndContext>
   );

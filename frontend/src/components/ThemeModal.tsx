@@ -25,22 +25,12 @@ export const ThemeModal: React.FC<ThemeModalProps> = ({
   onSelectTheme,
 }) => {
   const { t } = useI18n();
-  const [selectedPreset, setSelectedPreset] = useState<string>(currentTheme?.name || 'dark');
-  const [customPrimaryBg, setCustomPrimaryBg] = useState<string>(currentTheme?.primaryBg || '#0b0f19');
-  const [customCardBg, setCustomCardBg] = useState<string>(currentTheme?.cardBg || '#1f293d');
-  const [customAccent, setCustomAccent] = useState<string>(currentTheme?.accentColor || '#3b82f6');
-  const [customText, setCustomText] = useState<string>(currentTheme?.textColor || '#f8fafc');
+  const [selectedPreset, setSelectedPreset] = useState<string>(() => currentTheme?.name || 'dark');
+  const [customPrimaryBg, setCustomPrimaryBg] = useState<string>(() => currentTheme?.primaryBg || '#0b0f19');
+  const [customCardBg, setCustomCardBg] = useState<string>(() => currentTheme?.cardBg || '#1f293d');
+  const [customAccent, setCustomAccent] = useState<string>(() => currentTheme?.accentColor || '#3b82f6');
+  const [customText, setCustomText] = useState<string>(() => currentTheme?.textColor || '#f8fafc');
   const [isMaximized, setIsMaximized] = useState(false);
-
-  useEffect(() => {
-    if (currentTheme) {
-      setSelectedPreset(currentTheme.name);
-      if (currentTheme.primaryBg) setCustomPrimaryBg(currentTheme.primaryBg);
-      if (currentTheme.cardBg) setCustomCardBg(currentTheme.cardBg);
-      if (currentTheme.accentColor) setCustomAccent(currentTheme.accentColor);
-      if (currentTheme.textColor) setCustomText(currentTheme.textColor);
-    }
-  }, [currentTheme]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

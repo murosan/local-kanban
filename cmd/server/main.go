@@ -66,26 +66,23 @@ func createSampleTasks(store *markdown.Store) {
 	samples := []*model.Task{
 		{
 			Title:    "LocalKanban Phase 1プロトタイプ動作確認",
-			Status:   model.StatusTodo,
+			ColumnID: "col-todo",
 			Rank:     "0|m",
 			Tags:     []string{"frontend", "backend"},
-			Assignee: "User1",
 			Content:  "## 実装確認リスト\n- [x] Go Webサーバー\n- [ ] React UI dnd-kit\n- [ ] Focus / Reload 同期",
 		},
 		{
 			Title:    "dnd-kit によるカンバンカード並び替え実装",
-			Status:   model.StatusInProgress,
+			ColumnID: "col-in-progress",
 			Rank:     "0|m",
 			Tags:     []string{"dnd-kit", "react"},
-			Assignee: "User1",
 			Content:  "LexoRankアルゴリズムと連携した並び替えドラッグ＆ドロップ",
 		},
 		{
 			Title:    "Docker Compose 構成の定義",
-			Status:   model.StatusDone,
+			ColumnID: "col-done",
 			Rank:     "0|m",
 			Tags:     []string{"docker", "infra"},
-			Assignee: "User1",
 			Content:  "Go 1.26 と Node.js 24 による開発環境のコンテナ化",
 		},
 	}
@@ -94,3 +91,4 @@ func createSampleTasks(store *markdown.Store) {
 		_ = store.SaveTask(sample)
 	}
 }
+

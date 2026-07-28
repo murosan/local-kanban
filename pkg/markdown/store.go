@@ -28,17 +28,10 @@ func NewStore(dir string) (*Store, error) {
 	return &Store{dir: dir}, nil
 }
 
-// GetBoardConfig reads .kanban_config.json or returns default columns and statuses.
+// GetBoardConfig reads .kanban_config.json or returns default columns.
 func (s *Store) GetBoardConfig() (*model.BoardConfig, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-
-	defaultStatuses := []model.StatusItem{
-		{ID: "Todo", Name: "Todo"},
-		{ID: "In Progress", Name: "In Progress"},
-		{ID: "Review", Name: "Review"},
-		{ID: "Done", Name: "Done"},
-	}
 
 	configPath := filepath.Join(s.dir, ".kanban_config.json")
 	data, err := os.ReadFile(configPath)
@@ -46,12 +39,11 @@ func (s *Store) GetBoardConfig() (*model.BoardConfig, error) {
 		if os.IsNotExist(err) {
 			return &model.BoardConfig{
 				Columns: []model.Column{
-					{ID: "col-todo", Title: "Todo", Status: model.StatusTodo, Visible: true, Order: 1},
-					{ID: "col-in-progress", Title: "In Progress", Status: model.StatusInProgress, Visible: true, Order: 2},
-					{ID: "col-review", Title: "Review", Status: model.StatusReview, Visible: true, Order: 3},
-					{ID: "col-done", Title: "Done", Status: model.StatusDone, Visible: true, Order: 4},
+					{ID: "col-todo", Title: "Todo", Visible: true, Color: "#3b82f6", Order: 1},
+					{ID: "col-in-progress", Title: "In Progress", Visible: true, Color: "#f59e0b", Order: 2},
+					{ID: "col-review", Title: "Review", Visible: true, Color: "#8b5cf6", Order: 3},
+					{ID: "col-done", Title: "Done", Visible: true, Color: "#10b981", Order: 4},
 				},
-				Statuses: defaultStatuses,
 				Language: "ja",
 			}, nil
 		}
@@ -63,8 +55,8 @@ func (s *Store) GetBoardConfig() (*model.BoardConfig, error) {
 		return nil, fmt.Errorf("failed to parse board config: %w", err)
 	}
 
-	if len(cfg.Statuses) == 0 {
-		cfg.Statuses = defaultStatuses
+	if cfg.CustomFields == nil {
+		cfg.CustomFields = []model.CustomFieldDef{}
 	}
 	if cfg.Language == "" {
 		cfg.Language = "ja"
@@ -115,17 +107,8 @@ func (s *Store) GetAllTasks() ([]*model.Task, error) {
 		tasks = append(tasks, task)
 	}
 
-	// Sort tasks by Status (order in DefaultStatuses), then by Rank ascending
-	statusOrder := make(map[model.TaskStatus]int)
-	for i, st := range model.DefaultStatuses {
-		statusOrder[st] = i
-	}
-
+	// Sort tasks by Rank ascending
 	sort.Slice(tasks, func(i, j int) bool {
-		si, sj := statusOrder[tasks[i].Status], statusOrder[tasks[j].Status]
-		if si != sj {
-			return si < sj
-		}
 		return tasks[i].Rank < tasks[j].Rank
 	})
 

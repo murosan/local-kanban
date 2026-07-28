@@ -39,9 +39,20 @@ func TestConfigRoutes(t *testing.T) {
 		t.Errorf("expected 4 default columns, got %d", len(cfg.Columns))
 	}
 
-	// 2. PUT /api/config (Save theme & custom columns)
+	// 2. PUT /api/config (Save theme, custom columns & custom fields)
 	updatedCfg := model.BoardConfig{
 		Columns: cfg.Columns,
+		CustomFields: []model.CustomFieldDef{
+			{
+				ID:   "cf-priority",
+				Name: "Priority",
+				Type: model.FieldTypeDropdown,
+				Options: []model.CustomFieldOption{
+					{ID: "opt-1", Value: "High"},
+					{ID: "opt-2", Value: "Low"},
+				},
+			},
+		},
 		Theme: &model.ThemeConfig{
 			Name:        "midnight",
 			PrimaryBg:   "#0a0e1a",
@@ -73,7 +84,7 @@ func TestConfigRoutes(t *testing.T) {
 	if cfg2.Theme == nil || cfg2.Theme.Name != "midnight" {
 		t.Errorf("expected theme name 'midnight', got %+v", cfg2.Theme)
 	}
-	if cfg2.Theme.AccentColor != "#6366f1" {
-		t.Errorf("expected accent color '#6366f1', got '%s'", cfg2.Theme.AccentColor)
+	if len(cfg2.CustomFields) != 1 || cfg2.CustomFields[0].Name != "Priority" {
+		t.Errorf("expected 1 custom field 'Priority', got %+v", cfg2.CustomFields)
 	}
 }
