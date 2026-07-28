@@ -5,16 +5,18 @@ export const translations = {
     // Header
     'header.title': 'LocalKanban',
     'header.subtitle': 'ローカルファースト カンバン',
-    'header.searchPlaceholder': 'タスク、タグ、本文を検索...',
+    'header.searchPlaceholder': 'カード、タグ、本文を検索...',
     'header.theme': 'テーマ',
     'header.columns': '設定',
     'header.sync': '同期',
-    'header.newTask': 'タスク作成',
+    'header.newCard': 'カード作成',
 
     // Board & Columns
     'board.noColumns': '表示可能なカラムがありません。「設定」からカラムを追加または表示に切り替えてください。',
     'board.moveLeft': '左へ移動',
     'board.moveRight': '右へ移動',
+    'column.addCard': 'カードを追加',
+    'column.addCardTooltip': 'このカラムにカードを追加',
 
     // Column & Status Manager Modal
     'configModal.title': 'ボード＆カスタムフィールド設定',
@@ -57,22 +59,21 @@ export const translations = {
     'themeModal.done': '完了',
     'themeModal.active': '使用中',
 
-    // Task Modal
-    'taskModal.createTitle': '新規タスク作成',
-    'taskModal.editTitle': 'タスクの編集',
+    // Task / Card Modal
+    'taskModal.createTitle': '新規カード作成',
+    'taskModal.editTitle': 'カードの編集',
     'taskModal.titleLabel': 'タイトル',
     'taskModal.customFieldsLabel': 'カスタムフィールド',
     'taskModal.fieldEnabled': 'ON',
     'taskModal.fieldDisabled': '非表示 (OFF)',
     'taskModal.tagsLabel': 'タグ（カンマ区切り）',
     'taskModal.tagsPlaceholder': '例: frontend, bug, auth',
-    'taskModal.contentLabel': 'タスク詳細 (Markdown)',
-    'taskModal.contentPlaceholder': 'タスクの詳細説明やチェックリストを記入...',
+    'taskModal.contentLabel': 'カード詳細 (Markdown)',
+    'taskModal.contentPlaceholder': 'カードの詳細説明やチェックリストを記入...',
     'taskModal.delete': '削除',
     'taskModal.cancel': 'キャンセル',
     'taskModal.save': '保存',
     'taskModal.saving': '保存中...',
-
 
     // Presets Names
     'preset.dark': '標準ダーク',
@@ -89,16 +90,18 @@ export const translations = {
     // Header
     'header.title': 'LocalKanban',
     'header.subtitle': 'Local-First Kanban',
-    'header.searchPlaceholder': 'Search tasks, tags, content...',
+    'header.searchPlaceholder': 'Search cards, tags, content...',
     'header.theme': 'Theme',
     'header.columns': 'Config',
     'header.sync': 'Sync',
-    'header.newTask': 'New Task',
+    'header.newCard': 'New Card',
 
     // Board & Columns
     'board.noColumns': 'No visible columns. Please add or unhide columns in Config.',
     'board.moveLeft': 'Move Left',
     'board.moveRight': 'Move Right',
+    'column.addCard': 'Add Card',
+    'column.addCardTooltip': 'Add card to this column',
 
     // Column & Status Manager Modal
     'configModal.title': 'Board & Custom Fields Settings',
@@ -141,18 +144,17 @@ export const translations = {
     'themeModal.done': 'Done',
     'themeModal.active': 'Active',
 
-    // Task Modal
-    'taskModal.createTitle': 'Create New Task',
-    'taskModal.editTitle': 'Edit Task',
+    // Task / Card Modal
+    'taskModal.createTitle': 'Create New Card',
+    'taskModal.editTitle': 'Edit Card',
     'taskModal.titleLabel': 'Title',
     'taskModal.customFieldsLabel': 'Custom Fields',
     'taskModal.fieldEnabled': 'ON',
     'taskModal.fieldDisabled': 'Off (Hidden)',
     'taskModal.tagsLabel': 'Tags (comma separated)',
-
     'taskModal.tagsPlaceholder': 'e.g. frontend, bug, auth',
-    'taskModal.contentLabel': 'Task Content (Markdown)',
-    'taskModal.contentPlaceholder': 'Task description or checklists...',
+    'taskModal.contentLabel': 'Card Content (Markdown)',
+    'taskModal.contentPlaceholder': 'Card description or checklists...',
     'taskModal.delete': 'Delete',
     'taskModal.cancel': 'Cancel',
     'taskModal.save': 'Save',

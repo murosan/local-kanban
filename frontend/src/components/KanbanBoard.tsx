@@ -21,6 +21,7 @@ interface KanbanBoardProps {
   tasks: Task[];
   onTaskUpdated: () => void;
   onCardClick: (task: Task) => void;
+  onAddCard?: (columnId: string) => void;
 }
 
 export const KanbanBoard: React.FC<KanbanBoardProps> = ({
@@ -29,6 +30,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   tasks,
   onTaskUpdated,
   onCardClick,
+  onAddCard,
 }) => {
   const { t } = useI18n();
   const [activeTask, setActiveTask] = useState<Task | null>(null);
@@ -143,6 +145,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
               customFields={customFields}
               tasks={colTasks}
               onCardClick={onCardClick}
+              onAddCard={onAddCard}
             />
           );
         })}

@@ -93,7 +93,7 @@ export const App: React.FC = () => {
     };
   }, [loadData]);
 
-  const handleOpenNewTaskModal = (columnId?: string) => {
+  const handleOpenNewCardModal = (columnId?: string) => {
     const defaultColumnId = columnId || config?.columns[0]?.id || '';
     setSelectedTask(null);
     setInitialColumnId(defaultColumnId);
@@ -190,7 +190,6 @@ export const App: React.FC = () => {
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         onReload={loadData}
-        onOpenNewTaskModal={() => handleOpenNewTaskModal()}
         onOpenThemeModal={() => setIsThemeModalOpen(true)}
         onOpenColumnManagerModal={() => setIsColumnModalOpen(true)}
         isSyncing={isSyncing}
@@ -204,6 +203,7 @@ export const App: React.FC = () => {
           tasks={tasks}
           onTaskUpdated={loadData}
           onCardClick={handleCardClick}
+          onAddCard={(columnId) => handleOpenNewCardModal(columnId)}
         />
       </main>
 

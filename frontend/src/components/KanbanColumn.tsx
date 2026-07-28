@@ -1,14 +1,17 @@
 import React from 'react';
 import { useDroppable } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { Plus } from 'lucide-react';
 import { Column, CustomFieldDef, Task } from '../types/task';
 import { TaskCard } from './TaskCard';
+import { useI18n } from '../i18n/I18nContext';
 
 interface KanbanColumnProps {
   column: Column;
   customFields?: CustomFieldDef[];
   tasks: Task[];
   onCardClick: (task: Task) => void;
+  onAddCard?: (columnId: string) => void;
 }
 
 export const KanbanColumn: React.FC<KanbanColumnProps> = ({
@@ -16,7 +19,9 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
   customFields = [],
   tasks,
   onCardClick,
+  onAddCard,
 }) => {
+  const { t } = useI18n();
   const columnDropId = column.id;
   const { setNodeRef, isOver } = useDroppable({
     id: columnDropId,
@@ -34,7 +39,7 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
       } transition-all duration-200`}
     >
       {/* Column Header */}
-      <div className="flex items-center justify-between p-4 border-b border-[var(--border-color)]">
+      <div className="flex items-center justify-between px-3.5 py-2 border-b border-[var(--border-color)]">
         <div className="flex items-center space-x-2.5">
           <span className="w-3 h-3 rounded-full" style={{ backgroundColor: columnAccentColor }} />
           <h2 className="font-bold text-[var(--text-primary)] text-sm">{column.title}</h2>
@@ -49,6 +54,16 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
             {tasks.length}
           </span>
         </div>
+
+        {/* Add Card Button */}
+        <button
+          onClick={() => onAddCard && onAddCard(column.id)}
+          className="p-1.5 rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-card)] border border-transparent hover:border-[var(--border-color)] transition-all active:scale-95"
+          title={t('column.addCardTooltip')}
+          aria-label={t('column.addCard')}
+        >
+          <Plus className="w-4 h-4" />
+        </button>
       </div>
 
       {/* Task Cards Container */}
@@ -64,10 +79,9 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
           ))}
         </SortableContext>
 
-
         {tasks.length === 0 && (
           <div className="flex items-center justify-center h-32 border-2 border-dashed border-[var(--border-color)] rounded-xl text-[var(--text-muted)] text-xs font-medium">
-            Drop tasks here
+            Drop cards here
           </div>
         )}
       </div>
