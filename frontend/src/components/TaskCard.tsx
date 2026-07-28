@@ -111,7 +111,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
             return (
               <div
                 key={field.id}
-                className="flex items-center justify-between text-[11px] px-2.5 py-1 rounded-md bg-[var(--bg-surface)] text-[var(--text-secondary)] border border-[var(--border-color)]/80"
+                className="flex items-center justify-between text-[11px] px-2.5 py-1 rounded-md bg-[var(--bg-input)] text-[var(--text-secondary)] border border-[var(--border-color)]"
               >
                 <span className="text-[var(--text-muted)] font-medium truncate max-w-[50%]">
                   {field.name}
@@ -123,9 +123,9 @@ export const TaskCard: React.FC<TaskCardProps> = ({
                   style={
                     hasColor
                       ? {
-                          backgroundColor: `${field.color}22`,
+                          backgroundColor: `${field.color}20`,
                           color: field.color,
-                          border: `1px solid ${field.color}44`,
+                          border: `1px solid ${field.color}40`,
                         }
                       : undefined
                   }

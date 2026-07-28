@@ -194,7 +194,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 
           {/* Custom Fields Section (Trello Style) */}
           {customFields.length > 0 && (
-            <div className="bg-[var(--bg-surface)] p-4 rounded-xl border border-[var(--border-color)]/70 space-y-3">
+            <div className="bg-[var(--bg-surface)] p-4 rounded-xl border border-[var(--border-color)] space-y-3">
               <div className="flex items-center space-x-2 text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider">
                 <Sliders className="w-4 h-4 text-blue-500" />
                 <span>{t('taskModal.customFieldsLabel')}</span>
@@ -206,7 +206,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                   const isEnabled = fieldState.enabled;
 
                   return (
-                    <div key={field.id} className="flex flex-col space-y-1.5 border-b border-[var(--border-color)]/30 pb-3 last:border-b-0 last:pb-0">
+                    <div key={field.id} className="flex flex-col space-y-1.5 border-b border-[var(--border-color)] pb-3 last:border-b-0 last:pb-0">
                       <div className="flex items-center justify-between">
                         <label className="text-xs font-semibold text-[var(--text-secondary)] flex items-center space-x-1.5">
                           <span>{field.name}</span>
@@ -231,7 +231,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                             className={`inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border transition-all ${
                               isEnabled
                                 ? 'bg-blue-600/10 text-blue-500 border-blue-500/30'
-                                : 'bg-[var(--bg-input)] text-[var(--text-muted)] border-[var(--border-color)]'
+                                : 'bg-[var(--bg-input)] text-[var(--text-muted)] border border-[var(--border-color)]'
                             }`}
                             title={isEnabled ? t('taskModal.fieldEnabled') : t('taskModal.fieldDisabled')}
                           >
@@ -310,7 +310,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                                 type="checkbox"
                                 checked={!!fieldState.value}
                                 onChange={(e) => handleCustomFieldValueChange(field.id, e.target.checked)}
-                                className="w-4 h-4 text-blue-600 rounded border-[var(--border-color)] focus:ring-blue-500"
+                                className="w-4 h-4 text-blue-600 rounded border border-[var(--border-color)] focus:ring-blue-500"
                               />
                               <span className="text-xs text-[var(--text-primary)]">{field.name}</span>
                             </label>

@@ -277,3 +277,144 @@
   margin: 0.5rem 0;
 }
 
+/* Code Block & Prism Syntax Highlighting Styles */
+.codeblock {
+  @apply block rounded-xl bg-slate-800 relative mt-4 shadow-xl overflow-hidden;
+}
+
+.codeblock pre,
+.codeblock pre code {
+  @apply rounded-xl bg-slate-800 p-0 m-0;
+}
+
+.codeblock pre code {
+  @apply block relative overflow-auto;
+  @apply text-slate-300 tracking-wide text-xs font-mono;
+  tab-size: 2;
+}
+
+.codeblock pre code .code-container {
+  @apply min-w-full w-fit px-5 pt-4 pb-5;
+}
+
+.codeblock pre code.language-go {
+  tab-size: 4;
+}
+
+.codeblock .filename {
+  @apply pt-2 pb-1 px-5 min-h-10;
+  @apply text-sky-400 text-sm block leading-7 tracking-normal font-mono break-words;
+  @apply border-b-sky-400 border-b-2;
+}
+
+.codeblock .clipboard {
+  @apply absolute right-4 top-2.5 h-6 w-6;
+  @apply bg-slate-800/80 z-30 rounded-lg p-1;
+  @apply cursor-pointer transition-colors;
+}
+
+.codeblock .clipboard svg {
+  @apply stroke-slate-400 hover:stroke-slate-200 h-full w-full;
+}
+
+.token.tag {
+  @apply text-blue-300;
+}
+
+.token.comment,
+.token.prolog,
+.token.doctype,
+.token.cdata {
+  @apply text-zinc-400;
+}
+
+.token.punctuation,
+.token.namespace {
+  @apply opacity-70;
+}
+
+.token.keyword,
+.token.property,
+.token.selector,
+.token.constant,
+.token.symbol {
+  @apply text-amber-500;
+}
+
+.token.boolean,
+.token.number,
+.token.null,
+.token.deleted {
+  @apply text-blue-300;
+}
+
+.token.class-name,
+.token.builtin,
+.language-css .token.property,
+.language-hocon .token.property,
+.token.literal-property {
+  @apply text-sky-400;
+}
+
+.token.function,
+.token.function-variable {
+  @apply text-sky-400;
+}
+
+.token.attr-name {
+  @apply text-slate-300;
+}
+
+.token.attr-value,
+.token.string,
+.token.char,
+.token.entity,
+.token.url,
+.language-css .token.string,
+.style .token.string,
+.token.variable,
+.token.regex {
+  @apply text-lime-500;
+}
+
+.token.deleted-sign,
+.token.inserted-sign {
+  @apply block text-inherit;
+}
+
+.token.deleted-sign.deleted {
+  @apply bg-red-500/20;
+}
+
+.token.inserted-sign.inserted {
+  @apply bg-green-500/30;
+}
+
+.token.prefix {
+  @apply mr-2 select-none;
+}
+.token.prefix.inserted {
+  @apply bg-green-500/30;
+}
+.token.prefix.deleted {
+  @apply bg-red-500/30;
+}
+
+.token.annotation {
+  @apply text-yellow-200;
+}
+
+.token.regex,
+.token.important {
+  color: hsl(42, 75%, 65%);
+}
+
+.token.important,
+.token.bold {
+  @apply font-bold;
+}
+
+.token.entity {
+  @apply cursor-help;
+}
+

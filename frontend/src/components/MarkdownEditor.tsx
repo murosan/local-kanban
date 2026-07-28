@@ -1,6 +1,19 @@
 import React, { useState, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import Prism from 'prismjs';
+import 'prismjs/components/prism-go';
+import 'prismjs/components/prism-javascript';
+import 'prismjs/components/prism-typescript';
+import 'prismjs/components/prism-jsx';
+import 'prismjs/components/prism-tsx';
+import 'prismjs/components/prism-python';
+import 'prismjs/components/prism-css';
+import 'prismjs/components/prism-json';
+import 'prismjs/components/prism-bash';
+import 'prismjs/components/prism-sql';
+import 'prismjs/components/prism-markdown';
+import 'prismjs/components/prism-yaml';
 import {
   Bold,
   Italic,
@@ -80,6 +93,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 
     const start = textarea.selectionStart;
     const end = textarea.selectionEnd;
+    const scrollTop = textarea.scrollTop;
     const selectedText = value.substring(start, end) || defaultText;
     const replacement = `${before}${selectedText}${after}`;
 
@@ -92,6 +106,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
         start + before.length,
         start + before.length + selectedText.length
       );
+      textarea.scrollTop = scrollTop;
     }, 0);
   };
 
@@ -101,16 +116,55 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 
     const start = textarea.selectionStart;
     const end = textarea.selectionEnd;
+    const scrollTop = textarea.scrollTop;
     
-    // Find beginning of line
+    // Find beginning and end of current line
     const lineStart = value.lastIndexOf('\n', start - 1) + 1;
-    const newValue = value.substring(0, lineStart) + prefix + value.substring(lineStart);
-    
+    const lineEndIndex = value.indexOf('\n', start);
+    const lineEnd = lineEndIndex === -1 ? value.length : lineEndIndex;
+    const currentLine = value.substring(lineStart, lineEnd);
+
+    // Common prefix patterns (headings, check lists, bullet lists, ordered lists, blockquotes)
+    const prefixPatterns = [
+      /^#{1,6}\s+/,
+      /^[-*+]\s+\[[ xX]\]\s+/,
+      /^[-*+]\s+/,
+      /^\d+\.\s+/,
+      /^>\s+/
+    ];
+
+    let existingPrefix = '';
+    for (const pattern of prefixPatterns) {
+      const match = currentLine.match(pattern);
+      if (match) {
+        existingPrefix = match[0];
+        break;
+      }
+    }
+
+    let newLine = currentLine;
+    if (existingPrefix && currentLine.startsWith(prefix)) {
+      // Toggle off if clicking the same prefix
+      newLine = currentLine.substring(prefix.length);
+    } else if (existingPrefix) {
+      // Replace existing prefix with new prefix
+      newLine = prefix + currentLine.substring(existingPrefix.length);
+    } else {
+      // Add prefix
+      newLine = prefix + currentLine;
+    }
+
+    const newValue = value.substring(0, lineStart) + newLine + value.substring(lineEnd);
     onChange(newValue);
+
+    const lengthDiff = newLine.length - currentLine.length;
 
     setTimeout(() => {
       textarea.focus();
-      textarea.setSelectionRange(start + prefix.length, end + prefix.length);
+      const newStart = Math.max(lineStart, start + lengthDiff);
+      const newEnd = Math.max(lineStart, end + lengthDiff);
+      textarea.setSelectionRange(newStart, newEnd);
+      textarea.scrollTop = scrollTop;
     }, 0);
   };
 
@@ -126,26 +180,274 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
     insertFormat(`\`${formatted}\` `);
   };
 
-  const handleToggleTaskCheckbox = (index: number) => {
-    let taskCount = 0;
-    const lines = value.split('\n');
-    const updatedLines = lines.map((line) => {
-      const taskMatch = line.match(/^(\s*[-*+]\s+\[)([ xX])(\].*)$/);
-      if (taskMatch) {
-        if (taskCount === index) {
-          const currentChecked = taskMatch[2] !== ' ';
-          const nextMark = currentChecked ? ' ' : 'x';
-          taskCount++;
-          return `${taskMatch[1]}${nextMark}${taskMatch[3]}`;
-        }
-        taskCount++;
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    const isMod = e.metaKey || e.ctrlKey;
+    if (isMod) {
+      if (e.key === 'b' || e.key === 'B') {
+        e.preventDefault();
+        insertFormat('**', '**', '太字');
+        return;
       }
-      return line;
-    });
-    onChange(updatedLines.join('\n'));
+      if (e.key === 'i' || e.key === 'I') {
+        e.preventDefault();
+        insertFormat('*', '*', '斜体');
+        return;
+      }
+      if (e.key === 'k' || e.key === 'K') {
+        e.preventDefault();
+        insertFormat('[', '](https://example.com)', 'リンクテキスト');
+        return;
+      }
+    }
+
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      const textarea = textareaRef.current;
+      if (!textarea) return;
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const scrollTop = textarea.scrollTop;
+
+      if (e.shiftKey) {
+        const lineStart = value.lastIndexOf('\n', start - 1) + 1;
+        const lineText = value.substring(lineStart, end);
+        if (lineText.startsWith('  ')) {
+          const newValue = value.substring(0, lineStart) + lineText.substring(2) + value.substring(end);
+          onChange(newValue);
+          setTimeout(() => {
+            textarea.focus();
+            textarea.setSelectionRange(Math.max(lineStart, start - 2), Math.max(lineStart, end - 2));
+            textarea.scrollTop = scrollTop;
+          }, 0);
+        }
+      } else {
+        const newValue = value.substring(0, start) + '  ' + value.substring(end);
+        onChange(newValue);
+        setTimeout(() => {
+          textarea.focus();
+          textarea.setSelectionRange(start + 2, end + 2);
+          textarea.scrollTop = scrollTop;
+        }, 0);
+      }
+      return;
+    }
+
+    if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+      const textarea = textareaRef.current;
+      if (!textarea) return;
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+
+      if (start === end) {
+        const lineStart = value.lastIndexOf('\n', start - 1) + 1;
+        const lineText = value.substring(lineStart, start);
+
+        const taskMatch = lineText.match(/^(\s*[-*+]\s+\[[ xX]\]\s*)(.*)$/);
+        const bulletMatch = lineText.match(/^(\s*[-*+]\s+)(.*)$/);
+        const numberMatch = lineText.match(/^(\s*)(\d+)\.\s+(.*)$/);
+        const quoteMatch = lineText.match(/^(\s*>\s*)(.*)$/);
+
+        if (taskMatch) {
+          e.preventDefault();
+          const [, prefix, rest] = taskMatch;
+          if (rest.trim() === '') {
+            const newValue = value.substring(0, lineStart) + value.substring(start);
+            onChange(newValue);
+            setTimeout(() => {
+              textarea.focus();
+              textarea.setSelectionRange(lineStart, lineStart);
+            }, 0);
+          } else {
+            const newPrefix = '\n' + prefix.replace(/\[[xX]\]/, '[ ]');
+            const newValue = value.substring(0, start) + newPrefix + value.substring(start);
+            onChange(newValue);
+            setTimeout(() => {
+              textarea.focus();
+              const nextPos = start + newPrefix.length;
+              textarea.setSelectionRange(nextPos, nextPos);
+            }, 0);
+          }
+          return;
+        }
+
+        if (bulletMatch) {
+          e.preventDefault();
+          const [, prefix, rest] = bulletMatch;
+          if (rest.trim() === '') {
+            const newValue = value.substring(0, lineStart) + value.substring(start);
+            onChange(newValue);
+            setTimeout(() => {
+              textarea.focus();
+              textarea.setSelectionRange(lineStart, lineStart);
+            }, 0);
+          } else {
+            const newPrefix = '\n' + prefix;
+            const newValue = value.substring(0, start) + newPrefix + value.substring(start);
+            onChange(newValue);
+            setTimeout(() => {
+              textarea.focus();
+              const nextPos = start + newPrefix.length;
+              textarea.setSelectionRange(nextPos, nextPos);
+            }, 0);
+          }
+          return;
+        }
+
+        if (numberMatch) {
+          e.preventDefault();
+          const [, indent, numStr, restBefore] = numberMatch;
+          const lineEndIndex = value.indexOf('\n', start);
+          const lineEnd = lineEndIndex === -1 ? value.length : lineEndIndex;
+          const beforeCursor = value.substring(lineStart, start);
+          const afterCursor = value.substring(start, lineEnd);
+          const isLineEmptyItem = restBefore.trim() === '' && afterCursor.trim() === '';
+
+          const lines = value.split('\n');
+
+          // Find current line index in lines array
+          let currentLineIdx = 0;
+          let charAccumulator = 0;
+          for (let i = 0; i < lines.length; i++) {
+            if (charAccumulator + lines[i].length >= lineStart) {
+              currentLineIdx = i;
+              break;
+            }
+            charAccumulator += lines[i].length + 1;
+          }
+
+          const escapedIndent = indent.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          const numberItemRegex = new RegExp(`^(${escapedIndent})(\\d+)\\.\\s+(.*)$`);
+
+          if (isLineEmptyItem) {
+            lines[currentLineIdx] = '';
+
+            for (let k = currentLineIdx + 1; k < lines.length; k++) {
+              const match = lines[k].match(numberItemRegex);
+              if (match) {
+                const subNum = parseInt(match[2], 10);
+                lines[k] = `${indent}${subNum - 1}. ${match[3]}`;
+              } else if (lines[k].trim() === '') {
+                continue;
+              } else {
+                const nextIndentMatch = lines[k].match(/^(\s*)/);
+                const nextIndent = nextIndentMatch ? nextIndentMatch[1] : '';
+                if (nextIndent.length > indent.length) {
+                  continue;
+                } else {
+                  break;
+                }
+              }
+            }
+
+            const newValue = lines.join('\n');
+            onChange(newValue);
+            setTimeout(() => {
+              textarea.focus();
+              textarea.setSelectionRange(lineStart, lineStart);
+            }, 0);
+          } else {
+            const nextNum = parseInt(numStr, 10) + 1;
+            const restAfterTrimmed = afterCursor.trimStart();
+            const newPrefix = `${indent}${nextNum}. `;
+
+            lines[currentLineIdx] = beforeCursor;
+            lines.splice(currentLineIdx + 1, 0, `${newPrefix}${restAfterTrimmed}`);
+
+            for (let k = currentLineIdx + 2; k < lines.length; k++) {
+              const match = lines[k].match(numberItemRegex);
+              if (match) {
+                const subNum = parseInt(match[2], 10);
+                lines[k] = `${indent}${subNum + 1}. ${match[3]}`;
+              } else if (lines[k].trim() === '') {
+                continue;
+              } else {
+                const nextIndentMatch = lines[k].match(/^(\s*)/);
+                const nextIndent = nextIndentMatch ? nextIndentMatch[1] : '';
+                if (nextIndent.length > indent.length) {
+                  continue;
+                } else {
+                  break;
+                }
+              }
+            }
+
+            const newValue = lines.join('\n');
+            onChange(newValue);
+            const nextPos = start + 1 + newPrefix.length;
+            setTimeout(() => {
+              textarea.focus();
+              textarea.setSelectionRange(nextPos, nextPos);
+            }, 0);
+          }
+          return;
+        }
+
+        if (quoteMatch) {
+          e.preventDefault();
+          const [, prefix, rest] = quoteMatch;
+          if (rest.trim() === '') {
+            const newValue = value.substring(0, lineStart) + value.substring(start);
+            onChange(newValue);
+            setTimeout(() => {
+              textarea.focus();
+              textarea.setSelectionRange(lineStart, lineStart);
+            }, 0);
+          } else {
+            const newPrefix = '\n' + prefix;
+            const newValue = value.substring(0, start) + newPrefix + value.substring(start);
+            onChange(newValue);
+            setTimeout(() => {
+              textarea.focus();
+              const nextPos = start + newPrefix.length;
+              textarea.setSelectionRange(nextPos, nextPos);
+            }, 0);
+          }
+          return;
+        }
+      }
+    }
   };
 
-  let previewCheckboxCounter = 0;
+  const highlightCode = (code: string, language: string) => {
+    const normalizedLang = (language || '').toLowerCase();
+    const grammar = Prism.languages[normalizedLang] || Prism.languages.javascript || Prism.languages.clike;
+    if (!grammar) return code;
+    try {
+      return Prism.highlight(code, grammar, normalizedLang);
+    } catch {
+      return code;
+    }
+  };
+
+  const handleToggleTaskByLineNumber = (lineNum?: number) => {
+    if (!lineNum || lineNum <= 0) return;
+    const lines = value.split('\n');
+    let targetIdx = lineNum - 1;
+
+    if (targetIdx >= 0 && targetIdx < lines.length) {
+      let match = lines[targetIdx].match(/^(\s*(?:[-*+]|\d+|\>)*\s*[-*+]?\s*\[)([ xX])(\]\s*.*)$/);
+
+      if (!match) {
+        for (const offset of [-1, 1, -2, 2, -3, 3]) {
+          const idx = targetIdx + offset;
+          if (idx >= 0 && idx < lines.length) {
+            const nearMatch = lines[idx].match(/^(\s*(?:[-*+]|\d+|\>)*\s*[-*+]?\s*\[)([ xX])(\]\s*.*)$/);
+            if (nearMatch) {
+              targetIdx = idx;
+              match = nearMatch;
+              break;
+            }
+          }
+        }
+      }
+
+      if (match) {
+        const nextMark = match[2] === ' ' ? 'x' : ' ';
+        lines[targetIdx] = `${match[1]}${nextMark}${match[3]}`;
+        onChange(lines.join('\n'));
+      }
+    }
+  };
 
   return (
     <div className={`flex flex-col flex-1 border border-[var(--border-color)] rounded-xl overflow-hidden bg-[var(--bg-input)] transition-all ${
@@ -199,6 +501,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
             <div className="flex items-center space-x-0.5 border-r border-[var(--border-color)] pr-1.5 mr-1">
               <button
                 type="button"
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => insertLinePrefix('# ')}
                 className="p-1.5 text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--border-color)]/40 rounded-lg transition-colors"
                 title={t('editor.h1')}
@@ -207,6 +510,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
               </button>
               <button
                 type="button"
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => insertLinePrefix('## ')}
                 className="p-1.5 text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--border-color)]/40 rounded-lg transition-colors"
                 title={t('editor.h2')}
@@ -215,6 +519,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
               </button>
               <button
                 type="button"
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => insertLinePrefix('### ')}
                 className="p-1.5 text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--border-color)]/40 rounded-lg transition-colors"
                 title={t('editor.h3')}
@@ -226,6 +531,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
             <div className="flex items-center space-x-0.5 border-r border-[var(--border-color)] pr-1.5 mr-1">
               <button
                 type="button"
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => insertFormat('**', '**', '太字')}
                 className="p-1.5 text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--border-color)]/40 rounded-lg transition-colors"
                 title={t('editor.bold')}
@@ -234,6 +540,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
               </button>
               <button
                 type="button"
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => insertFormat('*', '*', '斜体')}
                 className="p-1.5 text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--border-color)]/40 rounded-lg transition-colors"
                 title={t('editor.italic')}
@@ -242,6 +549,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
               </button>
               <button
                 type="button"
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => insertFormat('~~', '~~', '打ち消し')}
                 className="p-1.5 text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--border-color)]/40 rounded-lg transition-colors"
                 title={t('editor.strikethrough')}
@@ -253,6 +561,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
             <div className="flex items-center space-x-0.5 border-r border-[var(--border-color)] pr-1.5 mr-1">
               <button
                 type="button"
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => insertLinePrefix('- ')}
                 className="p-1.5 text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--border-color)]/40 rounded-lg transition-colors"
                 title={t('editor.bulletList')}
@@ -261,6 +570,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
               </button>
               <button
                 type="button"
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => insertLinePrefix('1. ')}
                 className="p-1.5 text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--border-color)]/40 rounded-lg transition-colors"
                 title={t('editor.numberList')}
@@ -269,6 +579,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
               </button>
               <button
                 type="button"
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => insertLinePrefix('- [ ] ')}
                 className="p-1.5 text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--border-color)]/40 rounded-lg transition-colors"
                 title={t('editor.checkList')}
@@ -280,6 +591,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
             <div className="flex items-center space-x-0.5 border-r border-[var(--border-color)] pr-1.5 mr-1">
               <button
                 type="button"
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => insertLinePrefix('> ')}
                 className="p-1.5 text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--border-color)]/40 rounded-lg transition-colors"
                 title={t('editor.quote')}
@@ -288,6 +600,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
               </button>
               <button
                 type="button"
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => insertFormat('\n```javascript\n', '\n```\n', '// code here')}
                 className="p-1.5 text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--border-color)]/40 rounded-lg transition-colors"
                 title={t('editor.codeBlock')}
@@ -296,6 +609,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
               </button>
               <button
                 type="button"
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => insertFormat('\n| ヘッダー 1 | ヘッダー 2 |\n| --- | --- |\n| セル 1 | セル 2 |\n')}
                 className="p-1.5 text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--border-color)]/40 rounded-lg transition-colors"
                 title={t('editor.table')}
@@ -304,6 +618,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
               </button>
               <button
                 type="button"
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => insertFormat('[', '](https://example.com)', 'リンクテキスト')}
                 className="p-1.5 text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--border-color)]/40 rounded-lg transition-colors"
                 title={t('editor.link')}
@@ -312,6 +627,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
               </button>
               <button
                 type="button"
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => insertFormat('\n---\n')}
                 className="p-1.5 text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--border-color)]/40 rounded-lg transition-colors"
                 title={t('editor.horizontalRule')}
@@ -322,6 +638,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 
             <button
               type="button"
+              onMouseDown={(e) => e.preventDefault()}
               onClick={insertTimestamp}
               className="p-1.5 text-[var(--text-secondary)] hover:text-blue-400 hover:bg-[var(--border-color)]/40 rounded-lg transition-colors flex items-center space-x-1"
               title={t('editor.timestamp')}
@@ -336,6 +653,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
           {/* Focus Mode Fullscreen Toggle */}
           <button
             type="button"
+            onMouseDown={(e) => e.preventDefault()}
             onClick={() => setIsFocusMode(!isFocusMode)}
             className={`px-2 py-1 rounded-lg transition-colors flex items-center space-x-1 text-xs font-semibold ${
               isFocusMode
@@ -351,6 +669,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
           {/* Copy Markdown button */}
           <button
             type="button"
+            onMouseDown={(e) => e.preventDefault()}
             onClick={handleCopy}
             className="p-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] rounded-lg transition-colors"
             title="Markdownをコピー"
@@ -369,6 +688,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
               ref={textareaRef}
               value={value}
               onChange={(e) => onChange(e.target.value)}
+              onKeyDown={handleKeyDown}
               placeholder={placeholder || 'Markdown形式で入力...'}
               className="w-full flex-1 h-full p-4 bg-transparent text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none font-mono text-sm leading-relaxed resize-none overflow-y-auto"
             />
@@ -383,13 +703,44 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
                   components={{
+                    li({ node, children, className, ...props }) {
+                      const lineNum = node?.position?.start?.line;
+                      const isTaskItem = className?.includes('task-list-item');
+
+                      if (isTaskItem && lineNum) {
+                        return (
+                          <li
+                            {...props}
+                            className={className}
+                            onClick={(e) => {
+                              const target = e.target as HTMLElement;
+                              if (target && target.tagName === 'INPUT' && (target as HTMLInputElement).type === 'checkbox') {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleToggleTaskByLineNumber(lineNum);
+                              }
+                            }}
+                          >
+                            {children}
+                          </li>
+                        );
+                      }
+
+                      return (
+                        <li className={className} {...props}>
+                          {children}
+                        </li>
+                      );
+                    },
                     input({ node, ...props }) {
                       if (props.type === 'checkbox') {
-                        const currentIndex = previewCheckboxCounter++;
+                        const { disabled, readOnly, checked, ...restProps } = props;
                         return (
                           <input
-                            {...props}
-                            onChange={() => handleToggleTaskCheckbox(currentIndex)}
+                            {...restProps}
+                            checked={!!checked}
+                            disabled={false}
+                            onChange={() => {}}
                             className="cursor-pointer accent-blue-500 rounded focus:ring-1 focus:ring-blue-500"
                           />
                         );
@@ -401,6 +752,45 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
                         <a {...props} target="_blank" rel="noopener noreferrer">
                           {children}
                         </a>
+                      );
+                    },
+                    pre({ children }) {
+                      return <>{children}</>;
+                    },
+                    code({ node, className, children, ...props }) {
+                      const isInline = !className && !String(children).includes('\n');
+
+                      if (isInline) {
+                        return (
+                          <code className={className} {...props}>
+                            {children}
+                          </code>
+                        );
+                      }
+
+                      const rawLang = (className || '').replace(/^language-/, '');
+                      const [langName, filename] = rawLang.split(':');
+                      const lang = langName || 'text';
+                      const codeString = String(children).replace(/\n$/, '');
+                      const highlightedHtml = highlightCode(codeString, lang);
+
+                      return (
+                        <div className="codeblock">
+                          {filename && <div className="filename">{filename}</div>}
+                          <button
+                            type="button"
+                            className="clipboard"
+                            onClick={() => navigator.clipboard.writeText(codeString)}
+                            title="コードをコピー"
+                          >
+                            <Copy />
+                          </button>
+                          <pre>
+                            <code className={`language-${lang}`}>
+                              <div className="code-container" dangerouslySetInnerHTML={{ __html: highlightedHtml }} />
+                            </code>
+                          </pre>
+                        </div>
                       );
                     },
                   }}
