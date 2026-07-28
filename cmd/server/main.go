@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/go-chi/cors"
+
 	"localkanban/pkg/api"
 	"localkanban/pkg/markdown"
 	"localkanban/pkg/model"
@@ -72,7 +74,15 @@ func main() {
 	mux := http.NewServeMux()
 	server.RegisterRoutes(mux)
 
-	// Add CORS middleware
+	// Add CORS middleware using chi's cors package
+	corsMiddleware := cors.Handler(cors.Options{
+		AllowedOrigins:   []string{"*"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
+		ExposedHeaders:   []string{"Link"},
+		AllowCredentials: false,
+		MaxAge:           300,
+	})
 	handler := corsMiddleware(mux)
 
 	addr := fmt.Sprintf("%s:%s", cfg.host, cfg.port)
@@ -80,21 +90,6 @@ func main() {
 	if err := http.ListenAndServe(addr, handler); err != nil {
 		log.Fatalf("Server stopped: %v", err)
 	}
-}
-
-func corsMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-
-		next.ServeHTTP(w, r)
-	})
 }
 
 func createSampleTasks(store *markdown.Store) {
