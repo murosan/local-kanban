@@ -94,6 +94,15 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
     }
   };
 
+  const handleFieldNameChange = (fieldIndex: number, newName: string) => {
+    const updated = [...localCustomFields];
+    updated[fieldIndex] = {
+      ...updated[fieldIndex],
+      name: newName,
+    };
+    setLocalCustomFields(updated);
+  };
+
   const handleRemoveOptionFromCustomField = (fieldIndex: number, optionId: string) => {
     const updated = [...localCustomFields];
     const targetField = updated[fieldIndex];
@@ -449,13 +458,17 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
                     key={field.id}
                     className="p-4 rounded-xl border border-[var(--border-color)] bg-[var(--bg-card)] space-y-3 shadow-xs"
                   >
-                    {/* Header with Field Name, Type, and Explicit FIELD DELETE Button */}
-                    <div className="flex items-center justify-between border-b border-[var(--border-color)]/60 pb-2.5">
-                      <div className="flex items-center space-x-2">
-                        <span className="font-bold text-sm text-[var(--text-primary)]">
-                          {field.name}
-                        </span>
-                        <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-500 border border-blue-500/20">
+                    {/* Header with Field Name Input, Type, and Explicit FIELD DELETE Button */}
+                    <div className="flex items-center justify-between border-b border-[var(--border-color)]/60 pb-2.5 gap-2">
+                      <div className="flex items-center space-x-2 flex-1">
+                        <input
+                          type="text"
+                          value={field.name}
+                          onChange={(e) => handleFieldNameChange(idx, e.target.value)}
+                          className="bg-[var(--bg-input)] border border-[var(--border-color)] focus:border-blue-500 rounded px-2.5 py-1 text-sm font-bold text-[var(--text-primary)] flex-1 outline-none"
+                          placeholder="フィールド名"
+                        />
+                        <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-500 border border-blue-500/20 shrink-0">
                           {field.type}
                         </span>
                       </div>
@@ -464,7 +477,7 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
                       <button
                         type="button"
                         onClick={() => handleDeleteCustomField(idx)}
-                        className="flex items-center space-x-1.5 px-3 py-1.5 text-xs bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 rounded-lg text-rose-500 font-bold transition-all shadow-2xs cursor-pointer"
+                        className="flex items-center space-x-1.5 px-3 py-1.5 text-xs bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 rounded-lg text-rose-500 font-bold transition-all shadow-2xs cursor-pointer shrink-0"
                         title="このカスタムフィールド自体を削除"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
