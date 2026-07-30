@@ -1,23 +1,27 @@
 import React from 'react';
-import { RefreshCw, Search, Palette, Settings, Globe } from 'lucide-react';
+import { RefreshCw, Search, Palette, Settings, Globe, Database } from 'lucide-react';
 import { useI18n } from '../i18n/useI18n';
 
 interface HeaderProps {
   searchQuery: string;
   onSearchChange: (q: string) => void;
   onReload: () => void;
+  onRebuildDb: () => void;
   onOpenThemeModal: () => void;
   onOpenColumnManagerModal: () => void;
   isSyncing: boolean;
+  isRebuilding?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   searchQuery,
   onSearchChange,
   onReload,
+  onRebuildDb,
   onOpenThemeModal,
   onOpenColumnManagerModal,
   isSyncing,
+  isRebuilding = false,
 }) => {
   const { language, setLanguage, t } = useI18n();
 
@@ -89,10 +93,23 @@ export const Header: React.FC<HeaderProps> = ({
             <span className="hidden sm:inline">{t('header.columns')}</span>
           </button>
 
+          {/* Rebuild DB Button */}
+          <button
+            onClick={onRebuildDb}
+            disabled={isRebuilding || isSyncing}
+            className="flex items-center space-x-1 px-2.5 py-1 text-xs font-medium text-[var(--text-primary)] bg-[var(--bg-card)] hover:opacity-80 border border-[var(--border-color)] rounded-md transition-all active:scale-95 disabled:opacity-50"
+            title={t('header.rebuildDb')}
+          >
+            <Database
+              className={`w-3.5 h-3.5 text-[var(--text-secondary)] ${isRebuilding ? 'animate-spin' : ''}`}
+            />
+            <span className="hidden sm:inline">{t('header.rebuildDb')}</span>
+          </button>
+
           {/* Sync Button */}
           <button
             onClick={onReload}
-            disabled={isSyncing}
+            disabled={isSyncing || isRebuilding}
             className="flex items-center space-x-1 px-2.5 py-1 text-xs font-medium text-[var(--text-primary)] bg-[var(--bg-card)] hover:opacity-80 border border-[var(--border-color)] rounded-md transition-all active:scale-95 disabled:opacity-50"
             title={t('header.sync')}
           >

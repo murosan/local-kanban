@@ -9,6 +9,7 @@ export const translations = {
     'header.theme': 'テーマ',
     'header.columns': '設定',
     'header.sync': '同期',
+    'header.rebuildDb': 'DB再構築',
     'header.newCard': 'カード作成',
 
     // Board & Columns
@@ -118,6 +119,7 @@ export const translations = {
     'common.saved': 'カードを更新しました',
     'common.created': 'カードを作成しました',
     'common.deleted': 'カードを削除しました',
+    'common.rebuilt': 'データベースを再構築しました',
   },
   en: {
     // Header
@@ -127,6 +129,7 @@ export const translations = {
     'header.theme': 'Theme',
     'header.columns': 'Config',
     'header.sync': 'Sync',
+    'header.rebuildDb': 'Rebuild DB',
     'header.newCard': 'New Card',
 
     // Board & Columns
@@ -234,5 +237,6 @@ export const translations = {
     'common.saved': 'Task updated successfully',
     'common.created': 'Task created successfully',
     'common.deleted': 'Task deleted',
+    'common.rebuilt': 'Database rebuilt successfully',
   },
 };

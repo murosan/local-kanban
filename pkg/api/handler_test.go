@@ -139,3 +139,41 @@ func TestGetTasksSearchEngine(t *testing.T) {
 		t.Errorf("expected 1 task matching 'alpha', got %d", len(tasks))
 	}
 }
+
+func TestRebuildCache(t *testing.T) {
+	tempDir := t.TempDir()
+	store, err := markdown.NewStore(tempDir)
+	if err != nil {
+		t.Fatalf("failed to create store: %v", err)
+	}
+
+	task := &model.Task{
+		Title:    "Rebuild test task",
+		ColumnID: "col-todo",
+		Rank:     "0|a",
+	}
+	if err := store.SaveTask(task); err != nil {
+		t.Fatalf("failed to save task: %v", err)
+	}
+
+	server := NewServer(store, nil)
+	mux := http.NewServeMux()
+	server.RegisterRoutes(mux)
+
+	req := httptest.NewRequest("POST", "/api/rebuild", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", w.Code)
+	}
+
+	var res map[string]any
+	if err := json.NewDecoder(w.Body).Decode(&res); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if count, ok := res["count"].(float64); !ok || count != 1 {
+		t.Errorf("expected count 1, got %v", res["count"])
+	}
+}

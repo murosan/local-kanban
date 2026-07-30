@@ -7,6 +7,7 @@ import {
   updateTask,
   deleteTask,
   saveBoardConfig,
+  rebuildCache,
 } from './services/api';
 import { Header } from './components/Header';
 import { KanbanBoard } from './components/KanbanBoard';
@@ -22,6 +23,7 @@ export const App: React.FC = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isRebuilding, setIsRebuilding] = useState(false);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
   // Modal States
@@ -108,6 +110,23 @@ export const App: React.FC = () => {
       window.removeEventListener('focus', handleFocus);
     };
   }, [loadData]);
+
+  const handleRebuildDb = async () => {
+    setIsRebuilding(true);
+    try {
+      const res = await rebuildCache();
+      addToast(
+        `${t('common.rebuilt') || 'Database rebuilt successfully'} (${res.count} tasks)`,
+        'success'
+      );
+      await loadData();
+    } catch (err) {
+      console.error('Error rebuilding database:', err);
+      addToast('Failed to rebuild database cache', 'error');
+    } finally {
+      setIsRebuilding(false);
+    }
+  };
 
   const handleOpenNewCardModal = (columnId?: string) => {
     const defaultColumnId = columnId || config?.columns[0]?.id || '';
@@ -225,9 +244,11 @@ export const App: React.FC = () => {
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         onReload={loadData}
+        onRebuildDb={handleRebuildDb}
         onOpenThemeModal={() => setIsThemeModalOpen(true)}
         onOpenColumnManagerModal={() => setIsColumnModalOpen(true)}
         isSyncing={isSyncing}
+        isRebuilding={isRebuilding}
       />
 
       {/* Main Kanban Board Area */}

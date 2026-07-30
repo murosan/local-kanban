@@ -72,3 +72,11 @@ export async function deleteTask(id: string): Promise<void> {
   });
   if (!res.ok) throw new Error('Failed to delete task');
 }
+
+export async function rebuildCache(): Promise<{ message: string; count: number }> {
+  const res = await fetch(`${API_BASE}/rebuild`, {
+    method: 'POST',
+  });
+  if (!res.ok) throw new Error('Failed to rebuild database cache');
+  return res.json();
+}

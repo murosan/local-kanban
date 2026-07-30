@@ -37,6 +37,7 @@ func NewServer(
 func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/config", s.handleGetConfig)
 	mux.HandleFunc("PUT /api/config", s.handleSaveConfig)
+	mux.HandleFunc("POST /api/rebuild", s.handleRebuildCache)
 	mux.HandleFunc("GET /api/tasks", s.handleGetTasks)
 	mux.HandleFunc("POST /api/tasks", s.handleCreateTask)
 	mux.HandleFunc("PUT /api/tasks/{id}", s.handleUpdateTask)
@@ -245,6 +246,22 @@ func (s *Server) handleDeleteTask(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleRebuildCache(w http.ResponseWriter, r *http.Request) {
+	if err := s.store.SyncCache(); err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	tasks, err := s.store.GetAllTasks()
+	count := 0
+	if err == nil {
+		count = len(tasks)
+	}
+	respondJSON(w, http.StatusOK, map[string]any{
+		"message": "Database rebuilt successfully",
+		"count":   count,
+	})
 }
 
 func (s *Server) calculateRank(columnID string, prevID, nextID string) string {

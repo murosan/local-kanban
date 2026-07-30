@@ -419,7 +419,11 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 className="text-[var(--text-secondary)] hover:opacity-80 p-1.5 rounded-lg transition-colors"
                 title={isMaximized ? t('modal.minimize') : t('modal.maximize')}
               >
-                {isMaximized ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
+                {isMaximized ? (
+                  <Minimize2 className="w-5 h-5" />
+                ) : (
+                  <Maximize2 className="w-5 h-5" />
+                )}
               </button>
               <button
                 type="button"
@@ -526,7 +530,9 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                                   : 'bg-[var(--bg-input)] text-[var(--text-muted)] border border-[var(--border-color)]'
                               }`}
                               title={
-                                isEnabled ? t('taskModal.fieldEnabled') : t('taskModal.fieldDisabled')
+                                isEnabled
+                                  ? t('taskModal.fieldEnabled')
+                                  : t('taskModal.fieldDisabled')
                               }
                             >
                               {isEnabled ? (
@@ -570,7 +576,9 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                                         optionColor ? 'pl-9 pr-9 font-medium' : 'px-3 pr-9'
                                       }`}
                                     >
-                                      <option value="">-- {t('configModal.typeDropdown')} --</option>
+                                      <option value="">
+                                        -- {t('configModal.typeDropdown')} --
+                                      </option>
                                       {field.options?.map((opt) => (
                                         <option
                                           key={opt.id}
