@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"localkanban/pkg/cache"
-	"localkanban/pkg/model"
+	"github.com/murosan/local-kanban/pkg/cache"
+	"github.com/murosan/local-kanban/pkg/model"
 )
 
 func TestSearchEngine(t *testing.T) {

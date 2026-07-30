@@ -12,8 +12,8 @@ import (
 	"sync"
 	"time"
 
-	"localkanban/pkg/cache"
-	"localkanban/pkg/model"
+	"github.com/murosan/local-kanban/pkg/cache"
+	"github.com/murosan/local-kanban/pkg/model"
 
 	"gopkg.in/yaml.v3"
 )

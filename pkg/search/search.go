@@ -3,7 +3,7 @@ package search
 import (
 	"strings"
 
-	"localkanban/pkg/cache"
+	"github.com/murosan/local-kanban/pkg/cache"
 )
 
 type Engine struct {

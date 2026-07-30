@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"localkanban/pkg/markdown"
-	"localkanban/pkg/search"
+	"github.com/murosan/local-kanban/pkg/markdown"
+	"github.com/murosan/local-kanban/pkg/search"
 
 	mcpSDK "github.com/modelcontextprotocol/go-sdk/mcp"
 )

@@ -7,8 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"localkanban/pkg/markdown"
-	"localkanban/pkg/model"
+	"github.com/murosan/local-kanban/pkg/markdown"
+	"github.com/murosan/local-kanban/pkg/model"
 )
 
 func TestConfigRoutes(t *testing.T) {

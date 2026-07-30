@@ -6,10 +6,10 @@ import (
 	"net/http"
 	"strings"
 
-	"localkanban/pkg/lexorank"
-	"localkanban/pkg/markdown"
-	"localkanban/pkg/model"
-	"localkanban/pkg/search"
+	"github.com/murosan/local-kanban/pkg/lexorank"
+	"github.com/murosan/local-kanban/pkg/markdown"
+	"github.com/murosan/local-kanban/pkg/model"
+	"github.com/murosan/local-kanban/pkg/search"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )

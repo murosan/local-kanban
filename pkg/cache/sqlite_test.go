@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"localkanban/pkg/model"
+	"github.com/murosan/local-kanban/pkg/model"
 )
 
 func TestSQLiteCache(t *testing.T) {

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"sync"
 
-	"localkanban/pkg/model"
+	"github.com/murosan/local-kanban/pkg/model"
 
 	_ "modernc.org/sqlite"
 )

@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"localkanban/pkg/model"
+	"github.com/murosan/local-kanban/pkg/model"
 )
 
 func TestStoreCRUD(t *testing.T) {

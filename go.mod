@@ -1,4 +1,4 @@
-module localkanban
+module github.com/murosan/local-kanban
 
 go 1.26
 

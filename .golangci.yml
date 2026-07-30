@@ -10,9 +10,9 @@ formatters:
     gofmt:
       rewrite-rules: { pattern: 'interface{}', replacement: 'any' }
     gofumpt:
-      module-path: localkanban
+      module-path: github.com/murosan/local-kanban
     goimports:
-      local-prefixes: [localkanban]
+      local-prefixes: [github.com/murosan/local-kanban]
 
 linters:
   enable:
