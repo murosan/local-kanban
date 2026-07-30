@@ -42,7 +42,6 @@ type Task struct {
 	Tags         []string                    `json:"tags,omitempty" yaml:"tags,omitempty"`
 	CreatedAt    time.Time                   `json:"created_at" yaml:"created_at"`
 	UpdatedAt    time.Time                   `json:"updated_at" yaml:"updated_at"`
-	SlackLinks   []string                    `json:"slack_links,omitempty" yaml:"slack_links,omitempty"`
 	CustomFields map[string]CustomFieldValue `json:"custom_fields,omitempty" yaml:"custom_fields,omitempty"`
 
 	// Body content of the markdown file (after frontmatter)

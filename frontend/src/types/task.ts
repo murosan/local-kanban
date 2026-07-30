@@ -27,7 +27,6 @@ export interface Task {
   tags?: string[];
   created_at: string;
   updated_at: string;
-  slack_links?: string[];
   custom_fields?: Record<string, CustomFieldValue>;
   content: string;
   file_path?: string;
