@@ -216,7 +216,7 @@ export const App: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen flex flex-col transition-colors duration-300">
+    <div className="h-screen flex flex-col transition-colors duration-300 overflow-hidden">
       {/* Toast Notification Container */}
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
 
@@ -231,7 +231,7 @@ export const App: React.FC = () => {
       />
 
       {/* Main Kanban Board Area */}
-      <main className="flex-1 w-full px-3 sm:px-4 flex flex-col">
+      <main className="flex-1 w-full px-3 sm:px-4 pb-3 flex flex-col min-h-0 overflow-hidden">
         <KanbanBoard
           columns={config.columns}
           customFields={config.custom_fields}

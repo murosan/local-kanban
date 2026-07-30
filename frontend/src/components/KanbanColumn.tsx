@@ -34,7 +34,7 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
     <div
       ref={setNodeRef}
       style={{ borderTopColor: columnAccentColor }}
-      className={`flex flex-col w-80 flex-shrink-0 glass-panel rounded-2xl border-t-2 ${
+      className={`flex flex-col w-80 flex-shrink-0 max-h-full glass-panel rounded-2xl border-t-2 ${
         isOver ? 'ring-2 ring-blue-500/50 opacity-90' : ''
       } transition-all duration-200`}
     >
@@ -67,7 +67,7 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
       </div>
 
       {/* Task Cards Container */}
-      <div className="flex-1 p-3 space-y-3 overflow-y-auto min-h-[400px]">
+      <div className="flex-1 p-3 space-y-3 overflow-y-auto min-h-0">
         <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
           {tasks.map((task) => (
             <TaskCard

@@ -135,7 +135,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      <div className="flex space-x-4 overflow-x-auto pb-8 pt-1 items-start min-h-[calc(100vh-120px)] w-full px-1">
+      <div className="flex space-x-4 overflow-x-auto pb-2 pt-1 items-start h-full w-full px-1">
         {visibleColumns.map((column) => {
           const colTasks = tasks.filter((t) => t.column_id === column.id);
           return (
