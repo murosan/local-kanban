@@ -1,26 +1,16 @@
-version: "2"
-
-linters:
-  enable:
-    - govet
-    - errcheck
-    - staticcheck
-    - ineffassign
-    - unused
-    - misspell
+version: '2'
 
 formatters:
   enable:
     - gofmt
-
-linters-settings:
-  gofmt:
-    simplify: true
-
-issues:
-  exclude-dirs:
-    - frontend
-    - node_modules
+    - gofumpt
+    - goimports
+    - golines
+  settings:
+    gofmt:
+      rewrite-rules: { pattern: 'interface{}', replacement: 'any' }
+    goimports:
+      local-prefixes: [localkanban]
 
 run:
   timeout: 5m

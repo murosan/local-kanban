@@ -27,7 +27,8 @@ func Handler() http.Handler {
 		cleanPath := path.Clean(r.URL.Path)
 
 		// Never serve SPA index.html fallback for API or MCP requests
-		if strings.HasPrefix(cleanPath, "/api") || strings.HasPrefix(cleanPath, "/mcp") || cleanPath == "/sse" {
+		if strings.HasPrefix(cleanPath, "/api") || strings.HasPrefix(cleanPath, "/mcp") ||
+			cleanPath == "/sse" {
 			http.NotFound(w, r)
 			return
 		}
@@ -62,7 +63,11 @@ func Handler() http.Handler {
 		if os.IsNotExist(err) || err != nil {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(`<!DOCTYPE html><html><body><h2>LocalKanban Server</h2><p>Frontend assets not embedded yet. Please build frontend into pkg/ui/dist.</p></body></html>`))
+			_, _ = w.Write(
+				[]byte(
+					`<!DOCTYPE html><html><body><h2>LocalKanban Server</h2><p>Frontend assets not embedded yet. Please build frontend into pkg/ui/dist.</p></body></html>`,
+				),
+			)
 			return
 		}
 

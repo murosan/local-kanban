@@ -7,9 +7,10 @@ import (
 	"testing"
 	"time"
 
-	mcpSDK "github.com/modelcontextprotocol/go-sdk/mcp"
 	"localkanban/pkg/markdown"
 	"localkanban/pkg/search"
+
+	mcpSDK "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 func TestMCPServerTools(t *testing.T) {
@@ -83,7 +84,11 @@ func TestMCPSSEEndpoint(t *testing.T) {
 	wWithAccept := httptest.NewRecorder()
 
 	sseHandler.ServeHTTP(wWithAccept, reqWithAccept)
-	t.Logf("WithAccept Status: %d, Content-Type: %s", wWithAccept.Code, wWithAccept.Header().Get("Content-Type"))
+	t.Logf(
+		"WithAccept Status: %d, Content-Type: %s",
+		wWithAccept.Code,
+		wWithAccept.Header().Get("Content-Type"),
+	)
 
 	if ct := wWithAccept.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/event-stream") {
 		t.Errorf("expected Content-Type text/event-stream, got %s", ct)

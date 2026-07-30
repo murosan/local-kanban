@@ -6,11 +6,12 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"localkanban/pkg/lexorank"
 	"localkanban/pkg/markdown"
 	"localkanban/pkg/model"
 	"localkanban/pkg/search"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type Server struct {
@@ -21,30 +22,30 @@ type Server struct {
 
 type GetTasksInput struct {
 	Status string `json:"status,omitempty" jsonschema:"Filter tasks by column status ID (e.g. col-todo, col-in-progress, col-done)"`
-	Tag    string `json:"tag,omitempty" jsonschema:"Filter tasks by tag"`
-	Limit  int    `json:"limit,omitempty" jsonschema:"Maximum number of tasks to return"`
+	Tag    string `json:"tag,omitempty"    jsonschema:"Filter tasks by tag"`
+	Limit  int    `json:"limit,omitempty"  jsonschema:"Maximum number of tasks to return"`
 }
 
 type CreateTaskInput struct {
-	Title       string   `json:"title" jsonschema:"Task title"`
+	Title       string   `json:"title"                 jsonschema:"Task title"`
 	Description string   `json:"description,omitempty" jsonschema:"Task markdown description"`
-	Status      string   `json:"status,omitempty" jsonschema:"Status column ID (defaults to col-todo)"`
-	Tags        []string `json:"tags,omitempty" jsonschema:"Tags list"`
+	Status      string   `json:"status,omitempty"      jsonschema:"Status column ID (defaults to col-todo)"`
+	Tags        []string `json:"tags,omitempty"        jsonschema:"Tags list"`
 }
 
 type UpdateTaskStatusInput struct {
-	TaskID     string `json:"task_id" jsonschema:"Task ID to update"`
-	NewStatus  string `json:"new_status" jsonschema:"New status column ID"`
+	TaskID     string `json:"task_id"               jsonschema:"Task ID to update"`
+	NewStatus  string `json:"new_status"            jsonschema:"New status column ID"`
 	TargetRank string `json:"target_rank,omitempty" jsonschema:"Optional target LexoRank string"`
 }
 
 type UpdateTaskInput struct {
-	TaskID       string                            `json:"task_id" jsonschema:"Task ID to update"`
-	Title        string                            `json:"title,omitempty" jsonschema:"Optional new title"`
-	Description  string                            `json:"description,omitempty" jsonschema:"Optional new markdown content/description"`
-	Status       string                            `json:"status,omitempty" jsonschema:"Optional new status column ID"`
-	Tags         []string                          `json:"tags,omitempty" jsonschema:"Optional new list of tags"`
-	TargetRank   string                            `json:"target_rank,omitempty" jsonschema:"Optional new LexoRank string"`
+	TaskID       string                            `json:"task_id"                 jsonschema:"Task ID to update"`
+	Title        string                            `json:"title,omitempty"         jsonschema:"Optional new title"`
+	Description  string                            `json:"description,omitempty"   jsonschema:"Optional new markdown content/description"`
+	Status       string                            `json:"status,omitempty"        jsonschema:"Optional new status column ID"`
+	Tags         []string                          `json:"tags,omitempty"          jsonschema:"Optional new list of tags"`
+	TargetRank   string                            `json:"target_rank,omitempty"   jsonschema:"Optional new LexoRank string"`
 	CustomFields map[string]model.CustomFieldValue `json:"custom_fields,omitempty" jsonschema:"Optional custom field values"`
 }
 

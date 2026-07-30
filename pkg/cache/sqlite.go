@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"localkanban/pkg/model"
+
 	_ "modernc.org/sqlite"
 )
 
@@ -20,7 +21,7 @@ type SQLiteCache struct {
 
 func NewSQLiteCache(dbPath string) (*SQLiteCache, error) {
 	if dir := filepath.Dir(dbPath); dir != "." && dir != "" {
-		if err := os.MkdirAll(dir, 0755); err != nil {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return nil, fmt.Errorf("failed to create db directory: %w", err)
 		}
 	}
@@ -133,7 +134,13 @@ func (c *SQLiteCache) UpsertTask(task *model.Task) error {
 	// Update FTS5 table
 	tagsStr := strings.Join(task.Tags, " ")
 	_, _ = tx.Exec("DELETE FROM tasks_fts WHERE id = ?", task.ID)
-	_, err = tx.Exec("INSERT INTO tasks_fts (id, title, content, tags) VALUES (?, ?, ?, ?)", task.ID, task.Title, task.Content, tagsStr)
+	_, err = tx.Exec(
+		"INSERT INTO tasks_fts (id, title, content, tags) VALUES (?, ?, ?, ?)",
+		task.ID,
+		task.Title,
+		task.Content,
+		tagsStr,
+	)
 	if err != nil {
 		return fmt.Errorf("failed to insert into tasks_fts: %w", err)
 	}
@@ -239,7 +246,10 @@ func (c *SQLiteCache) SearchFTS(query string) ([]string, error) {
 		}
 		// Fallback to raw query
 		var errFallback error
-		rows, errFallback = c.db.Query("SELECT id FROM tasks_fts WHERE tasks_fts MATCH ?", cleanQuery)
+		rows, errFallback = c.db.Query(
+			"SELECT id FROM tasks_fts WHERE tasks_fts MATCH ?",
+			cleanQuery,
+		)
 		if errFallback != nil {
 			return nil, fmt.Errorf("fts5 search failed: %w", errFallback)
 		}
@@ -264,7 +274,11 @@ func (c *SQLiteCache) SearchFTS(query string) ([]string, error) {
 	// Fallback to LIKE query if FTS5 yields no results (e.g. for short 1-2 char Japanese queries)
 	if len(ids) == 0 {
 		likePattern := "%" + cleanQuery + "%"
-		likeRows, err := c.db.Query("SELECT id FROM tasks WHERE title LIKE ? OR tags LIKE ? ORDER BY updated_at DESC", likePattern, likePattern)
+		likeRows, err := c.db.Query(
+			"SELECT id FROM tasks WHERE title LIKE ? OR tags LIKE ? ORDER BY updated_at DESC",
+			likePattern,
+			likePattern,
+		)
 		if err == nil {
 			defer func() { _ = likeRows.Close() }()
 			for likeRows.Next() {

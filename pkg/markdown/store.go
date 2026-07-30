@@ -12,9 +12,10 @@ import (
 	"sync"
 	"time"
 
-	"gopkg.in/yaml.v3"
 	"localkanban/pkg/cache"
 	"localkanban/pkg/model"
+
+	"gopkg.in/yaml.v3"
 )
 
 type Store struct {
@@ -24,7 +25,7 @@ type Store struct {
 }
 
 func NewStore(dir string) (*Store, error) {
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, fmt.Errorf("failed to create tasks directory: %w", err)
 	}
 	return &Store{dir: dir}, nil
@@ -64,7 +65,13 @@ func (s *Store) GetBoardConfig() (*model.BoardConfig, error) {
 			return &model.BoardConfig{
 				Columns: []model.Column{
 					{ID: "col-todo", Title: "Todo", Visible: true, Color: "#3b82f6", Order: 1},
-					{ID: "col-in-progress", Title: "In Progress", Visible: true, Color: "#f59e0b", Order: 2},
+					{
+						ID:      "col-in-progress",
+						Title:   "In Progress",
+						Visible: true,
+						Color:   "#f59e0b",
+						Order:   2,
+					},
 					{ID: "col-review", Title: "Review", Visible: true, Color: "#8b5cf6", Order: 3},
 					{ID: "col-done", Title: "Done", Visible: true, Color: "#10b981", Order: 4},
 				},
@@ -100,7 +107,7 @@ func (s *Store) SaveBoardConfig(cfg *model.BoardConfig) error {
 		return fmt.Errorf("failed to marshal board config: %w", err)
 	}
 
-	if err := os.WriteFile(configPath, data, 0644); err != nil {
+	if err := os.WriteFile(configPath, data, 0o644); err != nil {
 		return fmt.Errorf("failed to write board config: %w", err)
 	}
 
@@ -175,7 +182,10 @@ func (s *Store) SaveTask(task *model.Task) error {
 		if len(idShort) > 8 {
 			idShort = idShort[:8]
 		}
-		filename = filepath.Join(s.dir, fmt.Sprintf("%s_%s.md", now.Format("20060102_150405"), idShort))
+		filename = filepath.Join(
+			s.dir,
+			fmt.Sprintf("%s_%s.md", now.Format("20060102_150405"), idShort),
+		)
 		task.FilePath = filename
 	}
 
@@ -184,7 +194,7 @@ func (s *Store) SaveTask(task *model.Task) error {
 		return fmt.Errorf("failed to serialize task: %w", err)
 	}
 
-	if err := os.WriteFile(filename, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(filename, []byte(content), 0o644); err != nil {
 		return fmt.Errorf("failed to write task file: %w", err)
 	}
 

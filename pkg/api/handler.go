@@ -18,7 +18,11 @@ type Server struct {
 	mcpServer    *mcp.Server
 }
 
-func NewServer(store *markdown.Store, searchEngine *search.Engine, mcpServers ...*mcp.Server) *Server {
+func NewServer(
+	store *markdown.Store,
+	searchEngine *search.Engine,
+	mcpServers ...*mcp.Server,
+) *Server {
 	var mcpSrv *mcp.Server
 	if len(mcpServers) > 0 {
 		mcpSrv = mcpServers[0]
@@ -265,7 +269,7 @@ func (s *Server) calculateRank(columnID string, prevID, nextID string) string {
 	return lexorank.Between(prevRank, nextRank)
 }
 
-func respondJSON(w http.ResponseWriter, status int, payload interface{}) {
+func respondJSON(w http.ResponseWriter, status int, payload any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(payload)
