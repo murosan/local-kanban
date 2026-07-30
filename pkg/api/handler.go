@@ -7,6 +7,7 @@ import (
 
 	"localkanban/pkg/lexorank"
 	"localkanban/pkg/markdown"
+	"localkanban/pkg/mcp"
 	"localkanban/pkg/model"
 	"localkanban/pkg/search"
 )
@@ -14,12 +15,18 @@ import (
 type Server struct {
 	store        *markdown.Store
 	searchEngine *search.Engine
+	mcpServer    *mcp.Server
 }
 
-func NewServer(store *markdown.Store, searchEngine *search.Engine) *Server {
+func NewServer(store *markdown.Store, searchEngine *search.Engine, mcpServers ...*mcp.Server) *Server {
+	var mcpSrv *mcp.Server
+	if len(mcpServers) > 0 {
+		mcpSrv = mcpServers[0]
+	}
 	return &Server{
 		store:        store,
 		searchEngine: searchEngine,
+		mcpServer:    mcpSrv,
 	}
 }
 
@@ -30,6 +37,12 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/tasks", s.handleCreateTask)
 	mux.HandleFunc("PUT /api/tasks/{id}", s.handleUpdateTask)
 	mux.HandleFunc("DELETE /api/tasks/{id}", s.handleDeleteTask)
+
+	if s.mcpServer != nil {
+		sseHandler := s.mcpServer.NewSSEHandler()
+		mux.Handle("/mcp/sse", sseHandler)
+		mux.Handle("/mcp/", sseHandler)
+	}
 }
 
 func (s *Server) handleGetConfig(w http.ResponseWriter, r *http.Request) {

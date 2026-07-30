@@ -1,5 +1,5 @@
 import React from 'react';
-import { RefreshCw, Search, Kanban, Palette, Settings, Globe } from 'lucide-react';
+import { RefreshCw, Search, Palette, Settings, Globe } from 'lucide-react';
 import { useI18n } from '../i18n/I18nContext';
 
 interface HeaderProps {
@@ -31,9 +31,7 @@ export const Header: React.FC<HeaderProps> = ({
         
         {/* Brand */}
         <div className="flex items-center space-x-2">
-          <div className="p-1 rounded-md bg-gradient-to-tr from-blue-600 to-indigo-500 shadow-sm text-white flex items-center justify-center">
-            <Kanban className="w-4 h-4" />
-          </div>
+          <img src="/icons/icon.svg" alt="LocalKanban" className="w-6 h-6 rounded-md shadow-sm border border-[var(--border-color)]" />
           <div className="flex items-baseline space-x-2">
             <h1 className="text-base font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-[var(--text-primary)] to-[var(--text-secondary)] leading-none">
               {t('header.title')}

@@ -14,6 +14,7 @@ import (
 	"localkanban/pkg/api"
 	"localkanban/pkg/cache"
 	"localkanban/pkg/markdown"
+	"localkanban/pkg/mcp"
 	"localkanban/pkg/model"
 	"localkanban/pkg/search"
 	"localkanban/pkg/ui"
@@ -94,7 +95,12 @@ func main() {
 	searchEngine := search.NewEngine(sqliteCache)
 	log.Printf("Search Engine: SQLite FTS5 + LIKE hybrid search enabled")
 
-	server := api.NewServer(store, searchEngine)
+	mcpServer, err := mcp.NewMCPServer(store, searchEngine)
+	if err != nil {
+		log.Printf("Warning: Failed to initialize MCP server: %v", err)
+	}
+
+	server := api.NewServer(store, searchEngine, mcpServer)
 
 	mux := http.NewServeMux()
 	server.RegisterRoutes(mux)

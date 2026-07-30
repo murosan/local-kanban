@@ -21,7 +21,10 @@ bin/
 *.out
 *.app
 /server
+/localkanban
+localkanban
 /app/server
+/app/localkanban
 
 # SQLite Cache Databases
 *.db
