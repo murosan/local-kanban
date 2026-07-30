@@ -23,7 +23,7 @@ docker compose down
 
 ## 🧹 コード品質・フォーマット・リンター (Docker 経由)
 
-本プロジェクトのコマンド実行はすべて Docker コンテナ経由で統一されています (`.gemini/rules.md`)。
+本プロジェクトのコマンド実行はすべて Docker コンテナ経由で統一されています。
 
 - **Go (バックエンド):** `golangci-lint` (v2) および `gofmt` (`golangci-lint` 経由)
 - **TypeScript / React (フロントエンド):** `ESLint` (Flat Config) および `Prettier`
@@ -42,6 +42,7 @@ make check
 ```
 
 または Docker コマンドを直接実行:
+
 ```bash
 # バックエンド
 docker compose exec backend golangci-lint run --fix   # フォーマット＆自動修正
@@ -79,12 +80,13 @@ LocalKanban は MCP サーバー機能を内蔵しており、Cursor, Claude Des
 
 ### 接続 URL / コマンド
 
-| 接続モード | 接続先 / コマンド | 説明 |
-| :--- | :--- | :--- |
+| 接続モード            | 接続先 / コマンド               | 説明                            |
+| :-------------------- | :------------------------------ | :------------------------------ |
 | **HTTP / SSE モード** | `http://localhost:3737/mcp/sse` | Web API サーバー経由の SSE 接続 |
-| **STDIO モード** | `localkanban mcp` | 標準入出力 (STDIO) パイプ接続 |
+| **STDIO モード**      | `localkanban mcp`               | 標準入出力 (STDIO) パイプ接続   |
 
 #### Claude Desktop (`claude_desktop_config.json`) 設定例:
+
 ```json
 {
   "mcpServers": {
@@ -97,21 +99,23 @@ LocalKanban は MCP サーバー機能を内蔵しており、Cursor, Claude Des
 ```
 
 #### MCP Inspector テスト方法:
+
 ```bash
 npx @modelcontextprotocol/inspector
 ```
+
 - **Transport Type:** `SSE`
 - **URL:** `http://localhost:3737/mcp/sse`
 
 ### 提供される MCP Tools
 
-| Tool 名 | 説明 | 引数 (Parameters) |
-| :--- | :--- | :--- |
-| `get_tasks` | タスク一覧の取得 | `status` (string, optional), `tag` (string, optional), `limit` (number) |
-| `create_task` | 新規タスク (Markdown) の作成 | `title` (string, required), `description` (string), `status` (string), `tags` (array of string) |
-| `update_task` | タスクの包括的プロパティ更新 | `task_id` (string, required), `title`, `description`, `status`, `tags`, `target_rank`, `custom_fields` |
-| `update_task_status` | タスクのステータス・順序更新 | `task_id` (string, required), `new_status` (string, required), `target_rank` (string) |
-| `search_tasks_fts` | SQLite FTS5 による高速全文検索 | `query` (string, required) |
+| Tool 名              | 説明                           | 引数 (Parameters)                                                                                      |
+| :------------------- | :----------------------------- | :----------------------------------------------------------------------------------------------------- |
+| `get_tasks`          | タスク一覧の取得               | `status` (string, optional), `tag` (string, optional), `limit` (number)                                |
+| `create_task`        | 新規タスク (Markdown) の作成   | `title` (string, required), `description` (string), `status` (string), `tags` (array of string)        |
+| `update_task`        | タスクの包括的プロパティ更新   | `task_id` (string, required), `title`, `description`, `status`, `tags`, `target_rank`, `custom_fields` |
+| `update_task_status` | タスクのステータス・順序更新   | `task_id` (string, required), `new_status` (string, required), `target_rank` (string)                  |
+| `search_tasks_fts`   | SQLite FTS5 による高速全文検索 | `query` (string, required)                                                                             |
 
 ---
 
@@ -143,10 +147,10 @@ Chrome や Safari から「アプリとしてインストール」してスタ�
 
 ## 🛠 設定・環境変数
 
-| 環境変数 | 初期値 | 説明 |
-| :--- | :--- | :--- |
-| `PORT` | `3737` | ポート番号 |
-| `HOST` | `0.0.0.0` | バインドホスト |
+| 環境変数    | 初期値       | 説明                     |
+| :---------- | :----------- | :----------------------- |
+| `PORT`      | `3737`       | ポート番号               |
+| `HOST`      | `0.0.0.0`    | バインドホスト           |
 | `TASKS_DIR` | `/app/tasks` | Markdownファイルの保存先 |
 
 ---
@@ -165,4 +169,3 @@ Chrome や Safari から「アプリとしてインストール」してスタ�
 ## 📄 ライセンス
 
 本プロジェクトは [MIT License](LICENSE) のもとで公開されています。
-
