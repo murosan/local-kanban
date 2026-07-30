@@ -17,14 +17,11 @@ export const TaskCard: React.FC<TaskCardProps> = ({
   onCardClick,
   isOverlay,
 }) => {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: task.id, data: { task }, disabled: isOverlay });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: task.id,
+    data: { task },
+    disabled: isOverlay,
+  });
 
   const style = isOverlay
     ? undefined
@@ -42,7 +39,10 @@ export const TaskCard: React.FC<TaskCardProps> = ({
 
   const displayFields = task.custom_fields
     ? Object.entries(task.custom_fields)
-        .filter(([_, cf]) => cf && cf.enabled && cf.value !== undefined && cf.value !== '' && cf.value !== false)
+        .filter(
+          ([_, cf]) =>
+            cf && cf.enabled && cf.value !== undefined && cf.value !== '' && cf.value !== false
+        )
         .map(([fieldId, cf]) => {
           // Resolve option color if dropdown field definition exists
           const fieldDef = customFields.find((f) => f.id === fieldId);
@@ -131,10 +131,17 @@ export const TaskCard: React.FC<TaskCardProps> = ({
                   }
                 >
                   {hasColor && (
-                    <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: field.color }} />
+                    <span
+                      className="w-1.5 h-1.5 rounded-full shrink-0"
+                      style={{ backgroundColor: field.color }}
+                    />
                   )}
                   <span className="truncate max-w-[120px]">
-                    {typeof field.value === 'boolean' ? (field.value ? '✓' : '✗') : String(field.value)}
+                    {typeof field.value === 'boolean'
+                      ? field.value
+                        ? '✓'
+                        : '✗'
+                      : String(field.value)}
                   </span>
                 </span>
               </div>

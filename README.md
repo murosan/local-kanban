@@ -21,6 +21,42 @@ docker compose down
 
 ---
 
+## 🧹 コード品質・フォーマット・リンター (Docker 経由)
+
+本プロジェクトのコマンド実行はすべて Docker コンテナ経由で統一されています (`.gemini/rules.md`)。
+
+- **Go (バックエンド):** `golangci-lint` (v2) および `gofmt` (`golangci-lint` 経由)
+- **TypeScript / React (フロントエンド):** `ESLint` (Flat Config) および `Prettier`
+
+### 実行コマンド (`Makefile`)
+
+```bash
+# フォーマット実行 (Go: golangci-lint run --fix / Frontend: prettier --write)
+make fmt
+
+# リンター実行 (Go: golangci-lint run / Frontend: eslint)
+make lint
+
+# フォーマットチェック・静的解析・テスト・ビルドを一括実行
+make check
+```
+
+または Docker コマンドを直接実行:
+```bash
+# バックエンド
+docker compose exec backend golangci-lint run --fix   # フォーマット＆自動修正
+docker compose exec backend golangci-lint run         # リンターチェック
+docker compose exec backend go test ./...             # テスト実行
+
+# フロントエンド
+docker compose exec frontend npm run format          # フォーマット実行
+docker compose exec frontend npm run format:check    # フォーマットチェック
+docker compose exec frontend npm run lint            # リンターチェック
+docker compose exec frontend npm run build           # ビルド
+```
+
+---
+
 ## 📦 プロダクション統合コンテナのビルド・起動
 
 Web UI (React SPA) を自動ビルドし、単一の Go バイナリとして組み込んだ軽量プロダクションコンテナを起動する場合：

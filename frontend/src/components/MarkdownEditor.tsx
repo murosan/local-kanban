@@ -132,7 +132,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
     const start = textarea.selectionStart;
     const end = textarea.selectionEnd;
     const scrollTop = textarea.scrollTop;
-    
+
     // Find beginning and end of current line
     const lineStart = value.lastIndexOf('\n', start - 1) + 1;
     const lineEndIndex = value.indexOf('\n', start);
@@ -145,7 +145,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
       /^[-*+]\s+\[[ xX]\]\s+/,
       /^[-*+]\s+/,
       /^\d+\.\s+/,
-      /^>\s+/
+      /^>\s+/,
     ];
 
     let existingPrefix = '';
@@ -248,7 +248,8 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
         const lineStart = value.lastIndexOf('\n', start - 1) + 1;
         const lineText = value.substring(lineStart, end);
         if (lineText.startsWith('  ')) {
-          const newValue = value.substring(0, lineStart) + lineText.substring(2) + value.substring(end);
+          const newValue =
+            value.substring(0, lineStart) + lineText.substring(2) + value.substring(end);
           const newStart = Math.max(lineStart, start - 2);
           const newEnd = Math.max(lineStart, end - 2);
           onChange(newValue, { immediate: true, selectionStart: newStart, selectionEnd: newEnd });
@@ -292,7 +293,11 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
           const [, prefix, rest] = taskMatch;
           if (rest.trim() === '') {
             const newValue = value.substring(0, lineStart) + value.substring(start);
-            onChange(newValue, { immediate: true, selectionStart: lineStart, selectionEnd: lineStart });
+            onChange(newValue, {
+              immediate: true,
+              selectionStart: lineStart,
+              selectionEnd: lineStart,
+            });
             setTimeout(() => {
               textarea.focus();
               textarea.setSelectionRange(lineStart, lineStart);
@@ -315,7 +320,11 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
           const [, prefix, rest] = bulletMatch;
           if (rest.trim() === '') {
             const newValue = value.substring(0, lineStart) + value.substring(start);
-            onChange(newValue, { immediate: true, selectionStart: lineStart, selectionEnd: lineStart });
+            onChange(newValue, {
+              immediate: true,
+              selectionStart: lineStart,
+              selectionEnd: lineStart,
+            });
             setTimeout(() => {
               textarea.focus();
               textarea.setSelectionRange(lineStart, lineStart);
@@ -380,7 +389,11 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
             }
 
             const newValue = lines.join('\n');
-            onChange(newValue, { immediate: true, selectionStart: lineStart, selectionEnd: lineStart });
+            onChange(newValue, {
+              immediate: true,
+              selectionStart: lineStart,
+              selectionEnd: lineStart,
+            });
             setTimeout(() => {
               textarea.focus();
               textarea.setSelectionRange(lineStart, lineStart);
@@ -427,7 +440,11 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
           const [, prefix, rest] = quoteMatch;
           if (rest.trim() === '') {
             const newValue = value.substring(0, lineStart) + value.substring(start);
-            onChange(newValue, { immediate: true, selectionStart: lineStart, selectionEnd: lineStart });
+            onChange(newValue, {
+              immediate: true,
+              selectionStart: lineStart,
+              selectionEnd: lineStart,
+            });
             setTimeout(() => {
               textarea.focus();
               textarea.setSelectionRange(lineStart, lineStart);
@@ -450,7 +467,8 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 
   const highlightCode = (code: string, language: string) => {
     const normalizedLang = (language || '').toLowerCase();
-    const grammar = Prism.languages[normalizedLang] || Prism.languages.javascript || Prism.languages.clike;
+    const grammar =
+      Prism.languages[normalizedLang] || Prism.languages.javascript || Prism.languages.clike;
     if (!grammar) return code;
     try {
       return Prism.highlight(code, grammar, normalizedLang);
@@ -465,13 +483,15 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
     let targetIdx = lineNum - 1;
 
     if (targetIdx >= 0 && targetIdx < lines.length) {
-      let match = lines[targetIdx].match(/^(\s*(?:[-*+]|\d+|\>)*\s*[-*+]?\s*\[)([ xX])(\]\s*.*)$/);
+      let match = lines[targetIdx].match(/^(\s*(?:[-*+]|\d+|>)*\s*[-*+]?\s*\[)([ xX])(\]\s*.*)$/);
 
       if (!match) {
         for (const offset of [-1, 1, -2, 2, -3, 3]) {
           const idx = targetIdx + offset;
           if (idx >= 0 && idx < lines.length) {
-            const nearMatch = lines[idx].match(/^(\s*(?:[-*+]|\d+|\>)*\s*[-*+]?\s*\[)([ xX])(\]\s*.*)$/);
+            const nearMatch = lines[idx].match(
+              /^(\s*(?:[-*+]|\d+|>)*\s*[-*+]?\s*\[)([ xX])(\]\s*.*)$/
+            );
             if (nearMatch) {
               targetIdx = idx;
               match = nearMatch;
@@ -490,9 +510,13 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   };
 
   return (
-    <div className={`flex flex-col flex-1 border border-[var(--border-color)] rounded-xl overflow-hidden bg-[var(--bg-input)] transition-all ${
-      isFocusMode ? 'fixed inset-2 sm:inset-4 z-50 shadow-2xl bg-[var(--modal-bg)]' : 'min-h-[420px]'
-    }`}>
+    <div
+      className={`flex flex-col flex-1 border border-[var(--border-color)] rounded-xl overflow-hidden bg-[var(--bg-input)] transition-all ${
+        isFocusMode
+          ? 'fixed inset-2 sm:inset-4 z-50 shadow-2xl bg-[var(--modal-bg)]'
+          : 'min-h-[420px]'
+      }`}
+    >
       {/* Editor Header / Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 bg-[var(--bg-surface)] border-b border-[var(--border-color)] select-none">
         {/* Mode Switcher */}
@@ -679,7 +703,11 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
               <button
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
-                onClick={() => insertFormat('\n| ヘッダー 1 | ヘッダー 2 |\n| --- | --- |\n| セル 1 | セル 2 |\n')}
+                onClick={() =>
+                  insertFormat(
+                    '\n| ヘッダー 1 | ヘッダー 2 |\n| --- | --- |\n| セル 1 | セル 2 |\n'
+                  )
+                }
                 className="p-1.5 text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--border-color)]/40 rounded-lg transition-colors"
                 title={t('editor.table')}
               >
@@ -731,7 +759,11 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
             }`}
             title={isFocusMode ? 'フォーカス表示解除' : '編集画面いっぱいに拡大 (フォーカス表示)'}
           >
-            {isFocusMode ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+            {isFocusMode ? (
+              <Minimize2 className="w-3.5 h-3.5" />
+            ) : (
+              <Maximize2 className="w-3.5 h-3.5" />
+            )}
             <span className="hidden sm:inline">{isFocusMode ? '戻す' : '全画面拡大'}</span>
           </button>
 
@@ -752,7 +784,9 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
       <div className="flex-1 flex min-h-[350px] overflow-hidden">
         {/* Editor Textarea */}
         {(mode === 'edit' || mode === 'split') && (
-          <div className={`flex-1 flex flex-col h-full ${mode === 'split' ? 'w-1/2 border-r border-[var(--border-color)]' : 'w-full'}`}>
+          <div
+            className={`flex-1 flex flex-col h-full ${mode === 'split' ? 'w-1/2 border-r border-[var(--border-color)]' : 'w-full'}`}
+          >
             <textarea
               ref={textareaRef}
               value={value}
@@ -771,7 +805,9 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 
         {/* Rich Preview Area */}
         {(mode === 'preview' || mode === 'split') && (
-          <div className={`flex-1 h-full p-5 overflow-y-auto bg-[var(--bg-input)] ${mode === 'split' ? 'w-1/2' : 'w-full'}`}>
+          <div
+            className={`flex-1 h-full p-5 overflow-y-auto bg-[var(--bg-input)] ${mode === 'split' ? 'w-1/2' : 'w-full'}`}
+          >
             {value.trim() ? (
               <div className="markdown-preview">
                 <ReactMarkdown
@@ -788,7 +824,11 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
                             className={className}
                             onClick={(e) => {
                               const target = e.target as HTMLElement;
-                              if (target && target.tagName === 'INPUT' && (target as HTMLInputElement).type === 'checkbox') {
+                              if (
+                                target &&
+                                target.tagName === 'INPUT' &&
+                                (target as HTMLInputElement).type === 'checkbox'
+                              ) {
                                 e.preventDefault();
                                 e.stopPropagation();
                                 handleToggleTaskByLineNumber(lineNum);
@@ -806,9 +846,11 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
                         </li>
                       );
                     },
-                    input({ node, ...props }) {
+                    input({ node: _node, ...props }) {
                       if (props.type === 'checkbox') {
                         const { disabled, readOnly, checked, ...restProps } = props;
+                        void disabled;
+                        void readOnly;
                         return (
                           <input
                             {...restProps}
@@ -821,7 +863,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
                       }
                       return <input {...props} />;
                     },
-                    a({ node, children, ...props }) {
+                    a({ node: _node, children, ...props }) {
                       return (
                         <a {...props} target="_blank" rel="noopener noreferrer">
                           {children}
@@ -831,7 +873,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
                     pre({ children }) {
                       return <>{children}</>;
                     },
-                    code({ node, className, children, ...props }) {
+                    code({ node: _node, className, children, ...props }) {
                       const isInline = !className && !String(children).includes('\n');
 
                       if (isInline) {
@@ -861,7 +903,10 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
                           </button>
                           <pre>
                             <code className={`language-${lang}`}>
-                              <div className="code-container" dangerouslySetInnerHTML={{ __html: highlightedHtml }} />
+                              <div
+                                className="code-container"
+                                dangerouslySetInnerHTML={{ __html: highlightedHtml }}
+                              />
                             </code>
                           </pre>
                         </div>

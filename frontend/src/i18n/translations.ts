@@ -12,7 +12,8 @@ export const translations = {
     'header.newCard': 'カード作成',
 
     // Board & Columns
-    'board.noColumns': '表示可能なカラムがありません。「設定」からカラムを追加または表示に切り替えてください。',
+    'board.noColumns':
+      '表示可能なカラムがありません。「設定」からカラムを追加または表示に切り替えてください。',
     'board.moveLeft': '左へ移動',
     'board.moveRight': '右へ移動',
     'column.addCard': 'カードを追加',
@@ -22,7 +23,8 @@ export const translations = {
     'configModal.title': 'ボード＆カスタムフィールド設定',
     'configModal.tabColumns': 'カラム設定',
     'configModal.tabStatuses': 'カスタムフィールド',
-    'configModal.statusesDesc': 'カスタムフィールドの登録・編集を行えます。カード単位で各フィールドのON/OFFが制御可能です。',
+    'configModal.statusesDesc':
+      'カスタムフィールドの登録・編集を行えます。カード単位で各フィールドのON/OFFが制御可能です。',
     'configModal.fieldTitle': 'フィールド名',
     'configModal.typeDropdown': 'プルダウン',
     'configModal.typeText': 'テキスト',

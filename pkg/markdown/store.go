@@ -12,9 +12,9 @@ import (
 	"sync"
 	"time"
 
+	"gopkg.in/yaml.v3"
 	"localkanban/pkg/cache"
 	"localkanban/pkg/model"
-	"gopkg.in/yaml.v3"
 )
 
 type Store struct {

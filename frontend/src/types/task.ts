@@ -15,7 +15,7 @@ export interface CustomFieldDef {
 
 export interface CustomFieldValue {
   field_id: string;
-  value: any;
+  value: string | number | boolean | string[] | null;
   enabled: boolean;
 }
 
@@ -31,7 +31,6 @@ export interface Task {
   content: string;
   file_path?: string;
 }
-
 
 export interface Column {
   id: string;
@@ -55,5 +54,3 @@ export interface BoardConfig {
   theme?: ThemeConfig;
   language?: string;
 }
-
-

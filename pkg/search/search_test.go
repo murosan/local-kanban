@@ -15,14 +15,14 @@ func TestSearchEngine(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	dbPath := filepath.Join(tmpDir, "test.db")
 	c, err := cache.NewSQLiteCache(dbPath)
 	if err != nil {
 		t.Fatalf("failed to init cache: %v", err)
 	}
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	task := &model.Task{
 		ID:        "task-unique-123",

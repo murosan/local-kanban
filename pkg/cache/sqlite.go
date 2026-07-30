@@ -31,13 +31,11 @@ func NewSQLiteCache(dbPath string) (*SQLiteCache, error) {
 	}
 
 	// Enable WAL mode
-	if _, err := db.Exec("PRAGMA journal_mode=WAL;"); err != nil {
-		// WAL mode might fail on some filesystems, ignore error
-	}
+	_, _ = db.Exec("PRAGMA journal_mode=WAL;")
 
 	cache := &SQLiteCache{db: db}
 	if err := cache.initSchema(); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("failed to initialize schema: %w", err)
 	}
 
@@ -237,7 +235,7 @@ func (c *SQLiteCache) SearchFTS(query string) ([]string, error) {
 	rows, err := c.db.Query("SELECT id FROM tasks_fts WHERE tasks_fts MATCH ?", escaped)
 	if err != nil || !rows.Next() {
 		if rows != nil {
-			rows.Close()
+			_ = rows.Close()
 		}
 		// Fallback to raw query
 		var errFallback error
@@ -247,13 +245,13 @@ func (c *SQLiteCache) SearchFTS(query string) ([]string, error) {
 		}
 	} else {
 		// Reset rows reading by executing again or reading the first row
-		rows.Close()
+		_ = rows.Close()
 		rows, err = c.db.Query("SELECT id FROM tasks_fts WHERE tasks_fts MATCH ?", escaped)
 		if err != nil {
 			return nil, fmt.Errorf("fts5 search failed: %w", err)
 		}
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var ids []string
 	for rows.Next() {
@@ -268,7 +266,7 @@ func (c *SQLiteCache) SearchFTS(query string) ([]string, error) {
 		likePattern := "%" + cleanQuery + "%"
 		likeRows, err := c.db.Query("SELECT id FROM tasks WHERE title LIKE ? OR tags LIKE ? ORDER BY updated_at DESC", likePattern, likePattern)
 		if err == nil {
-			defer likeRows.Close()
+			defer func() { _ = likeRows.Close() }()
 			for likeRows.Next() {
 				var id string
 				if err := likeRows.Scan(&id); err == nil {

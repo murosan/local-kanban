@@ -1,6 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { BoardConfig, Column, CustomFieldDef, Task, ThemeConfig } from './types/task';
-import { fetchBoardConfig, fetchTasks, createTask, updateTask, deleteTask, saveBoardConfig } from './services/api';
+import {
+  fetchBoardConfig,
+  fetchTasks,
+  createTask,
+  updateTask,
+  deleteTask,
+  saveBoardConfig,
+} from './services/api';
 import { Header } from './components/Header';
 import { KanbanBoard } from './components/KanbanBoard';
 import { TaskModal } from './components/TaskModal';
@@ -60,10 +67,7 @@ export const App: React.FC = () => {
   const loadData = useCallback(async () => {
     setIsSyncing(true);
     try {
-      const [cfg, taskList] = await Promise.all([
-        fetchBoardConfig(),
-        fetchTasks(searchQuery),
-      ]);
+      const [cfg, taskList] = await Promise.all([fetchBoardConfig(), fetchTasks(searchQuery)]);
       setConfig(cfg);
       setTasks(taskList);
 
@@ -151,10 +155,7 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleSaveConfig = async (
-    newColumns: Column[],
-    newCustomFields?: CustomFieldDef[]
-  ) => {
+  const handleSaveConfig = async (newColumns: Column[], newCustomFields?: CustomFieldDef[]) => {
     if (!config || newColumns.length === 0) return;
 
     try {

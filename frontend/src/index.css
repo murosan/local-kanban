@@ -16,7 +16,7 @@
   --card-shadow-hover: 0 4px 20px -2px rgba(59, 130, 246, 0.35);
 }
 
-[data-theme="midnight"] {
+[data-theme='midnight'] {
   --bg-primary: #0a0e1a;
   --bg-surface: #0f172a;
   --bg-card: #1e293b;
@@ -30,7 +30,7 @@
   --card-shadow-hover: 0 4px 20px -2px rgba(99, 102, 241, 0.35);
 }
 
-[data-theme="cyberpunk"] {
+[data-theme='cyberpunk'] {
   --bg-primary: #120024;
   --bg-surface: #1a0033;
   --bg-card: #2a004f;
@@ -44,7 +44,7 @@
   --card-shadow-hover: 0 4px 20px -2px rgba(255, 0, 127, 0.4);
 }
 
-[data-theme="forest"] {
+[data-theme='forest'] {
   --bg-primary: #061712;
   --bg-surface: #0b231c;
   --bg-card: #14352b;
@@ -58,7 +58,7 @@
   --card-shadow-hover: 0 4px 20px -2px rgba(16, 185, 129, 0.35);
 }
 
-[data-theme="light"] {
+[data-theme='light'] {
   --bg-primary: #f1f5f9;
   --bg-surface: #ffffff;
   --bg-card: #ffffff;
@@ -72,7 +72,7 @@
   --card-shadow-hover: 0 6px 16px -2px rgba(37, 99, 235, 0.2), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
 }
 
-[data-theme="dim-light"] {
+[data-theme='dim-light'] {
   --bg-primary: #94a3b8;
   --bg-surface: #cbd5e1;
   --bg-card: #bfcbda;
@@ -86,7 +86,7 @@
   --card-shadow-hover: 0 6px 20px -2px rgba(15, 23, 42, 0.15);
 }
 
-[data-theme="dim-dark"] {
+[data-theme='dim-dark'] {
   --bg-primary: #1f2937;
   --bg-surface: #374151;
   --bg-card: #252e3d;
@@ -99,7 +99,6 @@
   --modal-bg: #374151;
   --card-shadow-hover: 0 6px 20px -2px rgba(0, 0, 0, 0.4);
 }
-
 
 @layer base {
   body {
@@ -143,7 +142,9 @@
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   border: 1px solid var(--border-color);
-  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.08), 0 1px 2px -1px rgba(0, 0, 0, 0.08);
+  box-shadow:
+    0 1px 3px 0 rgba(0, 0, 0, 0.08),
+    0 1px 2px -1px rgba(0, 0, 0, 0.08);
   transition: all 0.2s ease-in-out;
 }
 
@@ -220,7 +221,7 @@
   margin-bottom: 0.25rem;
 }
 
-.markdown-preview li input[type="checkbox"] {
+.markdown-preview li input[type='checkbox'] {
   margin-right: 0.4rem;
   accent-color: #3b82f6;
   cursor: pointer;
@@ -452,4 +453,3 @@
 .token.entity {
   @apply cursor-help;
 }
-

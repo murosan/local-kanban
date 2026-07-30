@@ -120,7 +120,7 @@ func TestMCPClientListTools(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to connect client: %v", err)
 	}
-	defer session.Close()
+	defer func() { _ = session.Close() }()
 
 	toolsResult, err := session.ListTools(ctx, nil)
 	if err != nil {
@@ -136,4 +136,3 @@ func TestMCPClientListTools(t *testing.T) {
 		t.Errorf("expected 5 tools, got %d", len(toolsResult.Tools))
 	}
 }
-

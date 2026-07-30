@@ -2,8 +2,9 @@ FROM golang:1.26-alpine
 
 WORKDIR /app
 
-# Install git & build tools
-RUN apk add --no-cache git gcc musl-dev bash
+# Install git & build tools & golangci-lint v2 via official install script
+RUN apk add --no-cache git gcc musl-dev bash curl
+RUN curl -sSfL https://golangci-lint.run/install.sh | sh -s -- -b $(go env GOPATH)/bin
 
 COPY go.mod go.sum* ./
 RUN go mod download

@@ -10,14 +10,70 @@ interface ThemeModalProps {
   onSelectTheme: (theme: ThemeConfig) => void;
 }
 
-export const PRESET_THEMES: { id: string; nameKey: string; primaryBg: string; cardBg: string; accentColor: string; textColor: string }[] = [
-  { id: 'dark', nameKey: 'preset.dark', primaryBg: '#0b0f19', cardBg: '#1f293d', accentColor: '#3b82f6', textColor: '#f8fafc' },
-  { id: 'dim-dark', nameKey: 'preset.dimDark', primaryBg: '#1f2937', cardBg: '#252e3d', accentColor: '#38bdf8', textColor: '#f9fafb' },
-  { id: 'midnight', nameKey: 'preset.midnight', primaryBg: '#0a0e1a', cardBg: '#1e293b', accentColor: '#6366f1', textColor: '#f1f5f9' },
-  { id: 'cyberpunk', nameKey: 'preset.cyberpunk', primaryBg: '#120024', cardBg: '#2a004f', accentColor: '#ff007f', textColor: '#00f0ff' },
-  { id: 'forest', nameKey: 'preset.forest', primaryBg: '#061712', cardBg: '#14352b', accentColor: '#10b981', textColor: '#ecfdf5' },
-  { id: 'light', nameKey: 'preset.light', primaryBg: '#f8fafc', cardBg: '#ffffff', accentColor: '#2563eb', textColor: '#0f172a' },
-  { id: 'dim-light', nameKey: 'preset.dimLight', primaryBg: '#94a3b8', cardBg: '#bfcbda', accentColor: '#2563eb', textColor: '#0f172a' },
+export const PRESET_THEMES: {
+  id: string;
+  nameKey: string;
+  primaryBg: string;
+  cardBg: string;
+  accentColor: string;
+  textColor: string;
+}[] = [
+  {
+    id: 'dark',
+    nameKey: 'preset.dark',
+    primaryBg: '#0b0f19',
+    cardBg: '#1f293d',
+    accentColor: '#3b82f6',
+    textColor: '#f8fafc',
+  },
+  {
+    id: 'dim-dark',
+    nameKey: 'preset.dimDark',
+    primaryBg: '#1f2937',
+    cardBg: '#252e3d',
+    accentColor: '#38bdf8',
+    textColor: '#f9fafb',
+  },
+  {
+    id: 'midnight',
+    nameKey: 'preset.midnight',
+    primaryBg: '#0a0e1a',
+    cardBg: '#1e293b',
+    accentColor: '#6366f1',
+    textColor: '#f1f5f9',
+  },
+  {
+    id: 'cyberpunk',
+    nameKey: 'preset.cyberpunk',
+    primaryBg: '#120024',
+    cardBg: '#2a004f',
+    accentColor: '#ff007f',
+    textColor: '#00f0ff',
+  },
+  {
+    id: 'forest',
+    nameKey: 'preset.forest',
+    primaryBg: '#061712',
+    cardBg: '#14352b',
+    accentColor: '#10b981',
+    textColor: '#ecfdf5',
+  },
+  {
+    id: 'light',
+    nameKey: 'preset.light',
+    primaryBg: '#f8fafc',
+    cardBg: '#ffffff',
+    accentColor: '#2563eb',
+    textColor: '#0f172a',
+  },
+  {
+    id: 'dim-light',
+    nameKey: 'preset.dimLight',
+    primaryBg: '#94a3b8',
+    cardBg: '#bfcbda',
+    accentColor: '#2563eb',
+    textColor: '#0f172a',
+  },
 ];
 
 export const ThemeModal: React.FC<ThemeModalProps> = ({
@@ -28,9 +84,13 @@ export const ThemeModal: React.FC<ThemeModalProps> = ({
 }) => {
   const { t } = useI18n();
   const [selectedPreset, setSelectedPreset] = useState<string>(() => currentTheme?.name || 'dark');
-  const [customPrimaryBg, setCustomPrimaryBg] = useState<string>(() => currentTheme?.primaryBg || '#0b0f19');
+  const [customPrimaryBg, setCustomPrimaryBg] = useState<string>(
+    () => currentTheme?.primaryBg || '#0b0f19'
+  );
   const [customCardBg, setCustomCardBg] = useState<string>(() => currentTheme?.cardBg || '#1f293d');
-  const [customAccent, setCustomAccent] = useState<string>(() => currentTheme?.accentColor || '#3b82f6');
+  const [customAccent, setCustomAccent] = useState<string>(
+    () => currentTheme?.accentColor || '#3b82f6'
+  );
   const [customText, setCustomText] = useState<string>(() => currentTheme?.textColor || '#f8fafc');
   const [isMaximized, setIsMaximized] = useState(false);
 
@@ -52,7 +112,7 @@ export const ThemeModal: React.FC<ThemeModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleApplyPreset = (preset: typeof PRESET_THEMES[0]) => {
+  const handleApplyPreset = (preset: (typeof PRESET_THEMES)[0]) => {
     setSelectedPreset(preset.id);
     const themeConfig: ThemeConfig = {
       name: preset.id,
@@ -78,9 +138,11 @@ export const ThemeModal: React.FC<ThemeModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-2 sm:p-3 animate-fade-in">
-      <div className={`bg-[var(--modal-bg)] text-[var(--text-primary)] border border-[var(--border-color)] rounded-xl shadow-2xl w-full overflow-hidden flex flex-col transition-all duration-300 ${
-        isMaximized ? 'w-[98vw] h-[96vh] max-w-none max-h-none' : 'max-w-3xl h-[88vh]'
-      }`}>
+      <div
+        className={`bg-[var(--modal-bg)] text-[var(--text-primary)] border border-[var(--border-color)] rounded-xl shadow-2xl w-full overflow-hidden flex flex-col transition-all duration-300 ${
+          isMaximized ? 'w-[98vw] h-[96vh] max-w-none max-h-none' : 'max-w-3xl h-[88vh]'
+        }`}
+      >
         {/* Modal Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-color)]">
           <h2 className="text-lg font-semibold flex items-center space-x-2">
@@ -127,14 +189,32 @@ export const ThemeModal: React.FC<ThemeModalProps> = ({
                     }`}
                   >
                     <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-[var(--text-primary)]">{t(preset.nameKey)}</span>
-                      {isSelected && <span className="text-blue-500 text-xs font-semibold">{t('themeModal.active')}</span>}
+                      <span className="text-sm font-medium text-[var(--text-primary)]">
+                        {t(preset.nameKey)}
+                      </span>
+                      {isSelected && (
+                        <span className="text-blue-500 text-xs font-semibold">
+                          {t('themeModal.active')}
+                        </span>
+                      )}
                     </div>
                     {/* Color Swatch Preview */}
                     <div className="flex space-x-1.5 pt-1">
-                      <div className="w-5 h-5 rounded-full border border-slate-400/40 shadow-sm" style={{ backgroundColor: preset.primaryBg }} title="Primary BG" />
-                      <div className="w-5 h-5 rounded-full border border-slate-400/40 shadow-sm" style={{ backgroundColor: preset.cardBg }} title="Card BG" />
-                      <div className="w-5 h-5 rounded-full border border-slate-400/40 shadow-sm" style={{ backgroundColor: preset.accentColor }} title="Accent" />
+                      <div
+                        className="w-5 h-5 rounded-full border border-slate-400/40 shadow-sm"
+                        style={{ backgroundColor: preset.primaryBg }}
+                        title="Primary BG"
+                      />
+                      <div
+                        className="w-5 h-5 rounded-full border border-slate-400/40 shadow-sm"
+                        style={{ backgroundColor: preset.cardBg }}
+                        title="Card BG"
+                      />
+                      <div
+                        className="w-5 h-5 rounded-full border border-slate-400/40 shadow-sm"
+                        style={{ backgroundColor: preset.accentColor }}
+                        title="Accent"
+                      />
                     </div>
                   </button>
                 );
@@ -149,7 +229,9 @@ export const ThemeModal: React.FC<ThemeModalProps> = ({
             </label>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs text-[var(--text-secondary)] mb-1">{t('themeModal.background')}</label>
+                <label className="block text-xs text-[var(--text-secondary)] mb-1">
+                  {t('themeModal.background')}
+                </label>
                 <div className="flex items-center space-x-2">
                   <input
                     type="color"
@@ -157,12 +239,16 @@ export const ThemeModal: React.FC<ThemeModalProps> = ({
                     onChange={(e) => setCustomPrimaryBg(e.target.value)}
                     className="w-8 h-8 rounded cursor-pointer border border-[var(--border-color)] bg-transparent"
                   />
-                  <span className="text-xs font-mono text-[var(--text-primary)]">{customPrimaryBg}</span>
+                  <span className="text-xs font-mono text-[var(--text-primary)]">
+                    {customPrimaryBg}
+                  </span>
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs text-[var(--text-secondary)] mb-1">{t('themeModal.cardBackground')}</label>
+                <label className="block text-xs text-[var(--text-secondary)] mb-1">
+                  {t('themeModal.cardBackground')}
+                </label>
                 <div className="flex items-center space-x-2">
                   <input
                     type="color"
@@ -170,12 +256,16 @@ export const ThemeModal: React.FC<ThemeModalProps> = ({
                     onChange={(e) => setCustomCardBg(e.target.value)}
                     className="w-8 h-8 rounded cursor-pointer border border-[var(--border-color)] bg-transparent"
                   />
-                  <span className="text-xs font-mono text-[var(--text-primary)]">{customCardBg}</span>
+                  <span className="text-xs font-mono text-[var(--text-primary)]">
+                    {customCardBg}
+                  </span>
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs text-[var(--text-secondary)] mb-1">{t('themeModal.accentColor')}</label>
+                <label className="block text-xs text-[var(--text-secondary)] mb-1">
+                  {t('themeModal.accentColor')}
+                </label>
                 <div className="flex items-center space-x-2">
                   <input
                     type="color"
@@ -183,12 +273,16 @@ export const ThemeModal: React.FC<ThemeModalProps> = ({
                     onChange={(e) => setCustomAccent(e.target.value)}
                     className="w-8 h-8 rounded cursor-pointer border border-[var(--border-color)] bg-transparent"
                   />
-                  <span className="text-xs font-mono text-[var(--text-primary)]">{customAccent}</span>
+                  <span className="text-xs font-mono text-[var(--text-primary)]">
+                    {customAccent}
+                  </span>
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs text-[var(--text-secondary)] mb-1">{t('themeModal.textColor')}</label>
+                <label className="block text-xs text-[var(--text-secondary)] mb-1">
+                  {t('themeModal.textColor')}
+                </label>
                 <div className="flex items-center space-x-2">
                   <input
                     type="color"

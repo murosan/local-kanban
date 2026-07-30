@@ -20,7 +20,7 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
 }) => {
   const { t } = useI18n();
   const [activeTab, setActiveTab] = useState<'columns' | 'customFields'>('columns');
-  
+
   const [localColumns, setLocalColumns] = useState<Column[]>(() =>
     columns.map((col, idx) => ({
       ...col,
@@ -28,7 +28,9 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
       order: col.order ?? idx + 1,
     }))
   );
-  const [localCustomFields, setLocalCustomFields] = useState<CustomFieldDef[]>(() => customFields || []);
+  const [localCustomFields, setLocalCustomFields] = useState<CustomFieldDef[]>(
+    () => customFields || []
+  );
 
   const [newColumnTitle, setNewColumnTitle] = useState('');
 
@@ -232,7 +234,7 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      let finalCustomFields = [...localCustomFields];
+      const finalCustomFields = [...localCustomFields];
       if (newFieldName.trim()) {
         let options: CustomFieldOption[] | undefined;
         if (newFieldType === 'dropdown') {
@@ -265,9 +267,11 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-2 sm:p-3 animate-fade-in">
-      <div className={`bg-[var(--modal-bg)] text-[var(--text-primary)] border border-[var(--border-color)] rounded-xl shadow-2xl w-full overflow-hidden flex flex-col transition-all duration-300 ${
-        isMaximized ? 'w-[98vw] h-[96vh] max-w-none max-h-none' : 'max-w-3xl h-[90vh]'
-      }`}>
+      <div
+        className={`bg-[var(--modal-bg)] text-[var(--text-primary)] border border-[var(--border-color)] rounded-xl shadow-2xl w-full overflow-hidden flex flex-col transition-all duration-300 ${
+          isMaximized ? 'w-[98vw] h-[96vh] max-w-none max-h-none' : 'max-w-3xl h-[90vh]'
+        }`}
+      >
         {/* Modal Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-color)]">
           <h2 className="text-lg font-semibold flex items-center space-x-2">
@@ -338,7 +342,10 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
                     <div className="flex items-center justify-between gap-3">
                       {/* Title & Color Input */}
                       <div className="flex items-center space-x-2 flex-1">
-                        <label className="relative flex items-center cursor-pointer group" title="カスタムカラー選択">
+                        <label
+                          className="relative flex items-center cursor-pointer group"
+                          title="カスタムカラー選択"
+                        >
                           <span
                             className="w-5 h-5 rounded-full border border-white/20 shrink-0 shadow-xs group-hover:scale-110 transition-transform"
                             style={{ backgroundColor: col.color || '#3b82f6' }}
@@ -384,7 +391,9 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
                               : 'bg-[var(--bg-card)] text-[var(--text-secondary)] border border-[var(--border-color)]'
                           }`}
                         >
-                          {col.visible !== false ? t('configModal.visible') : t('configModal.hidden')}
+                          {col.visible !== false
+                            ? t('configModal.visible')
+                            : t('configModal.hidden')}
                         </button>
                         <button
                           onClick={() => handleDeleteColumn(idx)}
@@ -398,7 +407,9 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
 
                     {/* Extended Color Preset Palette */}
                     <div className="flex items-center space-x-1.5 flex-wrap pt-1 pl-7">
-                      <span className="text-[11px] font-medium text-[var(--text-muted)] mr-1">カラー:</span>
+                      <span className="text-[11px] font-medium text-[var(--text-muted)] mr-1">
+                        カラー:
+                      </span>
                       {COLOR_PRESETS.map((colorHex) => (
                         <button
                           key={colorHex}
@@ -506,7 +517,9 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
                                   <input
                                     type="text"
                                     value={opt.value}
-                                    onChange={(e) => handleOptionValueChange(idx, opt.id, e.target.value)}
+                                    onChange={(e) =>
+                                      handleOptionValueChange(idx, opt.id, e.target.value)
+                                    }
                                     className="bg-[var(--bg-input)] border border-[var(--border-color)] focus:border-blue-500 rounded px-2 py-0.5 text-xs font-medium text-[var(--text-primary)] flex-1 outline-none"
                                   />
                                 </div>
@@ -519,7 +532,9 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
                                       type="button"
                                       onClick={() => handleOptionColorChange(idx, opt.id, colorHex)}
                                       className={`w-4 h-4 rounded-full transition-transform ${
-                                        opt.color === colorHex ? 'scale-125 ring-2 ring-white/60 shadow-md' : 'hover:scale-110 opacity-70 hover:opacity-100'
+                                        opt.color === colorHex
+                                          ? 'scale-125 ring-2 ring-white/60 shadow-md'
+                                          : 'hover:scale-110 opacity-70 hover:opacity-100'
                                       }`}
                                       style={{ backgroundColor: colorHex }}
                                     />
@@ -536,7 +551,9 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
                               </div>
                             ))
                           ) : (
-                            <span className="text-xs text-[var(--text-muted)] italic">選択肢が設定されていません</span>
+                            <span className="text-xs text-[var(--text-muted)] italic">
+                              選択肢が設定されていません
+                            </span>
                           )}
                         </div>
 

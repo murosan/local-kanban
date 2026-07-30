@@ -1,4 +1,12 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  ReactNode,
+} from 'react';
 import { Language, translations } from './translations';
 
 interface I18nContextType {
@@ -34,30 +42,35 @@ export const I18nProvider: React.FC<{ initialLanguage?: string; children: ReactN
     });
   }, []);
 
-  const t = useCallback((key: string, params?: Record<string, string>): string => {
-    const dict = translations[language] || translations.ja;
-    let text = (dict as Record<string, string>)[key] || (translations.ja as Record<string, string>)[key] || key;
+  const t = useCallback(
+    (key: string, params?: Record<string, string>): string => {
+      const dict = translations[language] || translations.ja;
+      let text =
+        (dict as Record<string, string>)[key] ||
+        (translations.ja as Record<string, string>)[key] ||
+        key;
 
-    if (params) {
-      Object.entries(params).forEach(([paramKey, paramVal]) => {
-        text = text.replace(new RegExp(`\\{${paramKey}\\}`, 'g'), paramVal);
-      });
-    }
+      if (params) {
+        Object.entries(params).forEach(([paramKey, paramVal]) => {
+          text = text.replace(new RegExp(`\\{${paramKey}\\}`, 'g'), paramVal);
+        });
+      }
 
-    return text;
-  }, [language]);
-
-  const contextValue = useMemo(() => ({
-    language,
-    setLanguage,
-    t,
-  }), [language, setLanguage, t]);
-
-  return (
-    <I18nContext.Provider value={contextValue}>
-      {children}
-    </I18nContext.Provider>
+      return text;
+    },
+    [language]
   );
+
+  const contextValue = useMemo(
+    () => ({
+      language,
+      setLanguage,
+      t,
+    }),
+    [language, setLanguage, t]
+  );
+
+  return <I18nContext.Provider value={contextValue}>{children}</I18nContext.Provider>;
 };
 
 export const useI18n = (): I18nContextType => {

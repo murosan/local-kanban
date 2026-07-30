@@ -56,7 +56,6 @@ export interface UpdateTaskPayload {
   next_id?: string;
 }
 
-
 export async function updateTask(id: string, payload: UpdateTaskPayload): Promise<Task> {
   const res = await fetch(`${API_BASE}/tasks/${id}`, {
     method: 'PUT',

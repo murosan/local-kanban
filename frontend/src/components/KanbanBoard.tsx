@@ -157,7 +157,6 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
             <TaskCard task={activeTask} customFields={customFields} isOverlay />
           </div>
         ) : null}
-
       </DragOverlay>
     </DndContext>
   );

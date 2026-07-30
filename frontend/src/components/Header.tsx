@@ -28,10 +28,13 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <header className="sticky top-0 z-30 glass-panel border-b border-[var(--border-color)] px-4 py-2 mb-2">
       <div className="w-full flex flex-col md:flex-row items-center justify-between gap-2">
-        
         {/* Brand */}
         <div className="flex items-center space-x-2">
-          <img src="/icons/icon.svg" alt="LocalKanban" className="w-6 h-6 rounded-md shadow-sm border border-[var(--border-color)]" />
+          <img
+            src="/icons/icon.svg"
+            alt="LocalKanban"
+            className="w-6 h-6 rounded-md shadow-sm border border-[var(--border-color)]"
+          />
           <div className="flex items-baseline space-x-2">
             <h1 className="text-base font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-[var(--text-primary)] to-[var(--text-secondary)] leading-none">
               {t('header.title')}
@@ -93,11 +96,12 @@ export const Header: React.FC<HeaderProps> = ({
             className="flex items-center space-x-1 px-2.5 py-1 text-xs font-medium text-[var(--text-primary)] bg-[var(--bg-card)] hover:opacity-80 border border-[var(--border-color)] rounded-md transition-all active:scale-95 disabled:opacity-50"
             title={t('header.sync')}
           >
-            <RefreshCw className={`w-3.5 h-3.5 text-[var(--text-secondary)] ${isSyncing ? 'animate-spin' : ''}`} />
+            <RefreshCw
+              className={`w-3.5 h-3.5 text-[var(--text-secondary)] ${isSyncing ? 'animate-spin' : ''}`}
+            />
             <span className="hidden sm:inline">{t('header.sync')}</span>
           </button>
         </div>
-
       </div>
     </header>
   );

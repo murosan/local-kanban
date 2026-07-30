@@ -14,14 +14,14 @@ func TestSQLiteCache(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	dbPath := filepath.Join(tmpDir, "test.db")
 	cache, err := NewSQLiteCache(dbPath)
 	if err != nil {
 		t.Fatalf("failed to init SQLiteCache: %v", err)
 	}
-	defer cache.Close()
+	defer func() { _ = cache.Close() }()
 
 	task1 := &model.Task{
 		ID:        "task-1",

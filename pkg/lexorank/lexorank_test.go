@@ -13,11 +13,11 @@ func TestLexoRankBetween(t *testing.T) {
 	})
 
 	t.Run("between two ranks", func(t *testing.T) {
-		r1 := Between("", "")      // 0|m
-		r2 := Between(r1, "")     // 0|t
-		rMid := Between(r1, r2)   // Should be between 0|m and 0|t
+		r1 := Between("", "")   // 0|m
+		r2 := Between(r1, "")   // 0|t
+		rMid := Between(r1, r2) // Should be between 0|m and 0|t
 
-		if !(r1 < rMid && rMid < r2) {
+		if r1 >= rMid || rMid >= r2 {
 			t.Errorf("expected %s < %s < %s", r1, rMid, r2)
 		}
 	})
@@ -25,7 +25,7 @@ func TestLexoRankBetween(t *testing.T) {
 	t.Run("insert at head", func(t *testing.T) {
 		r1 := "0|m"
 		rHead := Between("", r1)
-		if !(rHead < r1) {
+		if rHead >= r1 {
 			t.Errorf("expected %s < %s", rHead, r1)
 		}
 	})
@@ -34,7 +34,7 @@ func TestLexoRankBetween(t *testing.T) {
 		r1 := "0|a"
 		r2 := "0|b"
 		rMid := Between(r1, r2)
-		if !(r1 < rMid && rMid < r2) {
+		if r1 >= rMid || rMid >= r2 {
 			t.Errorf("expected %s < %s < %s", r1, rMid, r2)
 		}
 	})

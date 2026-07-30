@@ -71,4 +71,3 @@ type Column struct {
 	Color   string `json:"color,omitempty"`
 	Order   int    `json:"order,omitempty"`
 }
-
