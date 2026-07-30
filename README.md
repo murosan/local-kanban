@@ -159,3 +159,10 @@ Chrome や Safari から「アプリとしてインストール」してスタ�
 - `DELETE /api/tasks/{id}` - タスク削除
 - `GET /api/config` / `PUT /api/config` - ボード・カラム・テーマ設定
 - `GET /mcp/sse` - MCP (Model Context Protocol) SSE エンドポイント
+
+---
+
+## 📄 ライセンス
+
+本プロジェクトは [MIT License](LICENSE) のもとで公開されています。
+
