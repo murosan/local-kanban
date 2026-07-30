@@ -4,7 +4,7 @@ import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { Plus } from 'lucide-react';
 import { Column, CustomFieldDef, Task } from '../types/task';
 import { TaskCard } from './TaskCard';
-import { useI18n } from '../i18n/I18nContext';
+import { useI18n } from '../i18n/useI18n';
 
 interface KanbanColumnProps {
   column: Column;

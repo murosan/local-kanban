@@ -13,7 +13,7 @@ import { Column, CustomFieldDef, Task } from '../types/task';
 import { KanbanColumn } from './KanbanColumn';
 import { TaskCard } from './TaskCard';
 import { updateTask } from '../services/api';
-import { useI18n } from '../i18n/I18nContext';
+import { useI18n } from '../i18n/useI18n';
 
 interface KanbanBoardProps {
   columns: Column[];

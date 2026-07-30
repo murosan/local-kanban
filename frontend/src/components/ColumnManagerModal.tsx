@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Column, CustomFieldDef, CustomFieldOption, CustomFieldType } from '../types/task';
-import { useI18n } from '../i18n/I18nContext';
+import { useI18n } from '../i18n/useI18n';
 import { Maximize2, Minimize2, X, Sliders, Plus, Trash2 } from 'lucide-react';
 
 interface ColumnManagerModalProps {

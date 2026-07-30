@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ThemeConfig } from '../types/task';
-import { useI18n } from '../i18n/I18nContext';
+import { useI18n } from '../i18n/useI18n';
+import { PRESET_THEMES } from '../constants/themePresets';
 import { Maximize2, Minimize2, X } from 'lucide-react';
 
 interface ThemeModalProps {
@@ -9,72 +10,6 @@ interface ThemeModalProps {
   currentTheme?: ThemeConfig;
   onSelectTheme: (theme: ThemeConfig) => void;
 }
-
-export const PRESET_THEMES: {
-  id: string;
-  nameKey: string;
-  primaryBg: string;
-  cardBg: string;
-  accentColor: string;
-  textColor: string;
-}[] = [
-  {
-    id: 'dark',
-    nameKey: 'preset.dark',
-    primaryBg: '#0b0f19',
-    cardBg: '#1f293d',
-    accentColor: '#3b82f6',
-    textColor: '#f8fafc',
-  },
-  {
-    id: 'dim-dark',
-    nameKey: 'preset.dimDark',
-    primaryBg: '#1f2937',
-    cardBg: '#252e3d',
-    accentColor: '#38bdf8',
-    textColor: '#f9fafb',
-  },
-  {
-    id: 'midnight',
-    nameKey: 'preset.midnight',
-    primaryBg: '#0a0e1a',
-    cardBg: '#1e293b',
-    accentColor: '#6366f1',
-    textColor: '#f1f5f9',
-  },
-  {
-    id: 'cyberpunk',
-    nameKey: 'preset.cyberpunk',
-    primaryBg: '#120024',
-    cardBg: '#2a004f',
-    accentColor: '#ff007f',
-    textColor: '#00f0ff',
-  },
-  {
-    id: 'forest',
-    nameKey: 'preset.forest',
-    primaryBg: '#061712',
-    cardBg: '#14352b',
-    accentColor: '#10b981',
-    textColor: '#ecfdf5',
-  },
-  {
-    id: 'light',
-    nameKey: 'preset.light',
-    primaryBg: '#f8fafc',
-    cardBg: '#ffffff',
-    accentColor: '#2563eb',
-    textColor: '#0f172a',
-  },
-  {
-    id: 'dim-light',
-    nameKey: 'preset.dimLight',
-    primaryBg: '#94a3b8',
-    cardBg: '#bfcbda',
-    accentColor: '#2563eb',
-    textColor: '#0f172a',
-  },
-];
 
 export const ThemeModal: React.FC<ThemeModalProps> = ({
   isOpen,

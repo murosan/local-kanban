@@ -14,7 +14,7 @@ import { TaskModal } from './components/TaskModal';
 import { ThemeModal } from './components/ThemeModal';
 import { ColumnManagerModal } from './components/ColumnManagerModal';
 import { ToastContainer, ToastMessage, ToastType } from './components/Toast';
-import { useI18n } from './i18n/I18nContext';
+import { useI18n } from './i18n/useI18n';
 
 export const App: React.FC = () => {
   const { language, t } = useI18n();

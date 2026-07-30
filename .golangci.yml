@@ -9,8 +9,20 @@ formatters:
   settings:
     gofmt:
       rewrite-rules: { pattern: 'interface{}', replacement: 'any' }
+    gofumpt:
+      module-path: localkanban
     goimports:
       local-prefixes: [localkanban]
+
+linters:
+  enable:
+    - bodyclose
+    - gosec
+  settings:
+    gosec:
+      excludes:
+        - G301
+        - G306
 
 run:
   timeout: 5m

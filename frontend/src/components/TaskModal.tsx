@@ -16,7 +16,7 @@ import {
   Columns,
 } from 'lucide-react';
 import { MarkdownEditor, ChangeOptions } from './MarkdownEditor';
-import { useI18n } from '../i18n/I18nContext';
+import { useI18n } from '../i18n/useI18n';
 
 interface TaskModalProps {
   isOpen: boolean;

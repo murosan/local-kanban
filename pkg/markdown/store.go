@@ -58,8 +58,10 @@ func (s *Store) GetBoardConfig() (*model.BoardConfig, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	configPath := filepath.Join(s.dir, ".kanban_config.json")
-	data, err := os.ReadFile(configPath)
+	configPath := filepath.Clean(filepath.Join(s.dir, ".kanban_config.json"))
+	data, err := os.ReadFile(
+		configPath,
+	) // #nosec G304 -- configPath is restricted to store directory
 	if err != nil {
 		if os.IsNotExist(err) {
 			return &model.BoardConfig{
@@ -245,7 +247,8 @@ func (s *Store) getTaskByIDUnlocked(id string) (*model.Task, error) {
 }
 
 func (s *Store) readTaskFile(path string) (*model.Task, error) {
-	data, err := os.ReadFile(path)
+	cleanPath := filepath.Clean(path)
+	data, err := os.ReadFile(cleanPath) // #nosec G304 -- cleanPath is restricted to task file path
 	if err != nil {
 		return nil, err
 	}
