@@ -18,7 +18,7 @@ func TestConfigRoutes(t *testing.T) {
 		t.Fatalf("failed to create store: %v", err)
 	}
 
-	server := NewServer(store)
+	server := NewServer(store, nil)
 	mux := http.NewServeMux()
 	server.RegisterRoutes(mux)
 
@@ -86,5 +86,56 @@ func TestConfigRoutes(t *testing.T) {
 	}
 	if len(cfg2.CustomFields) != 1 || cfg2.CustomFields[0].Name != "Priority" {
 		t.Errorf("expected 1 custom field 'Priority', got %+v", cfg2.CustomFields)
+	}
+}
+
+func TestGetTasksSearchEngine(t *testing.T) {
+	tempDir := t.TempDir()
+	store, err := markdown.NewStore(tempDir)
+	if err != nil {
+		t.Fatalf("failed to create store: %v", err)
+	}
+
+	task1 := &model.Task{
+		Title:    "検索エンジン検証タスク alpha",
+		ColumnID: "col-todo",
+		Rank:     "0|a",
+		Tags:     []string{"alpha"},
+		Content:  "アルファのテストコンテンツです",
+	}
+	task2 := &model.Task{
+		Title:    "検索エンジン検証タスク beta",
+		ColumnID: "col-in-progress",
+		Rank:     "0|b",
+		Tags:     []string{"beta"},
+		Content:  "ベータのテストコンテンツです",
+	}
+	if err := store.SaveTask(task1); err != nil {
+		t.Fatalf("failed to save task1: %v", err)
+	}
+	if err := store.SaveTask(task2); err != nil {
+		t.Fatalf("failed to save task2: %v", err)
+	}
+
+	server := NewServer(store, nil)
+	mux := http.NewServeMux()
+	server.RegisterRoutes(mux)
+
+	// GET /api/tasks?q=alpha
+	req := httptest.NewRequest("GET", "/api/tasks?q=alpha", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", w.Code)
+	}
+
+	var tasks []*model.Task
+	if err := json.NewDecoder(w.Body).Decode(&tasks); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if len(tasks) != 1 || tasks[0].Title != "検索エンジン検証タスク alpha" {
+		t.Errorf("expected 1 task matching 'alpha', got %d", len(tasks))
 	}
 }

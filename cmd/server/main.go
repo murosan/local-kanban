@@ -7,11 +7,15 @@ import (
 	"net/http"
 	"os"
 
+	"path/filepath"
+
 	"github.com/go-chi/cors"
 
 	"localkanban/pkg/api"
+	"localkanban/pkg/cache"
 	"localkanban/pkg/markdown"
 	"localkanban/pkg/model"
+	"localkanban/pkg/search"
 	"localkanban/pkg/ui"
 )
 
@@ -65,13 +69,33 @@ func main() {
 		log.Fatalf("Failed to initialize store: %v", err)
 	}
 
+	// Initialize SQLite Cache and Search Engine
+	dbPath := filepath.Join(cfg.tasksDir, ".local_cache.db")
+	sqliteCache, err := cache.NewSQLiteCache(dbPath)
+	if err != nil {
+		log.Printf("Warning: Failed to initialize SQLite Cache at %s: %v", dbPath, err)
+	} else {
+		defer sqliteCache.Close()
+		store.SetCache(sqliteCache)
+	}
+
 	// Create initial sample task if store is empty
 	tasks, err := store.GetAllTasks()
 	if err == nil && len(tasks) == 0 {
 		createSampleTasks(store)
 	}
 
-	server := api.NewServer(store)
+	if sqliteCache != nil {
+		if err := store.SyncCache(); err != nil {
+			log.Printf("Warning: Failed to sync cache on startup: %v", err)
+		}
+	}
+
+	searchEngine := search.NewEngine(sqliteCache)
+	log.Printf("Search Engine: SQLite FTS5 + LIKE hybrid search enabled")
+
+	server := api.NewServer(store, searchEngine)
+
 	mux := http.NewServeMux()
 	server.RegisterRoutes(mux)
 	mux.Handle("/", ui.Handler())

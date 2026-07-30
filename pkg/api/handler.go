@@ -8,14 +8,19 @@ import (
 	"localkanban/pkg/lexorank"
 	"localkanban/pkg/markdown"
 	"localkanban/pkg/model"
+	"localkanban/pkg/search"
 )
 
 type Server struct {
-	store *markdown.Store
+	store        *markdown.Store
+	searchEngine *search.Engine
 }
 
-func NewServer(store *markdown.Store) *Server {
-	return &Server{store: store}
+func NewServer(store *markdown.Store, searchEngine *search.Engine) *Server {
+	return &Server{
+		store:        store,
+		searchEngine: searchEngine,
+	}
 }
 
 func (s *Server) RegisterRoutes(mux *http.ServeMux) {
@@ -52,7 +57,8 @@ func (s *Server) handleSaveConfig(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleGetTasks(w http.ResponseWriter, r *http.Request) {
-	query := strings.ToLower(r.URL.Query().Get("q"))
+	rawQuery := r.URL.Query().Get("q")
+	query := strings.ToLower(rawQuery)
 	tasks, err := s.store.GetAllTasks()
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, err.Error())
@@ -60,6 +66,26 @@ func (s *Server) handleGetTasks(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if query != "" {
+		if s.searchEngine != nil {
+			matchedIDs, err := s.searchEngine.Search(rawQuery)
+			if err == nil {
+				idMap := make(map[string]bool, len(matchedIDs))
+				for _, id := range matchedIDs {
+					idMap[id] = true
+				}
+				filtered := make([]*model.Task, 0)
+				for _, t := range tasks {
+					if idMap[t.ID] {
+						filtered = append(filtered, t)
+					}
+				}
+				tasks = filtered
+				respondJSON(w, http.StatusOK, tasks)
+				return
+			}
+		}
+
+		// Fallback to in-memory search if searchEngine is nil or failed
 		filtered := make([]*model.Task, 0)
 		for _, t := range tasks {
 			match := strings.Contains(strings.ToLower(t.Title), query) ||

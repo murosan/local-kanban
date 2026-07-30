@@ -1,8 +1,8 @@
 # ローカルファーストAIネイティブ・カンバンツール「LocalKanban (仮)」基本・詳細仕様書
 
-* **文書バージョン:** 2.3.0 (ファイル自動監視廃止・シンプル同期版)
+* **文書バージョン:** 2.4.0 (SQLite FTS5 + LIKE 検索一本化・ripgrep非依存版)
 * **更新日:** 2026-07-30
-* **ステータス:** 承認済み / ファイル自動監視廃止
+* **ステータス:** 承認済み / SQLite FTS5 一本化
 
 ---
 
@@ -24,7 +24,7 @@
  |                        Go Local Web Server                            |
  |  +--------------------+  +--------------------+  +------------------+ |
  |  |  Markdown Sync     |  |   Search Engine    |  |    MCP Server    | |
- |  |  (On API Request)  |  | (SQLite FTS5 + rg) |  |   (stdio / SSE)  | |
+ |  |  (On API Request)  |  |   (SQLite FTS5)    |  |   (stdio / SSE)  | |
  |  +--------------------+  +--------------------+  +------------------+ |
  +-----------------------------------------------------------------------+
         |                       |                       |
@@ -45,7 +45,7 @@
    * Cursor, Claude Desktop, Auto-GPT等のAIツールが直接カンバンボードのタスクを参照・追加・ステータス更新可能。
 3. **Simple & Robust (超シンプル・高堅牢):**
    * WebSocketなどの常時接続・複雑なステート管理を排除し、純粋なREST APIと手動リロード / ウインドウフォーカス時自動更新で動作。
-   * OS上の `ripgrep` (`rg`) 連携による数万行規模のテキスト高速検索。
+   * SQLite FTS5 および LIKE クエリによる高速なハイブリッド全文検索。
 
 ---
 
@@ -60,7 +60,7 @@
 | **Drag & Drop** | **dnd-kit** | アクセシビリティ対応かつパフォーマンスに優れた順序変更D&Dライブラリ。 |
 | **Styling** | **Tailwind CSS v3+** | ディープダークモード対応、モダンで洗練されたGlassmorphism UIの構築。 |
 | **Sync Mechanism** | **REST API + Reload Button** | UI上のリロードボタン、およびブラウザのウィンドウフォーカス時 (`window.onfocus`) に自動再取得。 |
-| **Search & Cache** | **SQLite3 (FTS5) + ripgrep (`rg`)** | 構造化データの高速フィルタリングおよび全文検索。`rg`コマンドはOS環境に存在する場合は優先利用し、非存在時はSQLite FTS5へフォールバック。 |
+| **Search & Cache** | **SQLite3 (FTS5 + LIKE)** | 構造化データの高速フィルタリングおよび全文検索。FTS5 インデックスと短語用 LIKE クエリのハイブリッド検索。 |
 
 ---
 
@@ -178,10 +178,9 @@ CREATE VIRTUAL TABLE IF NOT EXISTS tasks_fts USING fts5(
 
 ### 4.3. 高速検索 & インデックス機能
 
-1. **リアルタイム複合検索 (FTS5 + SQLite):**
-   * REST API (`GET /api/tasks?q=...`) 経由でSQLite FTS5の高速全文検索を提供。
-2. **`ripgrep` パケット検索:**
-   * OSに `rg` コマンドが存在する場合は `rg` を呼び出して横断検索。未存在時は SQLite FTS5 へフォールバック。
+1. **リアルタイムハイブリッド全文検索 (SQLite FTS5 + LIKE):**
+   * REST API (`GET /api/tasks?q=...`) 経由で SQLite FTS5 および LIKE クエリによる高速全文検索を提供。
+   * 通常キーワードは FTS5 全文検索インデックスでミリ秒単位のレスポンスを実現し、1〜2文字の日本語短語等は LIKE フォールバック検索で漏れなく検索。
 
 ### 4.4. MCP (Model Context Protocol) サーバー機能
 
@@ -220,7 +219,7 @@ gantt
     LexoRank & dnd-kit 統合          :p1_3, after p1_2, 2d
     section Phase 2: Performance
     SQLite FTS5 キャッシュ実装       :p2_1, 2026-08-08, 3d
-    ripgrep (OS / FTS5) 検索統合     :p2_2, after p2_1, 2d
+    SQLite ハイブリッド全文検索統合   :p2_2, after p2_1, 2d
     section Phase 3: AI & CLI Integrations
     MCP SSE/stdio サーバー実装       :p3_1, 2026-08-15, 4d
     CLI ツール連携 (localkanban add)  :p3_2, after p3_1, 2d

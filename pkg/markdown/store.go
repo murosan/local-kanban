@@ -12,13 +12,15 @@ import (
 	"sync"
 	"time"
 
+	"localkanban/pkg/cache"
 	"localkanban/pkg/model"
 	"gopkg.in/yaml.v3"
 )
 
 type Store struct {
-	dir string
-	mu  sync.RWMutex
+	dir   string
+	cache *cache.SQLiteCache
+	mu    sync.RWMutex
 }
 
 func NewStore(dir string) (*Store, error) {
@@ -26,6 +28,28 @@ func NewStore(dir string) (*Store, error) {
 		return nil, fmt.Errorf("failed to create tasks directory: %w", err)
 	}
 	return &Store{dir: dir}, nil
+}
+
+func (s *Store) SetCache(c *cache.SQLiteCache) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.cache = c
+}
+
+func (s *Store) SyncCache() error {
+	s.mu.RLock()
+	c := s.cache
+	s.mu.RUnlock()
+
+	if c == nil {
+		return nil
+	}
+
+	tasks, err := s.GetAllTasks()
+	if err != nil {
+		return err
+	}
+	return c.SyncAll(tasks)
 }
 
 // GetBoardConfig reads .kanban_config.json or returns default columns.
@@ -164,6 +188,10 @@ func (s *Store) SaveTask(task *model.Task) error {
 		return fmt.Errorf("failed to write task file: %w", err)
 	}
 
+	if s.cache != nil {
+		_ = s.cache.UpsertTask(task)
+	}
+
 	return nil
 }
 
@@ -180,6 +208,11 @@ func (s *Store) DeleteTask(id string) error {
 	if err := os.Remove(task.FilePath); err != nil {
 		return fmt.Errorf("failed to remove task file: %w", err)
 	}
+
+	if s.cache != nil {
+		_ = s.cache.DeleteTask(id)
+	}
+
 	return nil
 }
 
