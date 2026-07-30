@@ -30,6 +30,48 @@
   --card-shadow-hover: 0 4px 20px -2px rgba(99, 102, 241, 0.35);
 }
 
+[data-theme='nord'] {
+  --bg-primary: #2e3440;
+  --bg-surface: #3b4252;
+  --bg-card: #434c5e;
+  --bg-input: #3b4252;
+  --accent-color: #88c0d0;
+  --text-primary: #eceff4;
+  --text-secondary: #e5e9f0;
+  --text-muted: #d8dee9;
+  --border-color: rgba(236, 239, 244, 0.12);
+  --modal-bg: #3b4252;
+  --card-shadow-hover: 0 6px 20px -2px rgba(136, 192, 208, 0.3);
+}
+
+[data-theme='dracula'] {
+  --bg-primary: #282a36;
+  --bg-surface: #343746;
+  --bg-card: #44475a;
+  --bg-input: #343746;
+  --accent-color: #bd93f9;
+  --text-primary: #f8f8f2;
+  --text-secondary: #6272a4;
+  --text-muted: #6272a4;
+  --border-color: rgba(189, 147, 249, 0.2);
+  --modal-bg: #343746;
+  --card-shadow-hover: 0 6px 20px -2px rgba(189, 147, 249, 0.35);
+}
+
+[data-theme='monokai'] {
+  --bg-primary: #272822;
+  --bg-surface: #3e3d32;
+  --bg-card: #49483e;
+  --bg-input: #3e3d32;
+  --accent-color: #a6e22e;
+  --text-primary: #f8f8f2;
+  --text-secondary: #cfcfc2;
+  --text-muted: #75715e;
+  --border-color: rgba(255, 255, 255, 0.12);
+  --modal-bg: #3e3d32;
+  --card-shadow-hover: 0 6px 20px -2px rgba(166, 226, 46, 0.35);
+}
+
 [data-theme='cyberpunk'] {
   --bg-primary: #120024;
   --bg-surface: #1a0033;
@@ -58,11 +100,12 @@
   --card-shadow-hover: 0 4px 20px -2px rgba(16, 185, 129, 0.35);
 }
 
+[data-theme='light-clean'],
 [data-theme='light'] {
-  --bg-primary: #f1f5f9;
+  --bg-primary: #f8fafc;
   --bg-surface: #ffffff;
   --bg-card: #ffffff;
-  --bg-input: #f8fafc;
+  --bg-input: #f1f5f9;
   --accent-color: #2563eb;
   --text-primary: #0f172a;
   --text-secondary: #475569;
@@ -70,6 +113,20 @@
   --border-color: #cbd5e1;
   --modal-bg: #ffffff;
   --card-shadow-hover: 0 6px 16px -2px rgba(37, 99, 235, 0.2), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+[data-theme='warm-paper'] {
+  --bg-primary: #fbf9f5;
+  --bg-surface: #f7f3eb;
+  --bg-card: #f3efe6;
+  --bg-input: #e8e2d5;
+  --accent-color: #d97706;
+  --text-primary: #292524;
+  --text-secondary: #57534e;
+  --text-muted: #78716c;
+  --border-color: #d6cebf;
+  --modal-bg: #f3efe6;
+  --card-shadow-hover: 0 6px 16px -2px rgba(217, 119, 6, 0.2);
 }
 
 [data-theme='dim-light'] {

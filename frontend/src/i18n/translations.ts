@@ -101,14 +101,23 @@ export const translations = {
     'preset.dark': '標準ダーク',
     'preset.dimDark': '明るめダーク',
     'preset.midnight': 'ミッドナイトブルー',
+    'preset.nord': 'Nord',
+    'preset.dracula': 'Dracula',
+    'preset.monokai': 'Monokai',
     'preset.cyberpunk': 'サイバーパンク',
     'preset.forest': 'フォレストダーク',
-    'preset.light': 'クリーンライト',
+    'preset.lightClean': 'クリーンライト',
     'preset.dimLight': '暗めライト',
+    'preset.warmPaper': 'ウォームペーパー',
 
-    // Modal Common
+    // Modal Common & Toasts
     'modal.maximize': '全画面表示',
     'modal.minimize': '元のサイズに戻す',
+    'common.close': '閉じる',
+    'common.error': 'エラーが発生しました',
+    'common.saved': 'カードを更新しました',
+    'common.created': 'カードを作成しました',
+    'common.deleted': 'カードを削除しました',
   },
   en: {
     // Header
@@ -208,13 +217,22 @@ export const translations = {
     'preset.dark': 'Default Dark',
     'preset.dimDark': 'Dim Dark',
     'preset.midnight': 'Midnight Blue',
-    'preset.cyberpunk': 'Cyberpunk Neon',
+    'preset.nord': 'Nord',
+    'preset.dracula': 'Dracula',
+    'preset.monokai': 'Monokai',
+    'preset.cyberpunk': 'Cyberpunk',
     'preset.forest': 'Forest Dark',
-    'preset.light': 'Clean Light',
+    'preset.lightClean': 'Clean Light',
     'preset.dimLight': 'Dim Light',
+    'preset.warmPaper': 'Warm Paper',
 
-    // Modal Common
+    // Modal Common & Toasts
     'modal.maximize': 'Maximize',
     'modal.minimize': 'Restore size',
+    'common.close': 'Close',
+    'common.error': 'An error occurred',
+    'common.saved': 'Task updated successfully',
+    'common.created': 'Task created successfully',
+    'common.deleted': 'Task deleted',
   },
 };
