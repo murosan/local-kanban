@@ -8,7 +8,7 @@ formatters:
     - golines
   settings:
     gofmt:
-      rewrite-rules: { pattern: 'interface{}', replacement: 'any' }
+      rewrite-rules: [{ pattern: 'interface{}', replacement: 'any' }]
     gofumpt:
       module-path: github.com/murosan/local-kanban
     goimports:
