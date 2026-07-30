@@ -22,7 +22,6 @@ bin/
 *.app
 /server
 /localkanban
-localkanban
 /app/server
 /app/localkanban
 
