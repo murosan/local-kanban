@@ -6,14 +6,16 @@ import { KanbanBoard } from './components/KanbanBoard';
 import { TaskModal } from './components/TaskModal';
 import { ThemeModal } from './components/ThemeModal';
 import { ColumnManagerModal } from './components/ColumnManagerModal';
+import { ToastContainer, ToastMessage, ToastType } from './components/Toast';
 import { useI18n } from './i18n/I18nContext';
 
 export const App: React.FC = () => {
-  const { language } = useI18n();
+  const { language, t } = useI18n();
   const [config, setConfig] = useState<BoardConfig | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSyncing, setIsSyncing] = useState(false);
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
   // Modal States
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
@@ -22,6 +24,15 @@ export const App: React.FC = () => {
 
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [initialColumnId, setInitialColumnId] = useState<string>('');
+
+  const addToast = useCallback((message: string, type: ToastType = 'info') => {
+    const id = Date.now().toString() + Math.random().toString(36).substr(2, 4);
+    setToasts((prev) => [...prev, { id, message, type }]);
+  }, []);
+
+  const dismissToast = useCallback((id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
 
   const applyTheme = useCallback((theme?: ThemeConfig) => {
     const root = document.documentElement;
@@ -34,7 +45,7 @@ export const App: React.FC = () => {
     } else if (theme.name === 'custom') {
       root.setAttribute('data-theme', 'custom');
       if (theme.primaryBg) root.style.setProperty('--bg-primary', theme.primaryBg);
-      if (theme.cardBg) root.style.setProperty('--bg-card', theme.cardBg);
+      if (theme.cardBg) root.style.setProperty('--cardBg', theme.cardBg);
       if (theme.accentColor) root.style.setProperty('--accent-color', theme.accentColor);
       if (theme.textColor) root.style.setProperty('--text-primary', theme.textColor);
     } else {
@@ -72,10 +83,11 @@ export const App: React.FC = () => {
       }
     } catch (err) {
       console.error('Error fetching kanban data:', err);
+      addToast(t('common.error') || 'Failed to load data from server', 'error');
     } finally {
       setIsSyncing(false);
     }
-  }, [searchQuery, applyTheme]);
+  }, [searchQuery, applyTheme, addToast, t]);
 
   // Initial load & Search query change effect
   useEffect(() => {
@@ -107,24 +119,36 @@ export const App: React.FC = () => {
 
   const handleSaveTask = async (taskData: Partial<Task>) => {
     const defaultColumnId = config?.columns[0]?.id;
-    if (taskData.id) {
-      await updateTask(taskData.id, taskData);
-    } else {
-      await createTask({
-        title: taskData.title || 'Untitled',
-        column_id: taskData.column_id || defaultColumnId,
-        tags: taskData.tags,
-        custom_fields: taskData.custom_fields,
-        content: taskData.content,
-      });
-
+    try {
+      if (taskData.id) {
+        await updateTask(taskData.id, taskData);
+        addToast(t('common.saved') || 'Task updated successfully', 'success');
+      } else {
+        await createTask({
+          title: taskData.title || 'Untitled',
+          column_id: taskData.column_id || defaultColumnId,
+          tags: taskData.tags,
+          custom_fields: taskData.custom_fields,
+          content: taskData.content,
+        });
+        addToast(t('common.created') || 'Task created successfully', 'success');
+      }
+      await loadData();
+    } catch (err) {
+      console.error('Error saving task:', err);
+      addToast('Failed to save task', 'error');
     }
-    await loadData();
   };
 
   const handleDeleteTask = async (id: string) => {
-    await deleteTask(id);
-    await loadData();
+    try {
+      await deleteTask(id);
+      addToast(t('common.deleted') || 'Task deleted', 'info');
+      await loadData();
+    } catch (err) {
+      console.error('Error deleting task:', err);
+      addToast('Failed to delete task', 'error');
+    }
   };
 
   const handleSaveConfig = async (
@@ -133,30 +157,36 @@ export const App: React.FC = () => {
   ) => {
     if (!config || newColumns.length === 0) return;
 
-    const validColumnIds = new Set(newColumns.map((c) => c.id));
-    const fallbackColumn = newColumns[0];
+    try {
+      const validColumnIds = new Set(newColumns.map((c) => c.id));
+      const fallbackColumn = newColumns[0];
 
-    // Reassign orphan tasks whose column was deleted
-    const orphanTasks = tasks.filter((t) => t.column_id && !validColumnIds.has(t.column_id));
-    for (const t of orphanTasks) {
-      try {
-        await updateTask(t.id, {
-          column_id: fallbackColumn.id,
-        });
-      } catch (err) {
-        console.error(`Failed to reassign task ${t.id}:`, err);
+      // Reassign orphan tasks whose column was deleted
+      const orphanTasks = tasks.filter((t) => t.column_id && !validColumnIds.has(t.column_id));
+      for (const t of orphanTasks) {
+        try {
+          await updateTask(t.id, {
+            column_id: fallbackColumn.id,
+          });
+        } catch (err) {
+          console.error(`Failed to reassign task ${t.id}:`, err);
+        }
       }
-    }
 
-    const updatedConfig: BoardConfig = {
-      ...config,
-      columns: newColumns,
-      custom_fields: newCustomFields,
-      language,
-    };
-    const saved = await saveBoardConfig(updatedConfig);
-    setConfig(saved);
-    await loadData();
+      const updatedConfig: BoardConfig = {
+        ...config,
+        columns: newColumns,
+        custom_fields: newCustomFields,
+        language,
+      };
+      const saved = await saveBoardConfig(updatedConfig);
+      setConfig(saved);
+      addToast('Board configuration saved', 'success');
+      await loadData();
+    } catch (err) {
+      console.error('Failed to save board config:', err);
+      addToast('Failed to save configuration', 'error');
+    }
   };
 
   const handleSelectTheme = async (theme: ThemeConfig) => {
@@ -167,6 +197,7 @@ export const App: React.FC = () => {
     try {
       const saved = await saveBoardConfig(updatedConfig);
       setConfig(saved);
+      addToast('Theme applied', 'success');
     } catch (err) {
       console.error('Failed to save theme to config:', err);
     }
@@ -185,6 +216,9 @@ export const App: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col transition-colors duration-300">
+      {/* Toast Notification Container */}
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+
       {/* Header */}
       <Header
         searchQuery={searchQuery}

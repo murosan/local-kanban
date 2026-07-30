@@ -6,9 +6,9 @@ WORKDIR /app
 RUN apk add --no-cache git gcc musl-dev bash
 
 COPY go.mod go.sum* ./
-COPY . .
+RUN go mod download
 
-RUN go mod tidy
+COPY . .
 
 EXPOSE 3737
 

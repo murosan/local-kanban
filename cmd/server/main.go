@@ -12,6 +12,7 @@ import (
 	"localkanban/pkg/api"
 	"localkanban/pkg/markdown"
 	"localkanban/pkg/model"
+	"localkanban/pkg/ui"
 )
 
 type config struct {
@@ -73,6 +74,7 @@ func main() {
 	server := api.NewServer(store)
 	mux := http.NewServeMux()
 	server.RegisterRoutes(mux)
+	mux.Handle("/", ui.Handler())
 
 	// Add CORS middleware using chi's cors package
 	corsMiddleware := cors.Handler(cors.Options{

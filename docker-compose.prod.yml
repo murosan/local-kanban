@@ -1,0 +1,16 @@
+services:
+  localkanban:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        GOOS: linux
+    ports:
+      - "3737:3737"
+    volumes:
+      - ./tasks:/app/tasks
+    environment:
+      - PORT=3737
+      - HOST=0.0.0.0
+      - TASKS_DIR=/app/tasks
+    restart: unless-stopped
