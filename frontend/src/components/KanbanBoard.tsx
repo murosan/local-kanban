@@ -9,6 +9,7 @@ import {
   useSensors,
   closestCorners,
 } from '@dnd-kit/core';
+import { arrayMove } from '@dnd-kit/sortable';
 import { Column, CustomFieldDef, Task } from '../types/task';
 import { KanbanColumn } from './KanbanColumn';
 import { TaskCard } from './TaskCard';
@@ -61,6 +62,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
     const activeId = active.id as string;
     const overId = over.id as string;
 
+    if (activeId === overId) return;
+
     const activeTaskItem = findTask(activeId);
     if (!activeTaskItem) return;
 
@@ -79,28 +82,42 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
 
     if (!targetColumnId) return;
 
-    // Get ordered tasks in target column
-    const targetTasks = tasks.filter((t) => {
-      if (t.id === activeId) return false;
-      return t.column_id === targetColumnId;
-    });
+    const targetTasks = tasks.filter((t) => t.column_id === targetColumnId);
 
-    // Find position where active item was dropped
     let prevId = '';
     let nextId = '';
 
     if (matchingColumn) {
-      // Dropped at end of column
-      if (targetTasks.length > 0) {
-        prevId = targetTasks[targetTasks.length - 1].id;
+      // Dropped onto column container (e.g. empty column or space below tasks)
+      const otherTasks = targetTasks.filter((t) => t.id !== activeId);
+      if (otherTasks.length > 0) {
+        prevId = otherTasks[otherTasks.length - 1].id;
       }
     } else {
-      const overIndex = targetTasks.findIndex((t) => t.id === overId);
-      if (overIndex >= 0) {
-        if (overIndex > 0) {
-          prevId = targetTasks[overIndex - 1].id;
+      if (activeTaskItem.column_id === targetColumnId) {
+        // Reordering within the SAME column
+        const oldIndex = targetTasks.findIndex((t) => t.id === activeId);
+        const newIndex = targetTasks.findIndex((t) => t.id === overId);
+
+        if (oldIndex !== -1 && newIndex !== -1) {
+          const reordered = arrayMove(targetTasks, oldIndex, newIndex);
+          const activeNewIndex = reordered.findIndex((t) => t.id === activeId);
+          if (activeNewIndex > 0) {
+            prevId = reordered[activeNewIndex - 1].id;
+          }
+          if (activeNewIndex < reordered.length - 1) {
+            nextId = reordered[activeNewIndex + 1].id;
+          }
         }
-        nextId = targetTasks[overIndex].id;
+      } else {
+        // Moving to a DIFFERENT column onto a target task
+        const overIndex = targetTasks.findIndex((t) => t.id === overId);
+        if (overIndex !== -1) {
+          if (overIndex > 0) {
+            prevId = targetTasks[overIndex - 1].id;
+          }
+          nextId = targetTasks[overIndex].id;
+        }
       }
     }
 
