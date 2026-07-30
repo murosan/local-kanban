@@ -42,6 +42,7 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 		sseHandler := s.mcpServer.NewSSEHandler()
 		mux.Handle("/mcp/sse", sseHandler)
 		mux.Handle("/mcp/", sseHandler)
+		mux.Handle("/sse", sseHandler)
 	}
 }
 

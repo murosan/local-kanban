@@ -27,7 +27,7 @@ RUN go mod download
 COPY . .
 COPY --from=frontend-builder /app/pkg/ui/dist ./pkg/ui/dist
 
-RUN CGO_ENABLED=0 GOOS=${GOOS} ${GOARCH:+GOARCH=${GOARCH}} go build -ldflags="-s -w" -o /app/localkanban ./cmd/server
+RUN CGO_ENABLED=0 GOOS=${GOOS} ${GOARCH:+GOARCH=${GOARCH}} go build -ldflags="-s -w" -o /app/localkanban ./cmd/localkanban
 
 # ==========================================
 # Stage 3: Minimal Production Runtime

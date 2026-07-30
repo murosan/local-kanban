@@ -38,8 +38,26 @@ type UpdateTaskStatusInput struct {
 	TargetRank string `json:"target_rank,omitempty" jsonschema:"Optional target LexoRank string"`
 }
 
+type UpdateTaskInput struct {
+	TaskID       string                            `json:"task_id" jsonschema:"Task ID to update"`
+	Title        string                            `json:"title,omitempty" jsonschema:"Optional new title"`
+	Description  string                            `json:"description,omitempty" jsonschema:"Optional new markdown content/description"`
+	Status       string                            `json:"status,omitempty" jsonschema:"Optional new status column ID"`
+	Tags         []string                          `json:"tags,omitempty" jsonschema:"Optional new list of tags"`
+	TargetRank   string                            `json:"target_rank,omitempty" jsonschema:"Optional new LexoRank string"`
+	CustomFields map[string]model.CustomFieldValue `json:"custom_fields,omitempty" jsonschema:"Optional custom field values"`
+}
+
 type SearchTasksInput struct {
 	Query string `json:"query" jsonschema:"Search query keyword"`
+}
+
+type GetTasksOutput struct {
+	Tasks []*model.Task `json:"tasks" jsonschema:"List of tasks"`
+}
+
+type SearchTasksOutput struct {
+	Tasks []*model.Task `json:"tasks" jsonschema:"List of tasks matching query"`
 }
 
 func NewMCPServer(store *markdown.Store, searchEngine *search.Engine) (*Server, error) {
@@ -64,7 +82,7 @@ func (s *Server) registerTools() {
 	mcp.AddTool(s.mcpServer, &mcp.Tool{
 		Name:        "get_tasks",
 		Description: "Get list of tasks with optional filtering by status and tag.",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, input GetTasksInput) (*mcp.CallToolResult, []*model.Task, error) {
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input GetTasksInput) (*mcp.CallToolResult, *GetTasksOutput, error) {
 		tasks, err := s.store.GetAllTasks()
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to fetch tasks: %w", err)
@@ -94,7 +112,7 @@ func (s *Server) registerTools() {
 			filtered = filtered[:input.Limit]
 		}
 
-		return nil, filtered, nil
+		return nil, &GetTasksOutput{Tasks: filtered}, nil
 	})
 
 	// 2. create_task
@@ -175,7 +193,7 @@ func (s *Server) registerTools() {
 	mcp.AddTool(s.mcpServer, &mcp.Tool{
 		Name:        "search_tasks_fts",
 		Description: "Search tasks using SQLite FTS5 full-text search.",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, input SearchTasksInput) (*mcp.CallToolResult, []*model.Task, error) {
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input SearchTasksInput) (*mcp.CallToolResult, *SearchTasksOutput, error) {
 		if strings.TrimSpace(input.Query) == "" {
 			return nil, nil, fmt.Errorf("query is required")
 		}
@@ -202,7 +220,47 @@ func (s *Server) registerTools() {
 			}
 		}
 
-		return nil, matched, nil
+		return nil, &SearchTasksOutput{Tasks: matched}, nil
+	})
+
+	// 5. update_task
+	mcp.AddTool(s.mcpServer, &mcp.Tool{
+		Name:        "update_task",
+		Description: "Update task fields such as title, description, status, tags, rank, or custom fields.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input UpdateTaskInput) (*mcp.CallToolResult, *model.Task, error) {
+		if strings.TrimSpace(input.TaskID) == "" {
+			return nil, nil, fmt.Errorf("task_id is required")
+		}
+
+		task, err := s.store.GetTaskByID(input.TaskID)
+		if err != nil {
+			return nil, nil, fmt.Errorf("task not found: %w", err)
+		}
+
+		if strings.TrimSpace(input.Title) != "" {
+			task.Title = strings.TrimSpace(input.Title)
+		}
+		if input.Description != "" {
+			task.Content = input.Description
+		}
+		if input.Status != "" {
+			task.ColumnID = input.Status
+		}
+		if input.Tags != nil {
+			task.Tags = input.Tags
+		}
+		if input.TargetRank != "" {
+			task.Rank = input.TargetRank
+		}
+		if input.CustomFields != nil {
+			task.CustomFields = input.CustomFields
+		}
+
+		if err := s.store.SaveTask(task); err != nil {
+			return nil, nil, fmt.Errorf("failed to update task: %w", err)
+		}
+
+		return nil, task, nil
 	})
 }
 
@@ -214,7 +272,9 @@ func (s *Server) RunStdio(ctx context.Context) error {
 func (s *Server) NewSSEHandler() http.Handler {
 	return mcp.NewSSEHandler(func(req *http.Request) *mcp.Server {
 		return s.mcpServer
-	}, nil)
+	}, &mcp.SSEOptions{
+		DisableLocalhostProtection: true,
+	})
 }
 
 func (s *Server) MCPServer() *mcp.Server {

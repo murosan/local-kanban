@@ -2,8 +2,12 @@ package mcp
 
 import (
 	"context"
+	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
+	mcpSDK "github.com/modelcontextprotocol/go-sdk/mcp"
 	"localkanban/pkg/markdown"
 	"localkanban/pkg/search"
 )
@@ -56,3 +60,80 @@ func TestMCPServerTools(t *testing.T) {
 	_ = createInput
 	_ = ctx
 }
+
+func TestMCPSSEEndpoint(t *testing.T) {
+	tempDir := t.TempDir()
+	store, err := markdown.NewStore(tempDir)
+	if err != nil {
+		t.Fatalf("failed to create store: %v", err)
+	}
+
+	mcpSrv, err := NewMCPServer(store, nil)
+	if err != nil {
+		t.Fatalf("failed to create MCP server: %v", err)
+	}
+
+	sseHandler := mcpSrv.NewSSEHandler()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	reqWithAccept := httptest.NewRequest("GET", "/mcp/sse", nil).WithContext(ctx)
+	reqWithAccept.Header.Set("Accept", "text/event-stream")
+	wWithAccept := httptest.NewRecorder()
+
+	sseHandler.ServeHTTP(wWithAccept, reqWithAccept)
+	t.Logf("WithAccept Status: %d, Content-Type: %s", wWithAccept.Code, wWithAccept.Header().Get("Content-Type"))
+
+	if ct := wWithAccept.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/event-stream") {
+		t.Errorf("expected Content-Type text/event-stream, got %s", ct)
+	}
+}
+
+func TestMCPClientListTools(t *testing.T) {
+	tempDir := t.TempDir()
+	store, err := markdown.NewStore(tempDir)
+	if err != nil {
+		t.Fatalf("failed to create store: %v", err)
+	}
+
+	searchEngine := search.NewEngine(nil)
+	mcpSrv, err := NewMCPServer(store, searchEngine)
+	if err != nil {
+		t.Fatalf("failed to create MCP server: %v", err)
+	}
+
+	clientTransport, serverTransport := mcpSDK.NewInMemoryTransports()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go func() {
+		_ = mcpSrv.MCPServer().Run(ctx, serverTransport)
+	}()
+
+	client := mcpSDK.NewClient(&mcpSDK.Implementation{
+		Name:    "TestClient",
+		Version: "1.0.0",
+	}, nil)
+
+	session, err := client.Connect(ctx, clientTransport, nil)
+	if err != nil {
+		t.Fatalf("failed to connect client: %v", err)
+	}
+	defer session.Close()
+
+	toolsResult, err := session.ListTools(ctx, nil)
+	if err != nil {
+		t.Fatalf("ListTools failed: %v", err)
+	}
+
+	t.Logf("Found %d tools", len(toolsResult.Tools))
+	for _, tool := range toolsResult.Tools {
+		t.Logf("Tool: %s - %s", tool.Name, tool.Description)
+	}
+
+	if len(toolsResult.Tools) != 5 {
+		t.Errorf("expected 5 tools, got %d", len(toolsResult.Tools))
+	}
+}
+

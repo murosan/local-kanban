@@ -26,6 +26,12 @@ func Handler() http.Handler {
 		// Clean the requested path
 		cleanPath := path.Clean(r.URL.Path)
 
+		// Never serve SPA index.html fallback for API or MCP requests
+		if strings.HasPrefix(cleanPath, "/api") || strings.HasPrefix(cleanPath, "/mcp") || cleanPath == "/sse" {
+			http.NotFound(w, r)
+			return
+		}
+
 		// Trim leading slash for fs lookup
 		lookupPath := strings.TrimPrefix(cleanPath, "/")
 		if lookupPath == "" {
