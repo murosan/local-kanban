@@ -680,10 +680,10 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                               <button
                                 type="button"
                                 onClick={() => handleToggleCustomField(field.id)}
-                                className="text-[11px] text-rose-400 hover:text-rose-500 font-medium underline px-1"
-                                title="このカードからフィールドを削除 (OFF)"
+                                className="text-[11px] text-[var(--text-muted)] hover:text-[var(--text-secondary)] font-medium underline px-1 transition-colors"
+                                title={t('taskModal.hideFieldTitle')}
                               >
-                                削除
+                                {t('taskModal.hideField')}
                               </button>
                             )}
                             <button
