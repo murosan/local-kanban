@@ -77,7 +77,12 @@ export const translations = {
     'taskModal.delete': '削除',
     'taskModal.cancel': 'キャンセル',
     'taskModal.save': '保存',
-    'taskModal.saving': '保存中...',
+    // Create Task Modal
+    'createModal.title': '新規カード追加',
+    'createModal.columnLabel': 'カラム',
+    'createModal.titlePlaceholder': 'カードのタイトルを入力...',
+    'createModal.add': '追加',
+    'createModal.adding': '追加中...',
 
     // Editor & Markdown Toolbar
     'editor.modeEdit': '編集',
@@ -197,6 +202,13 @@ export const translations = {
     'taskModal.cancel': 'Cancel',
     'taskModal.save': 'Save',
     'taskModal.saving': 'Saving...',
+
+    // Create Task Modal
+    'createModal.title': 'Add New Card',
+    'createModal.columnLabel': 'Column',
+    'createModal.titlePlaceholder': 'Enter card title...',
+    'createModal.add': 'Add Card',
+    'createModal.adding': 'Adding...',
 
     // Editor & Markdown Toolbar
     'editor.modeEdit': 'Edit',

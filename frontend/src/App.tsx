@@ -12,6 +12,7 @@ import {
 import { Header } from './components/Header';
 import { KanbanBoard } from './components/KanbanBoard';
 import { TaskModal } from './components/TaskModal';
+import { CreateTaskModal } from './components/CreateTaskModal';
 import { ThemeModal } from './components/ThemeModal';
 import { ColumnManagerModal } from './components/ColumnManagerModal';
 import { ToastContainer, ToastMessage, ToastType } from './components/Toast';
@@ -27,6 +28,7 @@ export const App: React.FC = () => {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
   // Modal States
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [isThemeModalOpen, setIsThemeModalOpen] = useState(false);
   const [isColumnModalOpen, setIsColumnModalOpen] = useState(false);
@@ -130,9 +132,26 @@ export const App: React.FC = () => {
 
   const handleOpenNewCardModal = (columnId?: string) => {
     const defaultColumnId = columnId || config?.columns[0]?.id || '';
-    setSelectedTask(null);
     setInitialColumnId(defaultColumnId);
-    setIsTaskModalOpen(true);
+    setIsCreateModalOpen(true);
+  };
+
+  const handleCreateTask = async (data: { title: string; column_id: string }) => {
+    try {
+      const createdTask = await createTask({
+        title: data.title,
+        column_id: data.column_id,
+      });
+      addToast(t('common.created') || 'Task created successfully', 'success');
+      await loadData();
+      setIsCreateModalOpen(false);
+      setSelectedTask(createdTask);
+      setIsTaskModalOpen(true);
+    } catch (err) {
+      console.error('Error creating task:', err);
+      addToast('Failed to create task', 'error');
+      throw err;
+    }
   };
 
   const handleCardClick = (task: Task) => {
@@ -263,7 +282,18 @@ export const App: React.FC = () => {
         />
       </main>
 
-      {/* Create / Edit Modal */}
+      {/* Simple Create Card Modal */}
+      {isCreateModalOpen && (
+        <CreateTaskModal
+          isOpen={isCreateModalOpen}
+          columns={config.columns}
+          initialColumnId={initialColumnId}
+          onClose={() => setIsCreateModalOpen(false)}
+          onSave={handleCreateTask}
+        />
+      )}
+
+      {/* Detail / Edit Modal */}
       {isTaskModalOpen && (
         <TaskModal
           isOpen={isTaskModalOpen}

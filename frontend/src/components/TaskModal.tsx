@@ -87,8 +87,14 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     };
   }, [isMenuOpen]);
 
+  const prevIsOpenRef = useRef(false);
+  const prevTaskIdRef = useRef<string | undefined>(undefined);
+
   useEffect(() => {
-    if (isOpen) {
+    const isNewOpen = isOpen && !prevIsOpenRef.current;
+    const isTaskChanged = isOpen && task?.id !== prevTaskIdRef.current;
+
+    if (isNewOpen || isTaskChanged) {
       setIsMenuOpen(false);
       const initialTitle = task ? task.title : '';
       const initialCol = task
@@ -116,6 +122,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       setCanUndo(false);
       setCanRedo(false);
     }
+    prevIsOpenRef.current = isOpen;
+    prevTaskIdRef.current = task?.id;
   }, [isOpen, task, initialColumnId, columns]);
 
   const recordHistory = useCallback((newState: FormState, options?: ChangeOptions) => {
