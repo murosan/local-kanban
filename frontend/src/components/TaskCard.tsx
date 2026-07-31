@@ -17,17 +17,18 @@ export const TaskCard: React.FC<TaskCardProps> = ({
   onCardClick,
   isOverlay,
 }) => {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useSortable({
     id: task.id,
     data: { task },
     disabled: isOverlay,
+    animateLayoutChanges: () => false,
   });
 
   const style = isOverlay
     ? undefined
     : {
         transform: CSS.Transform.toString(transform),
-        transition,
+        transition: undefined,
       };
 
   const formattedDate = new Date(task.updated_at).toLocaleDateString(undefined, {

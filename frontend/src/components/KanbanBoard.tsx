@@ -21,6 +21,7 @@ interface KanbanBoardProps {
   customFields?: CustomFieldDef[];
   tasks: Task[];
   onTaskUpdated: () => void;
+  onTasksChange?: (tasks: Task[]) => void;
   onCardClick: (task: Task) => void;
   onAddCard?: (columnId: string) => void;
 }
@@ -30,6 +31,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   customFields = [],
   tasks,
   onTaskUpdated,
+  onTasksChange,
   onCardClick,
   onAddCard,
 }) => {
@@ -121,6 +123,36 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
       }
     }
 
+    // Optimistic UI Update to immediately reflect changes in UI
+    if (onTasksChange) {
+      const updatedTasks = [...tasks];
+      const activeIdx = updatedTasks.findIndex((t) => t.id === activeId);
+      if (activeIdx !== -1) {
+        const movedTask = { ...updatedTasks[activeIdx], column_id: targetColumnId };
+        updatedTasks.splice(activeIdx, 1);
+
+        if (nextId) {
+          const nextIdx = updatedTasks.findIndex((t) => t.id === nextId);
+          if (nextIdx !== -1) {
+            updatedTasks.splice(nextIdx, 0, movedTask);
+          } else {
+            updatedTasks.push(movedTask);
+          }
+        } else if (prevId) {
+          const prevIdx = updatedTasks.findIndex((t) => t.id === prevId);
+          if (prevIdx !== -1) {
+            updatedTasks.splice(prevIdx + 1, 0, movedTask);
+          } else {
+            updatedTasks.push(movedTask);
+          }
+        } else {
+          updatedTasks.push(movedTask);
+        }
+
+        onTasksChange(updatedTasks);
+      }
+    }
+
     try {
       await updateTask(activeId, {
         column_id: targetColumnId,
@@ -130,6 +162,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
       onTaskUpdated();
     } catch (err) {
       console.error('Failed to move task:', err);
+      onTaskUpdated();
     }
   };
 
@@ -168,7 +201,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
         })}
       </div>
 
-      <DragOverlay>
+      <DragOverlay dropAnimation={null}>
         {activeTask ? (
           <div className="rotate-2 scale-105 shadow-2xl">
             <TaskCard task={activeTask} customFields={customFields} isOverlay />
