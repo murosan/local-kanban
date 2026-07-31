@@ -76,14 +76,14 @@ export const TaskCard: React.FC<TaskCardProps> = ({
     >
       {/* Title */}
       <div className="flex items-start justify-between gap-2">
-        <h3 className="font-semibold text-[var(--text-primary)] text-sm leading-snug line-clamp-2 group-hover:text-blue-500 transition-colors">
+        <h3 className="font-semibold text-[var(--text-primary)] text-sm leading-snug line-clamp-2 break-words group-hover:text-blue-500 transition-colors">
           {task.title}
         </h3>
       </div>
 
       {/* Content Preview if exists */}
       {task.content && (
-        <p className="text-xs text-[var(--text-secondary)] mt-1.5 line-clamp-2 font-normal leading-relaxed">
+        <p className="text-xs text-[var(--text-secondary)] mt-1.5 line-clamp-2 font-normal leading-relaxed break-words">
           {task.content.replace(/^#+\s+/gm, '')}
         </p>
       )}
