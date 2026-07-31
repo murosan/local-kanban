@@ -209,4 +209,3 @@ func TestGetTasksEmpty(t *testing.T) {
 		t.Errorf("expected body '[]', got '%s'", body)
 	}
 }
-

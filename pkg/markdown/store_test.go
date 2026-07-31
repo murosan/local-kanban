@@ -171,4 +171,3 @@ func TestGetAllTasksEmpty(t *testing.T) {
 		t.Errorf("expected JSON '[]', got '%s'", string(data))
 	}
 }
-
