@@ -24,7 +24,7 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
   const [localColumns, setLocalColumns] = useState<Column[]>(() =>
     columns.map((col, idx) => ({
       ...col,
-      name: col.name || (col as any).title || '',
+      name: col.name || (col as unknown as { title?: string }).title || '',
       visible: col.visible !== false,
       order: col.order ?? idx + 1,
     }))

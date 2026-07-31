@@ -2,6 +2,7 @@ package markdown
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/murosan/local-kanban/pkg/model"
@@ -131,16 +132,14 @@ func TestBoardConfigMigration(t *testing.T) {
 	}
 
 	// Verify migrated file content on disk
-	diskData, err := os.ReadFile(configPath)
+	cleanConfigPath := filepath.Clean(configPath)
+	diskData, err := os.ReadFile(cleanConfigPath) // #nosec G304
 	if err != nil {
 		t.Fatalf("failed to read migrated config file: %v", err)
 	}
 
 	diskStr := string(diskData)
-	if !testing.Verbose() {
-		// Just verify version 2 and name present, title removed
-	}
-	if !os.IsNotExist(err) && (diskStr == legacyConfigJSON) {
+	if diskStr == legacyConfigJSON {
 		t.Errorf("expected disk file to be updated with migrated JSON")
 	}
 }
