@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useLayoutEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import Prism from 'prismjs';
@@ -96,6 +96,15 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 
   const [copied, setCopied] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const pendingSelectionRef = useRef<{ start: number; end: number } | null>(null);
+
+  useLayoutEffect(() => {
+    if (pendingSelectionRef.current && textareaRef.current) {
+      const { start, end } = pendingSelectionRef.current;
+      textareaRef.current.setSelectionRange(start, end);
+      pendingSelectionRef.current = null;
+    }
+  }, [value]);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(value);
@@ -109,20 +118,14 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 
     const start = textarea.selectionStart;
     const end = textarea.selectionEnd;
-    const scrollTop = textarea.scrollTop;
     const selectedText = value.substring(start, end) || defaultText;
     const replacement = `${before}${selectedText}${after}`;
 
     const newValue = value.substring(0, start) + replacement + value.substring(end);
     const newStart = start + before.length;
     const newEnd = start + before.length + selectedText.length;
+    pendingSelectionRef.current = { start: newStart, end: newEnd };
     onChange(newValue, { immediate: true, selectionStart: newStart, selectionEnd: newEnd });
-
-    setTimeout(() => {
-      textarea.focus();
-      textarea.setSelectionRange(newStart, newEnd);
-      textarea.scrollTop = scrollTop;
-    }, 0);
   };
 
   const insertLinePrefix = (prefix: string) => {
@@ -131,7 +134,6 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 
     const start = textarea.selectionStart;
     const end = textarea.selectionEnd;
-    const scrollTop = textarea.scrollTop;
 
     // Find beginning and end of current line
     const lineStart = value.lastIndexOf('\n', start - 1) + 1;
@@ -174,13 +176,8 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
     const newStart = Math.max(lineStart, start + lengthDiff);
     const newEnd = Math.max(lineStart, end + lengthDiff);
 
+    pendingSelectionRef.current = { start: newStart, end: newEnd };
     onChange(newValue, { immediate: true, selectionStart: newStart, selectionEnd: newEnd });
-
-    setTimeout(() => {
-      textarea.focus();
-      textarea.setSelectionRange(newStart, newEnd);
-      textarea.scrollTop = scrollTop;
-    }, 0);
   };
 
   const insertTimestamp = () => {
@@ -242,7 +239,6 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
       if (!textarea) return;
       const start = textarea.selectionStart;
       const end = textarea.selectionEnd;
-      const scrollTop = textarea.scrollTop;
 
       if (e.shiftKey) {
         const lineStart = value.lastIndexOf('\n', start - 1) + 1;
@@ -252,23 +248,15 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
             value.substring(0, lineStart) + lineText.substring(2) + value.substring(end);
           const newStart = Math.max(lineStart, start - 2);
           const newEnd = Math.max(lineStart, end - 2);
+          pendingSelectionRef.current = { start: newStart, end: newEnd };
           onChange(newValue, { immediate: true, selectionStart: newStart, selectionEnd: newEnd });
-          setTimeout(() => {
-            textarea.focus();
-            textarea.setSelectionRange(newStart, newEnd);
-            textarea.scrollTop = scrollTop;
-          }, 0);
         }
       } else {
         const newValue = value.substring(0, start) + '  ' + value.substring(end);
         const newStart = start + 2;
         const newEnd = end + 2;
+        pendingSelectionRef.current = { start: newStart, end: newEnd };
         onChange(newValue, { immediate: true, selectionStart: newStart, selectionEnd: newEnd });
-        setTimeout(() => {
-          textarea.focus();
-          textarea.setSelectionRange(newStart, newEnd);
-          textarea.scrollTop = scrollTop;
-        }, 0);
       }
       return;
     }
@@ -293,24 +281,18 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
           const [, prefix, rest] = taskMatch;
           if (rest.trim() === '') {
             const newValue = value.substring(0, lineStart) + value.substring(start);
+            pendingSelectionRef.current = { start: lineStart, end: lineStart };
             onChange(newValue, {
               immediate: true,
               selectionStart: lineStart,
               selectionEnd: lineStart,
             });
-            setTimeout(() => {
-              textarea.focus();
-              textarea.setSelectionRange(lineStart, lineStart);
-            }, 0);
           } else {
             const newPrefix = '\n' + prefix.replace(/\[[xX]\]/, '[ ]');
             const newValue = value.substring(0, start) + newPrefix + value.substring(start);
             const nextPos = start + newPrefix.length;
+            pendingSelectionRef.current = { start: nextPos, end: nextPos };
             onChange(newValue, { immediate: true, selectionStart: nextPos, selectionEnd: nextPos });
-            setTimeout(() => {
-              textarea.focus();
-              textarea.setSelectionRange(nextPos, nextPos);
-            }, 0);
           }
           return;
         }
@@ -320,24 +302,18 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
           const [, prefix, rest] = bulletMatch;
           if (rest.trim() === '') {
             const newValue = value.substring(0, lineStart) + value.substring(start);
+            pendingSelectionRef.current = { start: lineStart, end: lineStart };
             onChange(newValue, {
               immediate: true,
               selectionStart: lineStart,
               selectionEnd: lineStart,
             });
-            setTimeout(() => {
-              textarea.focus();
-              textarea.setSelectionRange(lineStart, lineStart);
-            }, 0);
           } else {
             const newPrefix = '\n' + prefix;
             const newValue = value.substring(0, start) + newPrefix + value.substring(start);
             const nextPos = start + newPrefix.length;
+            pendingSelectionRef.current = { start: nextPos, end: nextPos };
             onChange(newValue, { immediate: true, selectionStart: nextPos, selectionEnd: nextPos });
-            setTimeout(() => {
-              textarea.focus();
-              textarea.setSelectionRange(nextPos, nextPos);
-            }, 0);
           }
           return;
         }
@@ -389,15 +365,12 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
             }
 
             const newValue = lines.join('\n');
+            pendingSelectionRef.current = { start: lineStart, end: lineStart };
             onChange(newValue, {
               immediate: true,
               selectionStart: lineStart,
               selectionEnd: lineStart,
             });
-            setTimeout(() => {
-              textarea.focus();
-              textarea.setSelectionRange(lineStart, lineStart);
-            }, 0);
           } else {
             const nextNum = parseInt(numStr, 10) + 1;
             const restAfterTrimmed = afterCursor.trimStart();
@@ -426,11 +399,8 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 
             const newValue = lines.join('\n');
             const nextPos = start + 1 + newPrefix.length;
+            pendingSelectionRef.current = { start: nextPos, end: nextPos };
             onChange(newValue, { immediate: true, selectionStart: nextPos, selectionEnd: nextPos });
-            setTimeout(() => {
-              textarea.focus();
-              textarea.setSelectionRange(nextPos, nextPos);
-            }, 0);
           }
           return;
         }
@@ -440,24 +410,18 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
           const [, prefix, rest] = quoteMatch;
           if (rest.trim() === '') {
             const newValue = value.substring(0, lineStart) + value.substring(start);
+            pendingSelectionRef.current = { start: lineStart, end: lineStart };
             onChange(newValue, {
               immediate: true,
               selectionStart: lineStart,
               selectionEnd: lineStart,
             });
-            setTimeout(() => {
-              textarea.focus();
-              textarea.setSelectionRange(lineStart, lineStart);
-            }, 0);
           } else {
             const newPrefix = '\n' + prefix;
             const newValue = value.substring(0, start) + newPrefix + value.substring(start);
             const nextPos = start + newPrefix.length;
+            pendingSelectionRef.current = { start: nextPos, end: nextPos };
             onChange(newValue, { immediate: true, selectionStart: nextPos, selectionEnd: nextPos });
-            setTimeout(() => {
-              textarea.focus();
-              textarea.setSelectionRange(nextPos, nextPos);
-            }, 0);
           }
           return;
         }

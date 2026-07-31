@@ -15,6 +15,10 @@ import {
   EyeOff,
   Columns,
   MoreVertical,
+  Check,
+  Loader2,
+  AlertCircle,
+  Clock,
 } from 'lucide-react';
 import { MarkdownEditor, ChangeOptions } from './MarkdownEditor';
 import { useI18n } from '../i18n/useI18n';
@@ -26,7 +30,7 @@ interface TaskModalProps {
   initialColumnId?: string;
   customFields?: CustomFieldDef[];
   onClose: () => void;
-  onSave: (taskData: Partial<Task>) => Promise<void>;
+  onSave: (taskData: Partial<Task>, options?: { silent?: boolean }) => Promise<void>;
   onDelete?: (id: string) => Promise<void>;
 }
 
@@ -39,6 +43,8 @@ interface FormState {
   selectionStart?: number;
   selectionEnd?: number;
 }
+
+type SaveStatus = 'saved' | 'saving' | 'unsaved' | 'error';
 
 export const TaskModal: React.FC<TaskModalProps> = ({
   isOpen,
@@ -61,6 +67,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     () => (task ? task.custom_fields || {} : {})
   );
 
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
   const [isSaving, setIsSaving] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -72,6 +79,98 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   const historyRef = useRef<FormState[]>([]);
   const historyIndexRef = useRef<number>(-1);
   const lastPushTimeRef = useRef<number>(0);
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const latestStateRef = useRef<FormState>({
+    title,
+    columnId,
+    tagsInput,
+    content,
+    customFieldsState,
+  });
+
+  useEffect(() => {
+    latestStateRef.current = {
+      title,
+      columnId,
+      tagsInput,
+      content,
+      customFieldsState,
+    };
+  }, [title, columnId, tagsInput, content, customFieldsState]);
+
+  const executeSave = useCallback(
+    async (formStateToSave?: FormState) => {
+      if (!task) return;
+      const currentState = formStateToSave || latestStateRef.current;
+      if (!currentState.title.trim()) return;
+
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+      }
+
+      setSaveStatus('saving');
+      setIsSaving(true);
+      try {
+        const tags = currentState.tagsInput
+          .split(',')
+          .map((t) => t.trim())
+          .filter(Boolean);
+
+        await onSave(
+          {
+            id: task.id,
+            title: currentState.title.trim(),
+            column_id: currentState.columnId || columns[0]?.id,
+            tags,
+            custom_fields: currentState.customFieldsState,
+            content: currentState.content.trim(),
+          },
+          { silent: true }
+        );
+        setSaveStatus('saved');
+      } catch (err) {
+        console.error('Auto-save error:', err);
+        setSaveStatus('error');
+      } finally {
+        setIsSaving(false);
+      }
+    },
+    [task, columns, onSave]
+  );
+
+  const triggerAutoSave = useCallback(
+    (newState: FormState, immediate: boolean = false) => {
+      if (!task) return;
+
+      setSaveStatus('unsaved');
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+      }
+
+      if (immediate) {
+        executeSave(newState);
+      } else {
+        autoSaveTimerRef.current = setTimeout(() => {
+          executeSave(newState);
+        }, 500);
+      }
+    },
+    [task, executeSave]
+  );
+
+  const handleCloseWithSave = useCallback(async () => {
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+    if (task && (saveStatus === 'unsaved' || saveStatus === 'error')) {
+      await executeSave();
+    }
+    onClose();
+  }, [task, saveStatus, executeSave, onClose]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -95,6 +194,10 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     const isTaskChanged = isOpen && task?.id !== prevTaskIdRef.current;
 
     if (isNewOpen || isTaskChanged) {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+      }
       setIsMenuOpen(false);
       const initialTitle = task ? task.title : '';
       const initialCol = task
@@ -109,6 +212,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       setTagsInput(initialTags);
       setContent(initialContent);
       setCustomFieldsState(initialFields);
+      setSaveStatus('saved');
 
       const initial: FormState = {
         title: initialTitle,
@@ -118,13 +222,20 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         customFieldsState: initialFields,
       };
       historyRef.current = [initial];
-      historyIndexRef.current = 0;
       setCanUndo(false);
       setCanRedo(false);
     }
     prevIsOpenRef.current = isOpen;
     prevTaskIdRef.current = task?.id;
   }, [isOpen, task, initialColumnId, columns]);
+
+  useEffect(() => {
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+      }
+    };
+  }, []);
 
   const recordHistory = useCallback((newState: FormState, options?: ChangeOptions) => {
     const now = Date.now();
@@ -142,7 +253,6 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     }
 
     historyRef.current = newHistory;
-    historyIndexRef.current = newHistory.length - 1;
     setCanUndo(historyIndexRef.current > 0);
     setCanRedo(false);
   }, []);
@@ -153,7 +263,6 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     if (index > 0) {
       const prevIndex = index - 1;
       const prevState = history[prevIndex];
-      historyIndexRef.current = prevIndex;
 
       setTitle(prevState.title);
       setColumnId(prevState.columnId);
@@ -163,8 +272,9 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 
       setCanUndo(prevIndex > 0);
       setCanRedo(prevIndex < history.length - 1);
+      triggerAutoSave(prevState, true);
     }
-  }, []);
+  }, [triggerAutoSave]);
 
   const handleRedo = useCallback(() => {
     const history = historyRef.current;
@@ -172,7 +282,6 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     if (index < history.length - 1) {
       const nextIndex = index + 1;
       const nextState = history[nextIndex];
-      historyIndexRef.current = nextIndex;
 
       setTitle(nextState.title);
       setColumnId(nextState.columnId);
@@ -182,13 +291,15 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 
       setCanUndo(nextIndex > 0);
       setCanRedo(nextIndex < history.length - 1);
+      triggerAutoSave(nextState, true);
     }
-  }, []);
+  }, [triggerAutoSave]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        onClose();
+        e.preventDefault();
+        handleCloseWithSave();
         return;
       }
 
@@ -217,44 +328,47 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isOpen, onClose, handleUndo, handleRedo]);
+  }, [isOpen, handleCloseWithSave, handleUndo, handleRedo]);
 
   if (!isOpen) return null;
 
   const handleTitleChange = (newTitle: string) => {
     setTitle(newTitle);
-    recordHistory({
+    const newState = {
       title: newTitle,
       columnId,
       tagsInput,
       content,
       customFieldsState,
-    });
+    };
+    recordHistory(newState);
+    triggerAutoSave(newState, false);
   };
 
   const handleColumnIdChange = (newColumnId: string) => {
     setColumnId(newColumnId);
-    recordHistory(
-      {
-        title,
-        columnId: newColumnId,
-        tagsInput,
-        content,
-        customFieldsState,
-      },
-      { immediate: true }
-    );
+    const newState = {
+      title,
+      columnId: newColumnId,
+      tagsInput,
+      content,
+      customFieldsState,
+    };
+    recordHistory(newState, { immediate: true });
+    triggerAutoSave(newState, true);
   };
 
   const handleTagsChange = (newTagsInput: string) => {
     setTagsInput(newTagsInput);
-    recordHistory({
+    const newState = {
       title,
       columnId,
       tagsInput: newTagsInput,
       content,
       customFieldsState,
-    });
+    };
+    recordHistory(newState);
+    triggerAutoSave(newState, false);
   };
 
   const handleToggleCustomField = (fieldId: string) => {
@@ -267,16 +381,15 @@ export const TaskModal: React.FC<TaskModalProps> = ({
           enabled: !current.enabled,
         },
       };
-      recordHistory(
-        {
-          title,
-          columnId,
-          tagsInput,
-          content,
-          customFieldsState: nextCustomFields,
-        },
-        { immediate: true }
-      );
+      const newState = {
+        title,
+        columnId,
+        tagsInput,
+        content,
+        customFieldsState: nextCustomFields,
+      };
+      recordHistory(newState, { immediate: true });
+      triggerAutoSave(newState, true);
       return nextCustomFields;
     });
   };
@@ -296,59 +409,60 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         },
       };
       const isImmediate = typeof value === 'boolean';
-      recordHistory(
-        {
-          title,
-          columnId,
-          tagsInput,
-          content,
-          customFieldsState: nextCustomFields,
-        },
-        { immediate: isImmediate }
-      );
+      const newState = {
+        title,
+        columnId,
+        tagsInput,
+        content,
+        customFieldsState: nextCustomFields,
+      };
+      recordHistory(newState, { immediate: isImmediate });
+      triggerAutoSave(newState, isImmediate);
       return nextCustomFields;
     });
   };
 
   const handleContentChange = (newContent: string, options?: ChangeOptions) => {
     setContent(newContent);
-    recordHistory(
-      {
-        title,
-        columnId,
-        tagsInput,
-        content: newContent,
-        customFieldsState,
-        selectionStart: options?.selectionStart,
-        selectionEnd: options?.selectionEnd,
-      },
-      options
-    );
+    const newState = {
+      title,
+      columnId,
+      tagsInput,
+      content: newContent,
+      customFieldsState,
+      selectionStart: options?.selectionStart,
+      selectionEnd: options?.selectionEnd,
+    };
+    recordHistory(newState, options);
+    triggerAutoSave(newState, options?.immediate ?? false);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
 
-    setIsSaving(true);
-    try {
-      const tags = tagsInput
-        .split(',')
-        .map((t) => t.trim())
-        .filter(Boolean);
+    if (task) {
+      await executeSave();
+    } else {
+      setIsSaving(true);
+      try {
+        const tags = tagsInput
+          .split(',')
+          .map((t) => t.trim())
+          .filter(Boolean);
 
-      await onSave({
-        ...(task ? { id: task.id } : {}),
-        title: title.trim(),
-        column_id: columnId || columns[0]?.id,
-        tags,
-        custom_fields: customFieldsState,
-        content: content.trim(),
-      });
+        await onSave({
+          title: title.trim(),
+          column_id: columnId || columns[0]?.id,
+          tags,
+          custom_fields: customFieldsState,
+          content: content.trim(),
+        });
 
-      onClose();
-    } finally {
-      setIsSaving(false);
+        onClose();
+      } finally {
+        setIsSaving(false);
+      }
     }
   };
 
@@ -382,14 +496,57 @@ export const TaskModal: React.FC<TaskModalProps> = ({
               </h2>
             </div>
             <div className="flex items-center space-x-2">
-              <button
-                type="submit"
-                disabled={isSaving}
-                className="flex items-center space-x-1.5 px-4 py-1.5 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-500 rounded-xl shadow-md shadow-blue-600/30 transition-all disabled:opacity-50"
-              >
-                <Save className="w-4 h-4" />
-                <span>{isSaving ? t('taskModal.saving') : t('taskModal.save')}</span>
-              </button>
+              {/* Header Save Control: Auto-Save status badge for task edit, or Manual Save for task create */}
+              {task ? (
+                <button
+                  type="button"
+                  onClick={() => executeSave()}
+                  className={`flex items-center space-x-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl border transition-all cursor-pointer ${
+                    saveStatus === 'saved'
+                      ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                      : saveStatus === 'saving'
+                        ? 'bg-blue-500/10 text-blue-400 border-blue-500/30'
+                        : saveStatus === 'error'
+                          ? 'bg-rose-500/10 text-rose-400 border-rose-500/30 hover:bg-rose-500/20'
+                          : 'bg-amber-500/10 text-amber-400 border-amber-500/30 hover:bg-amber-500/20'
+                  }`}
+                  title="クリックで手動即時保存"
+                >
+                  {saveStatus === 'saved' && (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>保存済み</span>
+                    </>
+                  )}
+                  {saveStatus === 'saving' && (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 text-blue-400 animate-spin" />
+                      <span>保存中...</span>
+                    </>
+                  )}
+                  {saveStatus === 'unsaved' && (
+                    <>
+                      <Clock className="w-3.5 h-3.5 text-amber-400" />
+                      <span>未保存の変更</span>
+                    </>
+                  )}
+                  {saveStatus === 'error' && (
+                    <>
+                      <AlertCircle className="w-3.5 h-3.5 text-rose-400" />
+                      <span>保存失敗 (再試行)</span>
+                    </>
+                  )}
+                </button>
+              ) : (
+                <button
+                  type="submit"
+                  disabled={isSaving}
+                  className="flex items-center space-x-1.5 px-4 py-1.5 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-500 rounded-xl shadow-md shadow-blue-600/30 transition-all disabled:opacity-50"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>{isSaving ? t('taskModal.saving') : t('taskModal.save')}</span>
+                </button>
+              )}
 
               {task && onDelete && (
                 <div className="relative" ref={menuRef}>
@@ -435,7 +592,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
               </button>
               <button
                 type="button"
-                onClick={onClose}
+                onClick={handleCloseWithSave}
                 className="text-[var(--text-secondary)] hover:opacity-80 p-1.5 rounded-lg transition-colors"
               >
                 <X className="w-5 h-5" />

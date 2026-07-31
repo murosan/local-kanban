@@ -159,12 +159,14 @@ export const App: React.FC = () => {
     setIsTaskModalOpen(true);
   };
 
-  const handleSaveTask = async (taskData: Partial<Task>) => {
+  const handleSaveTask = async (taskData: Partial<Task>, options?: { silent?: boolean }) => {
     const defaultColumnId = config?.columns[0]?.id;
     try {
       if (taskData.id) {
         await updateTask(taskData.id, taskData);
-        addToast(t('common.saved') || 'Task updated successfully', 'success');
+        if (!options?.silent) {
+          addToast(t('common.saved') || 'Task updated successfully', 'success');
+        }
       } else {
         await createTask({
           title: taskData.title || 'Untitled',
@@ -173,12 +175,17 @@ export const App: React.FC = () => {
           custom_fields: taskData.custom_fields,
           content: taskData.content,
         });
-        addToast(t('common.created') || 'Task created successfully', 'success');
+        if (!options?.silent) {
+          addToast(t('common.created') || 'Task created successfully', 'success');
+        }
       }
       await loadData();
     } catch (err) {
       console.error('Error saving task:', err);
-      addToast('Failed to save task', 'error');
+      if (!options?.silent) {
+        addToast('Failed to save task', 'error');
+      }
+      throw err;
     }
   };
 
