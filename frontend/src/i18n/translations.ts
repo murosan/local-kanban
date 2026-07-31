@@ -75,6 +75,8 @@ export const translations = {
     'taskModal.contentLabel': 'カード詳細 (Markdown)',
     'taskModal.contentPlaceholder': 'カードの詳細説明やチェックリストを記入...',
     'taskModal.delete': '削除',
+    'taskModal.hideField': '非表示',
+    'taskModal.hideFieldTitle': 'このカードでフィールドを非表示にする (OFF)',
     'taskModal.cancel': 'キャンセル',
     'taskModal.save': '保存',
     // Create Task Modal
@@ -199,6 +201,8 @@ export const translations = {
     'taskModal.contentLabel': 'Card Content (Markdown)',
     'taskModal.contentPlaceholder': 'Card description or checklists...',
     'taskModal.delete': 'Delete',
+    'taskModal.hideField': 'Hide',
+    'taskModal.hideFieldTitle': 'Hide field on this card (OFF)',
     'taskModal.cancel': 'Cancel',
     'taskModal.save': 'Save',
     'taskModal.saving': 'Saving...',
