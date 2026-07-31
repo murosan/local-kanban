@@ -470,7 +470,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                         value={col.id}
                         className="bg-[var(--modal-bg)] text-[var(--text-primary)]"
                       >
-                        {col.title}
+                        {col.name}
                       </option>
                     ))}
                   </select>

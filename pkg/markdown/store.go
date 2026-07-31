@@ -54,9 +54,10 @@ func (s *Store) SyncCache() error {
 }
 
 // GetBoardConfig reads .kanban_config.json or returns default columns.
+// If the config file is from a previous version, it automatically migrates the config and saves it back to disk.
 func (s *Store) GetBoardConfig() (*model.BoardConfig, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	configPath := filepath.Clean(filepath.Join(s.dir, ".kanban_config.json"))
 	data, err := os.ReadFile(
@@ -65,17 +66,18 @@ func (s *Store) GetBoardConfig() (*model.BoardConfig, error) {
 	if err != nil {
 		if os.IsNotExist(err) {
 			return &model.BoardConfig{
+				Version: model.CurrentBoardConfigVersion,
 				Columns: []model.Column{
-					{ID: "col-todo", Title: "Todo", Visible: true, Color: "#3b82f6", Order: 1},
+					{ID: "col-todo", Name: "Todo", Visible: true, Color: "#3b82f6", Order: 1},
 					{
 						ID:      "col-in-progress",
-						Title:   "In Progress",
+						Name:    "In Progress",
 						Visible: true,
 						Color:   "#f59e0b",
 						Order:   2,
 					},
-					{ID: "col-review", Title: "Review", Visible: true, Color: "#8b5cf6", Order: 3},
-					{ID: "col-done", Title: "Done", Visible: true, Color: "#10b981", Order: 4},
+					{ID: "col-review", Name: "Review", Visible: true, Color: "#8b5cf6", Order: 3},
+					{ID: "col-done", Name: "Done", Visible: true, Color: "#10b981", Order: 4},
 				},
 				Language: "ja",
 			}, nil
@@ -83,9 +85,52 @@ func (s *Store) GetBoardConfig() (*model.BoardConfig, error) {
 		return nil, err
 	}
 
-	var cfg model.BoardConfig
-	if err := json.Unmarshal(data, &cfg); err != nil {
+	type legacyColumn struct {
+		ID      string `json:"id"`
+		Name    string `json:"name"`
+		Title   string `json:"title"`
+		Visible bool   `json:"visible"`
+		Color   string `json:"color,omitempty"`
+		Order   int    `json:"order,omitempty"`
+	}
+
+	type legacyBoardConfig struct {
+		Version      int                    `json:"version"`
+		Columns      []legacyColumn         `json:"columns"`
+		CustomFields []model.CustomFieldDef `json:"custom_fields,omitempty"`
+		Theme        *model.ThemeConfig     `json:"theme,omitempty"`
+		Language     string                 `json:"language,omitempty"`
+	}
+
+	var legCfg legacyBoardConfig
+	if err := json.Unmarshal(data, &legCfg); err != nil {
 		return nil, fmt.Errorf("failed to parse board config: %w", err)
+	}
+
+	needsMigration := legCfg.Version < model.CurrentBoardConfigVersion
+
+	columns := make([]model.Column, 0, len(legCfg.Columns))
+	for _, col := range legCfg.Columns {
+		name := col.Name
+		if name == "" && col.Title != "" {
+			name = col.Title
+			needsMigration = true
+		}
+		columns = append(columns, model.Column{
+			ID:      col.ID,
+			Name:    name,
+			Visible: col.Visible,
+			Color:   col.Color,
+			Order:   col.Order,
+		})
+	}
+
+	cfg := &model.BoardConfig{
+		Version:      model.CurrentBoardConfigVersion,
+		Columns:      columns,
+		CustomFields: legCfg.CustomFields,
+		Theme:        legCfg.Theme,
+		Language:     legCfg.Language,
 	}
 
 	if cfg.CustomFields == nil {
@@ -95,14 +140,17 @@ func (s *Store) GetBoardConfig() (*model.BoardConfig, error) {
 		cfg.Language = "ja"
 	}
 
-	return &cfg, nil
+	if needsMigration {
+		if saveErr := s.saveBoardConfigLocked(cfg); saveErr != nil {
+			_ = saveErr
+		}
+	}
+
+	return cfg, nil
 }
 
-// SaveBoardConfig writes BoardConfig to .kanban_config.json.
-func (s *Store) SaveBoardConfig(cfg *model.BoardConfig) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
+func (s *Store) saveBoardConfigLocked(cfg *model.BoardConfig) error {
+	cfg.Version = model.CurrentBoardConfigVersion
 	configPath := filepath.Join(s.dir, ".kanban_config.json")
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
@@ -114,6 +162,13 @@ func (s *Store) SaveBoardConfig(cfg *model.BoardConfig) error {
 	}
 
 	return nil
+}
+
+// SaveBoardConfig writes BoardConfig to .kanban_config.json.
+func (s *Store) SaveBoardConfig(cfg *model.BoardConfig) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.saveBoardConfigLocked(cfg)
 }
 
 // GetAllTasks reads all .md files in the store directory and parses them into Task structs.

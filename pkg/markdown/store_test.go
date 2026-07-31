@@ -2,6 +2,7 @@ package markdown
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/murosan/local-kanban/pkg/model"
@@ -77,5 +78,68 @@ func TestStoreCRUD(t *testing.T) {
 	}
 	if len(tasksAfterDelete) != 0 {
 		t.Errorf("expected 0 tasks after delete, got %d", len(tasksAfterDelete))
+	}
+}
+
+func TestBoardConfigMigration(t *testing.T) {
+	tmpDir := t.TempDir()
+	store, err := NewStore(tmpDir)
+	if err != nil {
+		t.Fatalf("failed to init store: %v", err)
+	}
+
+	legacyConfigJSON := `{
+  "columns": [
+    {
+      "id": "col-todo",
+      "title": "Todo Legacy",
+      "visible": true,
+      "order": 1
+    },
+    {
+      "id": "col-done",
+      "title": "Done Legacy",
+      "visible": true,
+      "order": 2
+    }
+  ],
+  "language": "ja"
+}`
+
+	configPath := tmpDir + "/.kanban_config.json"
+	if err := os.WriteFile(configPath, []byte(legacyConfigJSON), 0o644); err != nil {
+		t.Fatalf("failed to write legacy config: %v", err)
+	}
+
+	cfg, err := store.GetBoardConfig()
+	if err != nil {
+		t.Fatalf("GetBoardConfig failed: %v", err)
+	}
+
+	if cfg.Version != model.CurrentBoardConfigVersion {
+		t.Errorf("expected version %d, got %d", model.CurrentBoardConfigVersion, cfg.Version)
+	}
+
+	if len(cfg.Columns) != 2 {
+		t.Fatalf("expected 2 columns, got %d", len(cfg.Columns))
+	}
+
+	if cfg.Columns[0].Name != "Todo Legacy" {
+		t.Errorf("expected Name 'Todo Legacy', got '%s'", cfg.Columns[0].Name)
+	}
+	if cfg.Columns[1].Name != "Done Legacy" {
+		t.Errorf("expected Name 'Done Legacy', got '%s'", cfg.Columns[1].Name)
+	}
+
+	// Verify migrated file content on disk
+	cleanConfigPath := filepath.Clean(configPath)
+	diskData, err := os.ReadFile(cleanConfigPath) // #nosec G304
+	if err != nil {
+		t.Fatalf("failed to read migrated config file: %v", err)
+	}
+
+	diskStr := string(diskData)
+	if diskStr == legacyConfigJSON {
+		t.Errorf("expected disk file to be updated with migrated JSON")
 	}
 }
