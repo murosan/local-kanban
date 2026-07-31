@@ -4,9 +4,10 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        GOOS: linux
+        GOOS: ${GOOS:-linux}
+        GOARCH: ${GOARCH:-}
     ports:
-      - "3737:3737"
+      - '3737:3737'
     volumes:
       - ./tasks:/app/tasks
     environment:
