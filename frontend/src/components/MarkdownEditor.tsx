@@ -776,6 +776,26 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
               <div className="markdown-preview">
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
+                  urlTransform={(url) => {
+                    if (!url) return '';
+                    const trimmed = url.trim();
+                    // eslint-disable-next-line no-control-regex
+                    const sanitized = trimmed.replace(/[\u0000-\u0020\u007F-\u009F]/g, '');
+                    const colonIndex = sanitized.indexOf(':');
+                    if (colonIndex !== -1) {
+                      const protocol = sanitized.slice(0, colonIndex).toLowerCase();
+                      if (protocol === 'javascript' || protocol === 'vbscript') {
+                        return '';
+                      }
+                      if (
+                        protocol === 'data' &&
+                        !/^data:image\/(png|jpg|jpeg|gif|webp|svg\+xml);/i.test(sanitized)
+                      ) {
+                        return '';
+                      }
+                    }
+                    return url;
+                  }}
                   components={{
                     li({ node, children, className, ...props }) {
                       const lineNum = node?.position?.start?.line;
@@ -827,9 +847,14 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
                       }
                       return <input {...props} />;
                     },
-                    a({ node: _node, children, ...props }) {
+                    a({ node: _node, children, href, ...props }) {
+                      const isWebUrl = href && /^https?:\/\//i.test(href);
                       return (
-                        <a {...props} target="_blank" rel="noopener noreferrer">
+                        <a
+                          href={href}
+                          {...props}
+                          {...(isWebUrl ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+                        >
                           {children}
                         </a>
                       );
