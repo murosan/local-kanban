@@ -73,7 +73,7 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
       onKeyDown={handleKeyDown}
     >
       <div
-        className="w-full max-w-md bg-[var(--bg-modal)] border border-[var(--border-color)] rounded-2xl shadow-2xl flex flex-col overflow-hidden text-[var(--text-primary)] transition-all"
+        className="w-full max-w-md bg-[var(--modal-bg)] border border-[var(--border-color)] rounded-2xl shadow-2xl flex flex-col overflow-hidden text-[var(--text-primary)] transition-all"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
@@ -129,7 +129,7 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                   <option
                     key={col.id}
                     value={col.id}
-                    className="bg-[var(--bg-card)] text-[var(--text-primary)]"
+                    className="bg-[var(--modal-bg)] text-[var(--text-primary)]"
                   >
                     {col.name}
                   </option>
