@@ -83,6 +83,9 @@ func (s *Server) handleGetTasks(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	if tasks == nil {
+		tasks = make([]*model.Task, 0)
+	}
 
 	if query != "" {
 		if s.searchEngine != nil {

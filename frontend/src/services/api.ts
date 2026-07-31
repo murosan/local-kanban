@@ -22,7 +22,8 @@ export async function fetchTasks(query?: string): Promise<Task[]> {
   const url = query ? `${API_BASE}/tasks?q=${encodeURIComponent(query)}` : `${API_BASE}/tasks`;
   const res = await fetch(url);
   if (!res.ok) throw new Error('Failed to fetch tasks');
-  return res.json();
+  const data = await res.json();
+  return data || [];
 }
 
 export interface CreateTaskPayload {

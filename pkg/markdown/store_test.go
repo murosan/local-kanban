@@ -1,6 +1,7 @@
 package markdown
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -143,3 +144,31 @@ func TestBoardConfigMigration(t *testing.T) {
 		t.Errorf("expected disk file to be updated with migrated JSON")
 	}
 }
+
+func TestGetAllTasksEmpty(t *testing.T) {
+	tmpDir := t.TempDir()
+	store, err := NewStore(tmpDir)
+	if err != nil {
+		t.Fatalf("failed to init store: %v", err)
+	}
+
+	tasks, err := store.GetAllTasks()
+	if err != nil {
+		t.Fatalf("GetAllTasks failed: %v", err)
+	}
+	if tasks == nil {
+		t.Errorf("expected non-nil tasks slice, got nil")
+	}
+	if len(tasks) != 0 {
+		t.Errorf("expected 0 tasks, got %d", len(tasks))
+	}
+
+	data, err := json.Marshal(tasks)
+	if err != nil {
+		t.Fatalf("json.Marshal failed: %v", err)
+	}
+	if string(data) != "[]" {
+		t.Errorf("expected JSON '[]', got '%s'", string(data))
+	}
+}
+
