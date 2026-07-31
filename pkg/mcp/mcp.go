@@ -89,7 +89,7 @@ func (s *Server) registerTools() {
 			return nil, nil, fmt.Errorf("failed to fetch tasks: %w", err)
 		}
 
-		var filtered []*model.Task
+		filtered := make([]*model.Task, 0)
 		for _, t := range tasks {
 			if input.Status != "" && t.ColumnID != input.Status {
 				continue
@@ -214,7 +214,7 @@ func (s *Server) registerTools() {
 			taskMap[t.ID] = t
 		}
 
-		var matched []*model.Task
+		matched := make([]*model.Task, 0)
 		for _, id := range taskIDs {
 			if t, ok := taskMap[id]; ok {
 				matched = append(matched, t)

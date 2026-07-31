@@ -181,7 +181,7 @@ func (s *Store) GetAllTasks() ([]*model.Task, error) {
 		return nil, fmt.Errorf("failed to read directory: %w", err)
 	}
 
-	var tasks []*model.Task
+	tasks := make([]*model.Task, 0)
 	for _, entry := range entries {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
 			continue

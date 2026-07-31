@@ -71,7 +71,7 @@ export const App: React.FC = () => {
     try {
       const [cfg, taskList] = await Promise.all([fetchBoardConfig(), fetchTasks(searchQuery)]);
       setConfig(cfg);
-      setTasks(taskList);
+      setTasks(taskList || []);
 
       if (cfg.theme && cfg.theme.name) {
         applyTheme(cfg.theme);

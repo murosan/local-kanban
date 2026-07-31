@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/murosan/local-kanban/pkg/markdown"
@@ -181,5 +182,30 @@ func TestRebuildCache(t *testing.T) {
 
 	if count, ok := res["count"].(float64); !ok || count != 1 {
 		t.Errorf("expected count 1, got %v", res["count"])
+	}
+}
+
+func TestGetTasksEmpty(t *testing.T) {
+	tempDir := t.TempDir()
+	store, err := markdown.NewStore(tempDir)
+	if err != nil {
+		t.Fatalf("failed to create store: %v", err)
+	}
+
+	server := NewServer(store, nil)
+	mux := http.NewServeMux()
+	server.RegisterRoutes(mux)
+
+	req := httptest.NewRequest("GET", "/api/tasks", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", w.Code)
+	}
+
+	body := strings.TrimSpace(w.Body.String())
+	if body != "[]" {
+		t.Errorf("expected body '[]', got '%s'", body)
 	}
 }
