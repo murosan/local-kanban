@@ -284,6 +284,7 @@ export const App: React.FC = () => {
           customFields={config.custom_fields}
           tasks={tasks}
           onTaskUpdated={loadData}
+          onTasksChange={setTasks}
           onCardClick={handleCardClick}
           onAddCard={(columnId) => handleOpenNewCardModal(columnId)}
         />
