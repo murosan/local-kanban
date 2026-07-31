@@ -126,7 +126,11 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                 className="w-full pl-9 pr-3 py-2 text-sm bg-[var(--bg-input)] border border-[var(--border-color)] rounded-xl text-[var(--text-primary)] focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all appearance-none cursor-pointer font-medium"
               >
                 {columns.map((col) => (
-                  <option key={col.id} value={col.id} className="bg-[var(--bg-card)] text-[var(--text-primary)]">
+                  <option
+                    key={col.id}
+                    value={col.id}
+                    className="bg-[var(--bg-card)] text-[var(--text-primary)]"
+                  >
                     {col.name}
                   </option>
                 ))}
