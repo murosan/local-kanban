@@ -24,6 +24,7 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
   const [localColumns, setLocalColumns] = useState<Column[]>(() =>
     columns.map((col, idx) => ({
       ...col,
+      name: col.name || (col as any).title || '',
       visible: col.visible !== false,
       order: col.order ?? idx + 1,
     }))
@@ -32,7 +33,7 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
     () => customFields || []
   );
 
-  const [newColumnTitle, setNewColumnTitle] = useState('');
+  const [newColumnName, setNewColumnName] = useState('');
 
   // New Custom Field state
   const [newFieldName, setNewFieldName] = useState('');
@@ -177,16 +178,16 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
       return;
     }
     const colToDelete = localColumns[index];
-    if (confirm(t('configModal.deleteColumnConfirm', { title: colToDelete.title }))) {
+    if (confirm(t('configModal.deleteColumnConfirm', { name: colToDelete.name }))) {
       const updated = localColumns.filter((_, i) => i !== index);
       const reordered = updated.map((col, idx) => ({ ...col, order: idx + 1 }));
       setLocalColumns(reordered);
     }
   };
 
-  const handleColumnTitleChange = (index: number, newTitle: string) => {
+  const handleColumnNameChange = (index: number, newName: string) => {
     const updated = [...localColumns];
-    updated[index] = { ...updated[index], title: newTitle };
+    updated[index] = { ...updated[index], name: newName };
     setLocalColumns(updated);
   };
 
@@ -197,19 +198,19 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
   };
 
   const handleAddColumn = () => {
-    if (!newColumnTitle.trim()) return;
-    const title = newColumnTitle.trim();
+    if (!newColumnName.trim()) return;
+    const name = newColumnName.trim();
     const id = `col-${Date.now()}`;
     const color = COLOR_PRESETS[localColumns.length % COLOR_PRESETS.length];
     const newCol: Column = {
       id,
-      title,
+      name,
       color,
       visible: true,
       order: localColumns.length + 1,
     };
     setLocalColumns([...localColumns, newCol]);
-    setNewColumnTitle('');
+    setNewColumnName('');
   };
 
   const COLOR_PRESETS = [
@@ -359,8 +360,8 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
                         </label>
                         <input
                           type="text"
-                          value={col.title}
-                          onChange={(e) => handleColumnTitleChange(idx, e.target.value)}
+                          value={col.name}
+                          onChange={(e) => handleColumnNameChange(idx, e.target.value)}
                           className="bg-[var(--bg-input)] border border-[var(--border-color)] focus:border-blue-500 rounded px-2.5 py-1 text-sm font-medium text-[var(--text-primary)] flex-1 outline-none"
                         />
                       </div>
@@ -437,9 +438,9 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
                 <div className="flex space-x-2">
                   <input
                     type="text"
-                    placeholder={t('configModal.columnTitlePlaceholder')}
-                    value={newColumnTitle}
-                    onChange={(e) => setNewColumnTitle(e.target.value)}
+                    placeholder={t('configModal.columnNamePlaceholder')}
+                    value={newColumnName}
+                    onChange={(e) => setNewColumnName(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleAddColumn()}
                     className="flex-1 bg-[var(--bg-input)] border border-[var(--border-color)] focus:border-blue-500 rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] outline-none"
                   />

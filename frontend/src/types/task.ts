@@ -34,7 +34,7 @@ export interface Task {
 
 export interface Column {
   id: string;
-  title: string;
+  name: string;
   visible?: boolean;
   color?: string;
   order?: number;
@@ -49,6 +49,7 @@ export interface ThemeConfig {
 }
 
 export interface BoardConfig {
+  version?: number;
   columns: Column[];
   custom_fields?: CustomFieldDef[];
   theme?: ThemeConfig;

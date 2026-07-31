@@ -57,7 +57,10 @@ type ThemeConfig struct {
 	TextColor   string `json:"textColor,omitempty"`
 }
 
+const CurrentBoardConfigVersion = 2
+
 type BoardConfig struct {
+	Version      int              `json:"version"`
 	Columns      []Column         `json:"columns"`
 	CustomFields []CustomFieldDef `json:"custom_fields,omitempty"`
 	Theme        *ThemeConfig     `json:"theme,omitempty"`
@@ -65,9 +68,9 @@ type BoardConfig struct {
 }
 
 type Column struct {
-	ID      string `json:"id"`
-	Title   string `json:"title"`
-	Visible bool   `json:"visible"`
-	Color   string `json:"color,omitempty"`
-	Order   int    `json:"order,omitempty"`
+	ID      string `json:"id"              yaml:"id"`
+	Name    string `json:"name"            yaml:"name"`
+	Visible bool   `json:"visible"         yaml:"visible"`
+	Color   string `json:"color,omitempty" yaml:"color,omitempty"`
+	Order   int    `json:"order,omitempty" yaml:"order,omitempty"`
 }

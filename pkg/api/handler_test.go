@@ -35,8 +35,14 @@ func TestConfigRoutes(t *testing.T) {
 	if err := json.NewDecoder(wGet.Body).Decode(&cfg); err != nil {
 		t.Fatalf("failed to decode config: %v", err)
 	}
+	if cfg.Version != model.CurrentBoardConfigVersion {
+		t.Errorf("expected version %d, got %d", model.CurrentBoardConfigVersion, cfg.Version)
+	}
 	if len(cfg.Columns) != 4 {
 		t.Errorf("expected 4 default columns, got %d", len(cfg.Columns))
+	}
+	if cfg.Columns[0].Name != "Todo" {
+		t.Errorf("expected column name 'Todo', got '%s'", cfg.Columns[0].Name)
 	}
 
 	// 2. PUT /api/config (Save theme, custom columns & custom fields)
