@@ -234,6 +234,9 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
     }
 
     if (e.key === 'Tab') {
+      if (e.nativeEvent.isComposing) {
+        return;
+      }
       e.preventDefault();
       const textarea = textareaRef.current;
       if (!textarea) return;
