@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/murosan/local-kanban/pkg/cache"
 	"github.com/murosan/local-kanban/pkg/model"
 )
 
@@ -169,5 +170,98 @@ func TestGetAllTasksEmpty(t *testing.T) {
 	}
 	if string(data) != "[]" {
 		t.Errorf("expected JSON '[]', got '%s'", string(data))
+	}
+}
+
+func TestGetVisibleTasksAndColumnFiltering(t *testing.T) {
+	tmpDir := t.TempDir()
+	store, err := NewStore(tmpDir)
+	if err != nil {
+		t.Fatalf("failed to init store: %v", err)
+	}
+
+	// 1. Setup board config with visible and hidden columns
+	cfg := &model.BoardConfig{
+		Version: model.CurrentBoardConfigVersion,
+		Columns: []model.Column{
+			{ID: "col-todo", Name: "Todo", Visible: true},
+			{ID: "col-hidden", Name: "Hidden", Visible: false},
+			{ID: "col-done", Name: "Done", Visible: true},
+		},
+	}
+	if err := store.SaveBoardConfig(cfg); err != nil {
+		t.Fatalf("failed to save board config: %v", err)
+	}
+
+	// 2. Create tasks in various columns
+	t1 := &model.Task{Title: "Task Todo", ColumnID: "col-todo", Rank: "0|a"}
+	t2 := &model.Task{Title: "Task Hidden", ColumnID: "col-hidden", Rank: "0|b"}
+	t3 := &model.Task{Title: "Task Deleted Col", ColumnID: "col-deleted", Rank: "0|c"}
+	t4 := &model.Task{Title: "Task Done", ColumnID: "col-done", Rank: "0|d"}
+
+	for _, task := range []*model.Task{t1, t2, t3, t4} {
+		if err := store.SaveTask(task); err != nil {
+			t.Fatalf("failed to save task %s: %v", task.Title, err)
+		}
+	}
+
+	// 3. Test GetVisibleTasks without cache
+	visTasks, err := store.GetVisibleTasks()
+	if err != nil {
+		t.Fatalf("GetVisibleTasks failed: %v", err)
+	}
+	if len(visTasks) != 2 {
+		t.Fatalf("expected 2 visible tasks, got %d", len(visTasks))
+	}
+	expectedTitles := map[string]bool{"Task Todo": true, "Task Done": true}
+	for _, vt := range visTasks {
+		if !expectedTitles[vt.Title] {
+			t.Errorf("unexpected task in visible list: %s", vt.Title)
+		}
+	}
+
+	// 4. Set SQLite cache and sync
+	dbPath := filepath.Join(tmpDir, "cache.db")
+	c, err := cache.NewSQLiteCache(dbPath)
+	if err != nil {
+		t.Fatalf("failed to create sqlite cache: %v", err)
+	}
+	defer func() { _ = c.Close() }()
+	store.SetCache(c)
+
+	if err := store.SyncCache(); err != nil {
+		t.Fatalf("failed to sync cache: %v", err)
+	}
+
+	// 5. Test GetVisibleTasks with cache
+	visTasksCache, err := store.GetVisibleTasks()
+	if err != nil {
+		t.Fatalf("GetVisibleTasks with cache failed: %v", err)
+	}
+	if len(visTasksCache) != 2 {
+		t.Fatalf("expected 2 visible tasks with cache, got %d", len(visTasksCache))
+	}
+	for _, vt := range visTasksCache {
+		if !expectedTitles[vt.Title] {
+			t.Errorf("unexpected task in visible list with cache: %s", vt.Title)
+		}
+	}
+
+	// 6. Test GetTasksByColumnID with cache
+	todoTasks, err := store.GetTasksByColumnID("col-todo")
+	if err != nil {
+		t.Fatalf("GetTasksByColumnID failed: %v", err)
+	}
+	if len(todoTasks) != 1 || todoTasks[0].Title != "Task Todo" {
+		t.Errorf("expected 1 task ('Task Todo') for col-todo, got %v", todoTasks)
+	}
+
+	// 7. Hidden/deleted column direct query should return empty
+	hiddenTasks, err := store.GetTasksByColumnID("col-deleted")
+	if err != nil {
+		t.Fatalf("GetTasksByColumnID for deleted col failed: %v", err)
+	}
+	if len(hiddenTasks) != 0 {
+		t.Errorf("expected 0 tasks for deleted col, got %d", len(hiddenTasks))
 	}
 }

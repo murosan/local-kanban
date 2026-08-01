@@ -2,12 +2,14 @@ package mcp
 
 import (
 	"context"
+	"encoding/json"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/murosan/local-kanban/pkg/markdown"
+	"github.com/murosan/local-kanban/pkg/model"
 	"github.com/murosan/local-kanban/pkg/search"
 
 	mcpSDK "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -139,5 +141,70 @@ func TestMCPClientListTools(t *testing.T) {
 
 	if len(toolsResult.Tools) != 5 {
 		t.Errorf("expected 5 tools, got %d", len(toolsResult.Tools))
+	}
+}
+
+func TestMCPGetTasksFiltering(t *testing.T) {
+	tempDir := t.TempDir()
+	store, err := markdown.NewStore(tempDir)
+	if err != nil {
+		t.Fatalf("failed to create store: %v", err)
+	}
+
+	cfg := &model.BoardConfig{
+		Version: model.CurrentBoardConfigVersion,
+		Columns: []model.Column{
+			{ID: "col-todo", Name: "Todo", Visible: true},
+			{ID: "col-hidden", Name: "Hidden", Visible: false},
+		},
+	}
+	if err := store.SaveBoardConfig(cfg); err != nil {
+		t.Fatalf("failed to save config: %v", err)
+	}
+
+	_ = store.SaveTask(&model.Task{Title: "Visible Task", ColumnID: "col-todo"})
+	_ = store.SaveTask(&model.Task{Title: "Hidden Task", ColumnID: "col-hidden"})
+	_ = store.SaveTask(&model.Task{Title: "Deleted Col Task", ColumnID: "col-deleted"})
+
+	mcpSrv, err := NewMCPServer(store, search.NewEngine(nil))
+	if err != nil {
+		t.Fatalf("failed to create MCP server: %v", err)
+	}
+
+	clientTransport, serverTransport := mcpSDK.NewInMemoryTransports()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go func() {
+		_ = mcpSrv.MCPServer().Run(ctx, serverTransport)
+	}()
+
+	client := mcpSDK.NewClient(&mcpSDK.Implementation{
+		Name:    "TestClient",
+		Version: "1.0.0",
+	}, nil)
+
+	session, err := client.Connect(ctx, clientTransport, nil)
+	if err != nil {
+		t.Fatalf("failed to connect client: %v", err)
+	}
+	defer func() { _ = session.Close() }()
+
+	res, err := session.CallTool(ctx, &mcpSDK.CallToolParams{
+		Name: "get_tasks",
+	})
+	if err != nil {
+		t.Fatalf("CallTool get_tasks failed: %v", err)
+	}
+
+	var output GetTasksOutput
+	data, _ := json.Marshal(res.StructuredContent)
+	_ = json.Unmarshal(data, &output)
+
+	if len(output.Tasks) != 1 {
+		t.Fatalf("expected 1 task in get_tasks output, got %d", len(output.Tasks))
+	}
+	if output.Tasks[0].Title != "Visible Task" {
+		t.Errorf("expected task title 'Visible Task', got '%s'", output.Tasks[0].Title)
 	}
 }

@@ -58,7 +58,10 @@ func (s *Store) SyncCache() error {
 func (s *Store) GetBoardConfig() (*model.BoardConfig, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.getBoardConfigUnlocked()
+}
 
+func (s *Store) getBoardConfigUnlocked() (*model.BoardConfig, error) {
 	configPath := filepath.Clean(filepath.Join(s.dir, ".kanban_config.json"))
 	data, err := os.ReadFile(
 		configPath,
@@ -169,6 +172,129 @@ func (s *Store) SaveBoardConfig(cfg *model.BoardConfig) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.saveBoardConfigLocked(cfg)
+}
+
+func (s *Store) getVisibleColumnIDsUnlocked() ([]string, error) {
+	cfg, err := s.getBoardConfigUnlocked()
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]string, 0, len(cfg.Columns))
+	for _, col := range cfg.Columns {
+		if col.Visible {
+			ids = append(ids, col.ID)
+		}
+	}
+	return ids, nil
+}
+
+// GetVisibleColumnIDs returns column IDs that are defined and visible in BoardConfig.
+func (s *Store) GetVisibleColumnIDs() ([]string, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.getVisibleColumnIDsUnlocked()
+}
+
+func (s *Store) getTasksByColumnIDsUnlocked(columnIDs []string) ([]*model.Task, error) {
+	if len(columnIDs) == 0 {
+		return []*model.Task{}, nil
+	}
+
+	visibleIDs, err := s.getVisibleColumnIDsUnlocked()
+	if err != nil {
+		return nil, err
+	}
+	visibleMap := make(map[string]bool, len(visibleIDs))
+	for _, id := range visibleIDs {
+		visibleMap[id] = true
+	}
+
+	targetIDs := make([]string, 0, len(columnIDs))
+	for _, id := range columnIDs {
+		if visibleMap[id] {
+			targetIDs = append(targetIDs, id)
+		}
+	}
+
+	if len(targetIDs) == 0 {
+		return []*model.Task{}, nil
+	}
+
+	colMap := make(map[string]bool, len(targetIDs))
+	for _, id := range targetIDs {
+		colMap[id] = true
+	}
+
+	if s.cache != nil {
+		paths, err := s.cache.GetFilePathsByColumnIDs(targetIDs)
+		if err == nil {
+			tasks := make([]*model.Task, 0, len(paths))
+			for _, path := range paths {
+				task, err := s.readTaskFile(path)
+				if err != nil {
+					continue
+				}
+				if colMap[task.ColumnID] {
+					tasks = append(tasks, task)
+				}
+			}
+			sort.Slice(tasks, func(i, j int) bool {
+				return tasks[i].Rank < tasks[j].Rank
+			})
+			return tasks, nil
+		}
+	}
+
+	// Fallback when cache is disabled or empty
+	entries, err := os.ReadDir(s.dir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read directory: %w", err)
+	}
+
+	tasks := make([]*model.Task, 0)
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
+			continue
+		}
+		path := filepath.Join(s.dir, entry.Name())
+		task, err := s.readTaskFile(path)
+		if err != nil {
+			continue
+		}
+		if colMap[task.ColumnID] {
+			tasks = append(tasks, task)
+		}
+	}
+
+	sort.Slice(tasks, func(i, j int) bool {
+		return tasks[i].Rank < tasks[j].Rank
+	})
+
+	return tasks, nil
+}
+
+// GetTasksByColumnIDs reads and parses task markdown files matching the specified column IDs.
+// It leverages SQLite cache index when available and excludes non-visible and deleted column tasks.
+func (s *Store) GetTasksByColumnIDs(columnIDs []string) ([]*model.Task, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.getTasksByColumnIDsUnlocked(columnIDs)
+}
+
+// GetVisibleTasks returns tasks belonging to visible and non-deleted columns.
+func (s *Store) GetVisibleTasks() ([]*model.Task, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	colIDs, err := s.getVisibleColumnIDsUnlocked()
+	if err != nil {
+		return nil, err
+	}
+	return s.getTasksByColumnIDsUnlocked(colIDs)
+}
+
+// GetTasksByColumnID returns tasks belonging to a single column ID.
+func (s *Store) GetTasksByColumnID(columnID string) ([]*model.Task, error) {
+	return s.GetTasksByColumnIDs([]string{columnID})
 }
 
 // GetAllTasks reads all .md files in the store directory and parses them into Task structs.

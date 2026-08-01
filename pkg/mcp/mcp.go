@@ -84,17 +84,35 @@ func (s *Server) registerTools() {
 		Name:        "get_tasks",
 		Description: "Get list of tasks with optional filtering by status and tag.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input GetTasksInput) (*mcp.CallToolResult, *GetTasksOutput, error) {
-		tasks, err := s.store.GetAllTasks()
+		visibleIDs, err := s.store.GetVisibleColumnIDs()
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to fetch tasks: %w", err)
+			return nil, nil, fmt.Errorf("failed to fetch visible columns: %w", err)
 		}
 
-		filtered := make([]*model.Task, 0)
-		for _, t := range tasks {
-			if input.Status != "" && t.ColumnID != input.Status {
-				continue
+		visibleMap := make(map[string]bool, len(visibleIDs))
+		for _, id := range visibleIDs {
+			visibleMap[id] = true
+		}
+
+		var tasks []*model.Task
+		if input.Status != "" {
+			if visibleMap[input.Status] {
+				tasks, err = s.store.GetTasksByColumnID(input.Status)
+				if err != nil {
+					return nil, nil, fmt.Errorf("failed to fetch tasks: %w", err)
+				}
 			}
-			if input.Tag != "" {
+		} else {
+			tasks, err = s.store.GetVisibleTasks()
+			if err != nil {
+				return nil, nil, fmt.Errorf("failed to fetch tasks: %w", err)
+			}
+		}
+
+		filtered := tasks
+		if input.Tag != "" {
+			filtered = make([]*model.Task, 0)
+			for _, t := range tasks {
 				hasTag := false
 				for _, tag := range t.Tags {
 					if strings.EqualFold(tag, input.Tag) {
@@ -102,11 +120,10 @@ func (s *Server) registerTools() {
 						break
 					}
 				}
-				if !hasTag {
-					continue
+				if hasTag {
+					filtered = append(filtered, t)
 				}
 			}
-			filtered = append(filtered, t)
 		}
 
 		if input.Limit > 0 && len(filtered) > input.Limit {
@@ -130,13 +147,7 @@ func (s *Server) registerTools() {
 			status = "col-todo"
 		}
 
-		allTasks, _ := s.store.GetAllTasks()
-		var colTasks []*model.Task
-		for _, t := range allTasks {
-			if t.ColumnID == status {
-				colTasks = append(colTasks, t)
-			}
-		}
+		colTasks, _ := s.store.GetTasksByColumnID(status)
 
 		var newRank string
 		if len(colTasks) == 0 {
@@ -204,13 +215,13 @@ func (s *Server) registerTools() {
 			return nil, nil, fmt.Errorf("search failed: %w", err)
 		}
 
-		allTasks, err := s.store.GetAllTasks()
+		visibleTasks, err := s.store.GetVisibleTasks()
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to load tasks: %w", err)
 		}
 
 		taskMap := make(map[string]*model.Task)
-		for _, t := range allTasks {
+		for _, t := range visibleTasks {
 			taskMap[t.ID] = t
 		}
 
