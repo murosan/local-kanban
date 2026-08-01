@@ -78,7 +78,7 @@ func (s *Server) handleSaveConfig(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleGetTasks(w http.ResponseWriter, r *http.Request) {
 	rawQuery := r.URL.Query().Get("q")
 	query := strings.ToLower(rawQuery)
-	tasks, err := s.store.GetAllTasks()
+	tasks, err := s.store.GetVisibleTasks()
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -268,7 +268,13 @@ func (s *Server) handleRebuildCache(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) calculateRank(columnID string, prevID, nextID string) string {
-	tasks, err := s.store.GetAllTasks()
+	var tasks []*model.Task
+	var err error
+	if columnID != "" {
+		tasks, err = s.store.GetTasksByColumnID(columnID)
+	} else {
+		tasks, err = s.store.GetVisibleTasks()
+	}
 	if err != nil {
 		return lexorank.Between("", "")
 	}

@@ -292,3 +292,49 @@ func (c *SQLiteCache) SearchFTS(query string) ([]string, error) {
 
 	return ids, nil
 }
+
+// GetFilePathsByColumnIDs returns file paths of tasks in specified column IDs, ordered by column_id and rank using idx_tasks_column_rank.
+func (c *SQLiteCache) GetFilePathsByColumnIDs(columnIDs []string) ([]string, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if len(columnIDs) == 0 {
+		return nil, nil
+	}
+
+	placeholders := make([]string, len(columnIDs))
+	args := make([]any, len(columnIDs))
+	for i, id := range columnIDs {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+
+	query := fmt.Sprintf(
+		"SELECT file_path FROM tasks WHERE column_id IN (%s) ORDER BY rank ASC",
+		strings.Join(placeholders, ","),
+	) // #nosec G201 -- placeholders construction uses sanitized '?' placeholders
+
+	rows, err := c.db.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query file_paths by column_ids: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var paths []string
+	for rows.Next() {
+		var path string
+		if err := rows.Scan(&path); err != nil {
+			return nil, fmt.Errorf("failed to scan file_path: %w", err)
+		}
+		paths = append(paths, path)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error during rows iteration: %w", err)
+	}
+	return paths, nil
+}
+
+// GetFilePathsByColumnID returns file paths of tasks in a single column ID, ordered by rank using idx_tasks_column_rank.
+func (c *SQLiteCache) GetFilePathsByColumnID(columnID string) ([]string, error) {
+	return c.GetFilePathsByColumnIDs([]string{columnID})
+}
