@@ -23,6 +23,7 @@ export const App: React.FC = () => {
   const [config, setConfig] = useState<BoardConfig | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
   const [isSyncing, setIsSyncing] = useState(false);
   const [isRebuilding, setIsRebuilding] = useState(false);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -56,7 +57,7 @@ export const App: React.FC = () => {
     } else if (theme.name === 'custom') {
       root.setAttribute('data-theme', 'custom');
       if (theme.primaryBg) root.style.setProperty('--bg-primary', theme.primaryBg);
-      if (theme.cardBg) root.style.setProperty('--cardBg', theme.cardBg);
+      if (theme.cardBg) root.style.setProperty('--bg-card', theme.cardBg);
       if (theme.accentColor) root.style.setProperty('--accent-color', theme.accentColor);
       if (theme.textColor) root.style.setProperty('--text-primary', theme.textColor);
     } else {
@@ -71,7 +72,7 @@ export const App: React.FC = () => {
   const loadData = useCallback(async () => {
     setIsSyncing(true);
     try {
-      const [cfg, taskList] = await Promise.all([fetchBoardConfig(), fetchTasks(searchQuery)]);
+      const [cfg, taskList] = await Promise.all([fetchBoardConfig(), fetchTasks(debouncedQuery)]);
       setConfig(cfg);
       setTasks(taskList || []);
 
@@ -95,9 +96,17 @@ export const App: React.FC = () => {
     } finally {
       setIsSyncing(false);
     }
-  }, [searchQuery, applyTheme, addToast, t]);
+  }, [debouncedQuery, applyTheme, addToast, t]);
 
-  // Initial load & Search query change effect
+  // Debounce searchQuery by 300ms before firing API call
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedQuery(searchQuery);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // Initial load & debounced search query change effect
   useEffect(() => {
     loadData();
   }, [loadData]);

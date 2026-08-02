@@ -92,7 +92,7 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
 
   const handleDeleteCustomField = (index: number) => {
     const target = localCustomFields[index];
-    if (confirm(`カスタムフィールド「${target.name}」全体を削除してもよろしいですか？`)) {
+    if (confirm(t('configModal.deleteFieldConfirm', { name: target.name }))) {
       setLocalCustomFields(localCustomFields.filter((_, i) => i !== index));
     }
   };

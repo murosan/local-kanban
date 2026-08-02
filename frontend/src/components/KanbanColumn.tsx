@@ -81,7 +81,7 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
 
         {tasks.length === 0 && (
           <div className="flex items-center justify-center h-32 border-2 border-dashed border-[var(--border-color)] rounded-xl text-[var(--text-muted)] text-xs font-medium">
-            Drop cards here
+            {t('column.dropHere')}
           </div>
         )}
       </div>

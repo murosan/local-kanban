@@ -316,14 +316,14 @@ func createSampleTasks(store *markdown.Store) {
 		{
 			Title:    "dnd-kit によるカンバンカード並び替え実装",
 			ColumnID: "col-in-progress",
-			Rank:     "0|m",
+			Rank:     "0|n",
 			Tags:     []string{"dnd-kit", "react"},
 			Content:  "LexoRankアルゴリズムと連携した並び替えドラッグ＆ドロップ",
 		},
 		{
 			Title:    "Docker Compose 構成の定義",
 			ColumnID: "col-done",
-			Rank:     "0|m",
+			Rank:     "0|o",
 			Tags:     []string{"docker", "infra"},
 			Content:  "Go 1.26 と Node.js 24 による開発環境のコンテナ化",
 		},

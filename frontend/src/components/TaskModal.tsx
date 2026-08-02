@@ -222,6 +222,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         customFieldsState: initialFields,
       };
       historyRef.current = [initial];
+      historyIndexRef.current = 0;
       setCanUndo(false);
       setCanRedo(false);
     }
@@ -253,7 +254,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     }
 
     historyRef.current = newHistory;
-    setCanUndo(historyIndexRef.current > 0);
+    historyIndexRef.current = newHistory.length - 1;
+    setCanUndo(newHistory.length - 1 > 0);
     setCanRedo(false);
   }, []);
 
@@ -270,6 +272,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       setContent(prevState.content);
       setCustomFieldsState(prevState.customFieldsState);
 
+      historyIndexRef.current = prevIndex;
       setCanUndo(prevIndex > 0);
       setCanRedo(prevIndex < history.length - 1);
       triggerAutoSave(prevState, true);
@@ -289,6 +292,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       setContent(nextState.content);
       setCustomFieldsState(nextState.customFieldsState);
 
+      historyIndexRef.current = nextIndex;
       setCanUndo(nextIndex > 0);
       setCanRedo(nextIndex < history.length - 1);
       triggerAutoSave(nextState, true);
@@ -468,7 +472,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 
   const handleDelete = async () => {
     if (!task || !onDelete) return;
-    if (confirm('Are you sure you want to delete this task Markdown file?')) {
+    if (confirm(t('taskModal.deleteConfirm'))) {
       setIsSaving(true);
       try {
         await onDelete(task.id);
@@ -515,25 +519,25 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                   {saveStatus === 'saved' && (
                     <>
                       <Check className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>保存済み</span>
+                      <span>{t('taskModal.saved')}</span>
                     </>
                   )}
                   {saveStatus === 'saving' && (
                     <>
                       <Loader2 className="w-3.5 h-3.5 text-blue-400 animate-spin" />
-                      <span>保存中...</span>
+                      <span>{t('taskModal.saving')}</span>
                     </>
                   )}
                   {saveStatus === 'unsaved' && (
                     <>
                       <Clock className="w-3.5 h-3.5 text-amber-400" />
-                      <span>未保存の変更</span>
+                      <span>{t('taskModal.unsaved')}</span>
                     </>
                   )}
                   {saveStatus === 'error' && (
                     <>
                       <AlertCircle className="w-3.5 h-3.5 text-rose-400" />
-                      <span>保存失敗 (再試行)</span>
+                      <span>{t('taskModal.saveError')}</span>
                     </>
                   )}
                 </button>
