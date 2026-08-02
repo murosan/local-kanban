@@ -79,12 +79,20 @@ export const translations = {
     'taskModal.hideFieldTitle': 'このカードでフィールドを非表示にする (OFF)',
     'taskModal.cancel': 'キャンセル',
     'taskModal.save': '保存',
+    'taskModal.saving': '保存中...',
+    'taskModal.saved': '保存済み',
+    'taskModal.unsaved': '未保存の変更',
+    'taskModal.saveError': '保存失敗（再試行）',
+    'taskModal.deleteConfirm': 'このタスクのMarkdownファイルを削除してもよろしいですか？',
     // Create Task Modal
     'createModal.title': '新規カード追加',
     'createModal.columnLabel': 'カラム',
     'createModal.titlePlaceholder': 'カードのタイトルを入力...',
     'createModal.add': '追加',
     'createModal.adding': '追加中...',
+
+    // Column
+    'column.dropHere': 'ここにカードをドロップ',
 
     // Editor & Markdown Toolbar
     'editor.modeEdit': '編集',
@@ -206,6 +214,10 @@ export const translations = {
     'taskModal.cancel': 'Cancel',
     'taskModal.save': 'Save',
     'taskModal.saving': 'Saving...',
+    'taskModal.saved': 'Saved',
+    'taskModal.unsaved': 'Unsaved changes',
+    'taskModal.saveError': 'Save failed (retry)',
+    'taskModal.deleteConfirm': 'Are you sure you want to delete this task Markdown file?',
 
     // Create Task Modal
     'createModal.title': 'Add New Card',
@@ -213,6 +225,9 @@ export const translations = {
     'createModal.titlePlaceholder': 'Enter card title...',
     'createModal.add': 'Add Card',
     'createModal.adding': 'Adding...',
+
+    // Column
+    'column.dropHere': 'Drop cards here',
 
     // Editor & Markdown Toolbar
     'editor.modeEdit': 'Edit',

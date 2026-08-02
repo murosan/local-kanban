@@ -205,6 +205,8 @@ func (s *Server) handleUpdateTask(w http.ResponseWriter, r *http.Request) {
 	if payload.Title != nil {
 		task.Title = *payload.Title
 	}
+	// Save old column ID before update to correctly detect column change
+	oldColumnID := task.ColumnID
 	if payload.ColumnID != nil {
 		task.ColumnID = *payload.ColumnID
 	}
@@ -219,7 +221,7 @@ func (s *Server) handleUpdateTask(w http.ResponseWriter, r *http.Request) {
 	}
 
 	targetColumnID := task.ColumnID
-	columnChanged := payload.ColumnID != nil && *payload.ColumnID != task.ColumnID
+	columnChanged := payload.ColumnID != nil && *payload.ColumnID != oldColumnID
 
 	// Calculate new Rank if explicit rank, or prev_id / next_id provided, or column changed
 	if payload.Rank != nil {

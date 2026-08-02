@@ -240,10 +240,7 @@ func (c *SQLiteCache) SearchFTS(query string) ([]string, error) {
 	// Try double-quoted substring query for trigram index first
 	escaped := fmt.Sprintf(`"%s"`, strings.ReplaceAll(cleanQuery, `"`, `""`))
 	rows, err := c.db.Query("SELECT id FROM tasks_fts WHERE tasks_fts MATCH ?", escaped)
-	if err != nil || !rows.Next() {
-		if rows != nil {
-			_ = rows.Close()
-		}
+	if err != nil {
 		// Fallback to raw query
 		var errFallback error
 		rows, errFallback = c.db.Query(
@@ -253,13 +250,6 @@ func (c *SQLiteCache) SearchFTS(query string) ([]string, error) {
 		if errFallback != nil {
 			return nil, fmt.Errorf("fts5 search failed: %w", errFallback)
 		}
-	} else {
-		// Reset rows reading by executing again or reading the first row
-		_ = rows.Close()
-		rows, err = c.db.Query("SELECT id FROM tasks_fts WHERE tasks_fts MATCH ?", escaped)
-		if err != nil {
-			return nil, fmt.Errorf("fts5 search failed: %w", err)
-		}
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -268,6 +258,24 @@ func (c *SQLiteCache) SearchFTS(query string) ([]string, error) {
 		var id string
 		if err := rows.Scan(&id); err == nil {
 			ids = append(ids, id)
+		}
+	}
+
+	// If escaped query yielded no results, retry with raw query
+	if len(ids) == 0 && err == nil {
+		_ = rows.Close()
+		rawRows, errRaw := c.db.Query(
+			"SELECT id FROM tasks_fts WHERE tasks_fts MATCH ?",
+			cleanQuery,
+		)
+		if errRaw == nil {
+			defer func() { _ = rawRows.Close() }()
+			for rawRows.Next() {
+				var id string
+				if scanErr := rawRows.Scan(&id); scanErr == nil {
+					ids = append(ids, id)
+				}
+			}
 		}
 	}
 
