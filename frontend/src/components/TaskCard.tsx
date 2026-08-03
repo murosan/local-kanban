@@ -2,7 +2,8 @@ import React from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { CustomFieldDef, Task } from '../types/task';
-import { Tag, Clock } from 'lucide-react';
+import { Tag, Clock, ExternalLink } from 'lucide-react';
+import { getSafeUrl } from '../utils/url';
 
 interface TaskCardProps {
   task: Task;
@@ -58,6 +59,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
           return {
             id: fieldId,
             name: fieldDef ? fieldDef.name : fieldId.replace('cf-', ''),
+            type: fieldDef?.type,
             value: cf.value,
             color: resolvedColor,
           };
@@ -109,6 +111,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
         <div className="flex flex-col space-y-1 mt-3">
           {displayFields.map((field) => {
             const hasColor = !!field.color;
+            const safeUrl = field.type === 'link' ? getSafeUrl(field.value) : null;
             return (
               <div
                 key={field.id}
@@ -137,13 +140,27 @@ export const TaskCard: React.FC<TaskCardProps> = ({
                       style={{ backgroundColor: field.color }}
                     />
                   )}
-                  <span className="truncate max-w-[120px]">
-                    {typeof field.value === 'boolean'
-                      ? field.value
-                        ? '✓'
-                        : '✗'
-                      : String(field.value)}
-                  </span>
+                  {safeUrl ? (
+                    <a
+                      href={safeUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="hover:underline text-blue-500 inline-flex items-center space-x-1 font-semibold truncate max-w-[120px]"
+                      title={String(field.value)}
+                    >
+                      <ExternalLink className="w-3 h-3 shrink-0" />
+                      <span className="truncate">{String(field.value)}</span>
+                    </a>
+                  ) : (
+                    <span className="truncate max-w-[120px]">
+                      {typeof field.value === 'boolean'
+                        ? field.value
+                          ? '✓'
+                          : '✗'
+                        : String(field.value ?? '')}
+                    </span>
+                  )}
                 </span>
               </div>
             );

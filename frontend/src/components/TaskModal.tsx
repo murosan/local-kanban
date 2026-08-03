@@ -19,10 +19,12 @@ import {
   Loader2,
   AlertCircle,
   Clock,
+  ExternalLink,
 } from 'lucide-react';
 import { MarkdownEditor, ChangeOptions } from './MarkdownEditor';
 import { useI18n } from '../i18n/useI18n';
 import { fetchTaskById } from '../services/api';
+import { getSafeUrl } from '../utils/url';
 
 interface TaskModalProps {
   isOpen: boolean;
@@ -838,6 +840,35 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                                 </span>
                               </label>
                             )}
+
+                            {field.type === 'link' &&
+                              (() => {
+                                const safeUrl = getSafeUrl(fieldState.value);
+                                return (
+                                  <div className="relative flex items-center">
+                                    <input
+                                      type="text"
+                                      value={String(fieldState.value ?? '')}
+                                      onChange={(e) =>
+                                        handleCustomFieldValueChange(field.id, e.target.value)
+                                      }
+                                      placeholder="https://... または vscode://..."
+                                      className="w-full px-3 py-2 text-sm bg-[var(--bg-input)] border border-[var(--border-color)] rounded-xl text-[var(--text-primary)] focus:outline-none focus:border-blue-500 pr-9"
+                                    />
+                                    {safeUrl && (
+                                      <a
+                                        href={safeUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="absolute right-3 text-[var(--text-secondary)] hover:text-blue-500 transition-colors"
+                                        title="リンクを開く"
+                                      >
+                                        <ExternalLink className="w-4 h-4" />
+                                      </a>
+                                    )}
+                                  </div>
+                                );
+                              })()}
                           </div>
                         )}
                       </div>

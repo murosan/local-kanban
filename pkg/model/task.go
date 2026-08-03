@@ -13,6 +13,7 @@ const (
 	FieldTypeNumber   CustomFieldType = "number"
 	FieldTypeDate     CustomFieldType = "date"
 	FieldTypeCheckbox CustomFieldType = "checkbox"
+	FieldTypeLink     CustomFieldType = "link"
 )
 
 type CustomFieldOption struct {

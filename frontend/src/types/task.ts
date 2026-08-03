@@ -1,4 +1,4 @@
-export type CustomFieldType = 'dropdown' | 'text' | 'number' | 'date' | 'checkbox';
+export type CustomFieldType = 'dropdown' | 'text' | 'number' | 'date' | 'checkbox' | 'link';
 
 export interface CustomFieldOption {
   id: string;
