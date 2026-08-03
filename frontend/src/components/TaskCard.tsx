@@ -83,9 +83,9 @@ export const TaskCard: React.FC<TaskCardProps> = ({
       </div>
 
       {/* Content Preview if exists */}
-      {task.content && (
+      {(task.summary || task.content) && (
         <p className="text-xs text-[var(--text-secondary)] mt-1.5 line-clamp-2 font-normal leading-relaxed break-words">
-          {task.content.replace(/^#+\s+/gm, '')}
+          {task.summary || (task.content ? task.content.replace(/^#+\s+/gm, '') : '')}
         </p>
       )}
 

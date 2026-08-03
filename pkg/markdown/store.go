@@ -227,14 +227,10 @@ func (s *Store) getTasksByColumnIDsUnlocked(columnIDs []string) ([]*model.Task, 
 	}
 
 	if s.cache != nil {
-		paths, err := s.cache.GetFilePathsByColumnIDs(targetIDs)
-		if err == nil {
-			tasks := make([]*model.Task, 0, len(paths))
-			for _, path := range paths {
-				task, err := s.readTaskFile(path)
-				if err != nil {
-					continue
-				}
+		cachedTasks, err := s.cache.GetTasksByColumnIDs(targetIDs)
+		if err == nil && len(cachedTasks) > 0 {
+			tasks := make([]*model.Task, 0, len(cachedTasks))
+			for _, task := range cachedTasks {
 				if colMap[task.ColumnID] {
 					tasks = append(tasks, task)
 				}
@@ -470,6 +466,7 @@ func parseTaskContent(raw string) (*model.Task, error) {
 	}
 
 	task.Content = strings.TrimPrefix(bodyContent, "\n")
+	task.Summary = model.GenerateSummary(task.Content)
 	return &task, nil
 }
 

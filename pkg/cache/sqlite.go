@@ -63,7 +63,8 @@ func (c *SQLiteCache) initSchema() error {
 		created_at DATETIME NOT NULL,
 		updated_at DATETIME NOT NULL,
 		file_path TEXT UNIQUE NOT NULL,
-		custom_fields TEXT
+		custom_fields TEXT,
+		summary TEXT
 	);
 
 	CREATE INDEX IF NOT EXISTS idx_tasks_column_rank ON tasks(column_id, rank);
@@ -77,8 +78,12 @@ func (c *SQLiteCache) initSchema() error {
 		tokenize = 'trigram'
 	);
 	`
-	_, err := c.db.Exec(schema)
-	return err
+	if _, err := c.db.Exec(schema); err != nil {
+		return err
+	}
+	// Migrate existing tables if summary column is missing
+	_, _ = c.db.Exec("ALTER TABLE tasks ADD COLUMN summary TEXT;")
+	return nil
 }
 
 func (c *SQLiteCache) UpsertTask(task *model.Task) error {
@@ -93,6 +98,10 @@ func (c *SQLiteCache) UpsertTask(task *model.Task) error {
 		_ = tx.Rollback()
 	}()
 
+	if task.Summary == "" && task.Content != "" {
+		task.Summary = model.GenerateSummary(task.Content)
+	}
+
 	tagsJSON, err := json.Marshal(task.Tags)
 	if err != nil {
 		tagsJSON = []byte("[]")
@@ -104,8 +113,8 @@ func (c *SQLiteCache) UpsertTask(task *model.Task) error {
 	}
 
 	upsertSQL := `
-	INSERT INTO tasks (id, title, column_id, rank, tags, created_at, updated_at, file_path, custom_fields)
-	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	INSERT INTO tasks (id, title, column_id, rank, tags, created_at, updated_at, file_path, custom_fields, summary)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	ON CONFLICT(id) DO UPDATE SET
 		title=excluded.title,
 		column_id=excluded.column_id,
@@ -114,7 +123,8 @@ func (c *SQLiteCache) UpsertTask(task *model.Task) error {
 		created_at=excluded.created_at,
 		updated_at=excluded.updated_at,
 		file_path=excluded.file_path,
-		custom_fields=excluded.custom_fields;
+		custom_fields=excluded.custom_fields,
+		summary=excluded.summary;
 	`
 	_, err = tx.Exec(upsertSQL,
 		task.ID,
@@ -126,6 +136,7 @@ func (c *SQLiteCache) UpsertTask(task *model.Task) error {
 		task.UpdatedAt,
 		task.FilePath,
 		string(customFieldsJSON),
+		task.Summary,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to upsert task into tasks table: %w", err)
@@ -194,12 +205,15 @@ func (c *SQLiteCache) SyncAll(tasks []*model.Task) error {
 	}
 
 	upsertSQL := `
-	INSERT INTO tasks (id, title, column_id, rank, tags, created_at, updated_at, file_path, custom_fields)
-	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+	INSERT INTO tasks (id, title, column_id, rank, tags, created_at, updated_at, file_path, custom_fields, summary)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 	`
 	ftsSQL := `INSERT INTO tasks_fts (id, title, content, tags) VALUES (?, ?, ?, ?);`
 
 	for _, task := range tasks {
+		if task.Summary == "" && task.Content != "" {
+			task.Summary = model.GenerateSummary(task.Content)
+		}
 		tagsJSON, _ := json.Marshal(task.Tags)
 		customFieldsJSON, _ := json.Marshal(task.CustomFields)
 
@@ -213,6 +227,7 @@ func (c *SQLiteCache) SyncAll(tasks []*model.Task) error {
 			task.UpdatedAt,
 			task.FilePath,
 			string(customFieldsJSON),
+			task.Summary,
 		)
 		if err != nil {
 			return err
@@ -345,4 +360,67 @@ func (c *SQLiteCache) GetFilePathsByColumnIDs(columnIDs []string) ([]string, err
 // GetFilePathsByColumnID returns file paths of tasks in a single column ID, ordered by rank using idx_tasks_column_rank.
 func (c *SQLiteCache) GetFilePathsByColumnID(columnID string) ([]string, error) {
 	return c.GetFilePathsByColumnIDs([]string{columnID})
+}
+
+// GetTasksByColumnIDs returns task summaries in specified column IDs directly from SQLite cache, ordered by rank ASC.
+func (c *SQLiteCache) GetTasksByColumnIDs(columnIDs []string) ([]*model.Task, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if len(columnIDs) == 0 {
+		return nil, nil
+	}
+
+	placeholders := make([]string, len(columnIDs))
+	args := make([]any, len(columnIDs))
+	for i, id := range columnIDs {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+
+	query := fmt.Sprintf(
+		"SELECT id, title, column_id, rank, tags, created_at, updated_at, file_path, custom_fields, summary FROM tasks WHERE column_id IN (%s) ORDER BY rank ASC",
+		strings.Join(placeholders, ","),
+	) // #nosec G201 -- placeholders construction uses sanitized '?' placeholders
+
+	rows, err := c.db.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query tasks by column_ids: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var tasks []*model.Task
+	for rows.Next() {
+		var t model.Task
+		var tagsJSON, customFieldsJSON, summary sql.NullString
+		err := rows.Scan(
+			&t.ID,
+			&t.Title,
+			&t.ColumnID,
+			&t.Rank,
+			&tagsJSON,
+			&t.CreatedAt,
+			&t.UpdatedAt,
+			&t.FilePath,
+			&customFieldsJSON,
+			&summary,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan task: %w", err)
+		}
+		if tagsJSON.Valid && tagsJSON.String != "" {
+			_ = json.Unmarshal([]byte(tagsJSON.String), &t.Tags)
+		}
+		if customFieldsJSON.Valid && customFieldsJSON.String != "" {
+			_ = json.Unmarshal([]byte(customFieldsJSON.String), &t.CustomFields)
+		}
+		if summary.Valid {
+			t.Summary = summary.String
+		}
+		tasks = append(tasks, &t)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error during rows iteration: %w", err)
+	}
+	return tasks, nil
 }

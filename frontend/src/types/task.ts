@@ -28,7 +28,8 @@ export interface Task {
   created_at: string;
   updated_at: string;
   custom_fields?: Record<string, CustomFieldValue>;
-  content: string;
+  content?: string;
+  summary?: string;
   file_path?: string;
 }
 
