@@ -611,6 +611,7 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
                       <option value="number">{t('configModal.typeNumber')}</option>
                       <option value="date">{t('configModal.typeDate')}</option>
                       <option value="checkbox">{t('configModal.typeCheckbox')}</option>
+                      <option value="link">{t('configModal.typeLink')}</option>
                     </select>
                   </div>
                 </div>
