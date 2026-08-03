@@ -17,7 +17,7 @@ FROM golang:1.26-alpine AS backend-builder
 WORKDIR /app
 
 ARG GOOS=linux
-ARG GOARCH
+ARG GOARCH=
 
 RUN apk add --no-cache gcc musl-dev
 
@@ -27,7 +27,7 @@ RUN go mod download
 COPY . .
 COPY --from=frontend-builder /app/pkg/ui/dist ./pkg/ui/dist
 
-RUN CGO_ENABLED=0 GOOS=${GOOS} ${GOARCH} go build -ldflags="-s -w" -o /app/localkanban ./cmd/localkanban
+RUN CGO_ENABLED=0 GOOS=${GOOS} GOARCH=${GOARCH} go build -ldflags="-s -w" -o /app/localkanban ./cmd/localkanban
 
 # ==========================================
 # Stage 3: Minimal Production Runtime
