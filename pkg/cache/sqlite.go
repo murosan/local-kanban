@@ -381,7 +381,7 @@ func (c *SQLiteCache) GetTasksByColumnIDs(columnIDs []string) ([]*model.Task, er
 	query := fmt.Sprintf(
 		"SELECT id, title, column_id, rank, tags, created_at, updated_at, file_path, custom_fields, summary FROM tasks WHERE column_id IN (%s) ORDER BY rank ASC",
 		strings.Join(placeholders, ","),
-	)
+	) // #nosec G201 -- placeholders construction uses sanitized '?' placeholders
 
 	rows, err := c.db.Query(query, args...)
 	if err != nil {
