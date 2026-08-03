@@ -1,6 +1,7 @@
 package model
 
 import (
+	"strings"
 	"time"
 )
 
@@ -45,8 +46,37 @@ type Task struct {
 	CustomFields map[string]CustomFieldValue `json:"custom_fields,omitempty" yaml:"custom_fields,omitempty"`
 
 	// Body content of the markdown file (after frontmatter)
-	Content  string `json:"content"             yaml:"-"`
+	Content  string `json:"content,omitempty"   yaml:"-"`
+	Summary  string `json:"summary,omitempty"   yaml:"-"`
 	FilePath string `json:"file_path,omitempty" yaml:"-"`
+}
+
+func GenerateSummary(content string) string {
+	lines := strings.Split(content, "\n")
+	var cleaned []string
+	for _, l := range lines {
+		trimmed := strings.TrimSpace(l)
+		if trimmed == "" {
+			continue
+		}
+		for strings.HasPrefix(trimmed, "#") {
+			trimmed = strings.TrimPrefix(trimmed, "#")
+		}
+		trimmed = strings.TrimSpace(trimmed)
+		if trimmed != "" {
+			cleaned = append(cleaned, trimmed)
+		}
+	}
+	if len(cleaned) == 0 {
+		return ""
+	}
+	result := strings.Join(cleaned, " ")
+	runes := []rune(result)
+	const maxLen = 200
+	if len(runes) > maxLen {
+		return string(runes[:maxLen]) + "..."
+	}
+	return result
 }
 
 type ThemeConfig struct {

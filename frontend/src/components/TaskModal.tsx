@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { MarkdownEditor, ChangeOptions } from './MarkdownEditor';
 import { useI18n } from '../i18n/useI18n';
+import { fetchTaskById } from '../services/api';
 
 interface TaskModalProps {
   isOpen: boolean;
@@ -69,6 +70,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
   const [isSaving, setIsSaving] = useState(false);
+  const [isLoadingContent, setIsLoadingContent] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -225,6 +227,29 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       historyIndexRef.current = 0;
       setCanUndo(false);
       setCanRedo(false);
+
+      if (task?.id) {
+        setIsLoadingContent(true);
+        fetchTaskById(task.id)
+          .then((fullTask) => {
+            if (fullTask && fullTask.content !== undefined) {
+              const fetchedContent = fullTask.content || '';
+              setContent(fetchedContent);
+              if (historyRef.current.length > 0) {
+                historyRef.current[0].content = fetchedContent;
+                latestStateRef.current.content = fetchedContent;
+              }
+            }
+          })
+          .catch((err) => {
+            console.error('Error fetching full task content:', err);
+          })
+          .finally(() => {
+            setIsLoadingContent(false);
+          });
+      } else {
+        setIsLoadingContent(false);
+      }
     }
     prevIsOpenRef.current = isOpen;
     prevTaskIdRef.current = task?.id;
@@ -837,10 +862,18 @@ export const TaskModal: React.FC<TaskModalProps> = ({
             </div>
 
             {/* Content (Markdown Body) */}
-            <div className="flex-1 flex flex-col min-h-[600px]">
-              <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-1.5 flex items-center gap-1">
-                <AlignLeft className="w-3.5 h-3.5 text-[var(--text-muted)]" />{' '}
-                {t('taskModal.contentLabel')}
+            <div className="flex-1 flex flex-col min-h-[600px] relative">
+              <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                <span className="flex items-center gap-1">
+                  <AlignLeft className="w-3.5 h-3.5 text-[var(--text-muted)]" />{' '}
+                  {t('taskModal.contentLabel')}
+                </span>
+                {isLoadingContent && (
+                  <span className="flex items-center gap-1 text-xs text-blue-500 font-normal normal-case">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    <span>Loading...</span>
+                  </span>
+                )}
               </label>
               <MarkdownEditor
                 value={content}

@@ -39,6 +39,7 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/config", s.handleSaveConfig)
 	mux.HandleFunc("POST /api/rebuild", s.handleRebuildCache)
 	mux.HandleFunc("GET /api/tasks", s.handleGetTasks)
+	mux.HandleFunc("GET /api/tasks/{id}", s.handleGetTask)
 	mux.HandleFunc("POST /api/tasks", s.handleCreateTask)
 	mux.HandleFunc("PUT /api/tasks/{id}", s.handleUpdateTask)
 	mux.HandleFunc("DELETE /api/tasks/{id}", s.handleDeleteTask)
@@ -102,32 +103,67 @@ func (s *Server) handleGetTasks(w http.ResponseWriter, r *http.Request) {
 					}
 				}
 				tasks = filtered
-				respondJSON(w, http.StatusOK, tasks)
-				return
 			}
-		}
-
-		// Fallback to in-memory search if searchEngine is nil or failed
-		filtered := make([]*model.Task, 0)
-		for _, t := range tasks {
-			match := strings.Contains(strings.ToLower(t.Title), query) ||
-				strings.Contains(strings.ToLower(t.Content), query)
-			if !match {
-				for _, tag := range t.Tags {
-					if strings.Contains(strings.ToLower(tag), query) {
-						match = true
-						break
+		} else {
+			// Fallback to in-memory search if searchEngine is nil or failed
+			filtered := make([]*model.Task, 0)
+			for _, t := range tasks {
+				match := strings.Contains(strings.ToLower(t.Title), query) ||
+					strings.Contains(strings.ToLower(t.Content), query) ||
+					strings.Contains(strings.ToLower(t.Summary), query)
+				if !match {
+					for _, tag := range t.Tags {
+						if strings.Contains(strings.ToLower(tag), query) {
+							match = true
+							break
+						}
 					}
 				}
+				if match {
+					filtered = append(filtered, t)
+				}
 			}
-			if match {
-				filtered = append(filtered, t)
-			}
+			tasks = filtered
 		}
-		tasks = filtered
 	}
 
-	respondJSON(w, http.StatusOK, tasks)
+	lightweightTasks := make([]*model.Task, len(tasks))
+	for i, t := range tasks {
+		lightweightTasks[i] = toLightweightTask(t)
+	}
+
+	respondJSON(w, http.StatusOK, lightweightTasks)
+}
+
+func (s *Server) handleGetTask(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		respondError(w, http.StatusBadRequest, "Task ID required")
+		return
+	}
+
+	task, err := s.store.GetTaskByID(id)
+	if err != nil {
+		respondError(w, http.StatusNotFound, "Task not found")
+		return
+	}
+
+	if task.Summary == "" && task.Content != "" {
+		task.Summary = model.GenerateSummary(task.Content)
+	}
+
+	respondJSON(w, http.StatusOK, task)
+}
+
+func toLightweightTask(t *model.Task) *model.Task {
+	summary := t.Summary
+	if summary == "" && t.Content != "" {
+		summary = model.GenerateSummary(t.Content)
+	}
+	copyTask := *t
+	copyTask.Content = ""
+	copyTask.Summary = summary
+	return &copyTask
 }
 
 type CreateTaskPayload struct {

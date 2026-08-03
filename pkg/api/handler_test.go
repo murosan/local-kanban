@@ -209,3 +209,67 @@ func TestGetTasksEmpty(t *testing.T) {
 		t.Errorf("expected body '[]', got '%s'", body)
 	}
 }
+
+func TestGetTasksLightweightAndGetTaskByID(t *testing.T) {
+	tempDir := t.TempDir()
+	store, err := markdown.NewStore(tempDir)
+	if err != nil {
+		t.Fatalf("failed to create store: %v", err)
+	}
+
+	task := &model.Task{
+		Title:    "Detailed Task",
+		ColumnID: "col-todo",
+		Rank:     "0|a",
+		Content:  "# Header\n\nThis is a long description for the detailed task.",
+	}
+	if err := store.SaveTask(task); err != nil {
+		t.Fatalf("failed to save task: %v", err)
+	}
+
+	server := NewServer(store, nil)
+	mux := http.NewServeMux()
+	server.RegisterRoutes(mux)
+
+	// 1. GET /api/tasks should return lightweight task without content
+	reqList := httptest.NewRequest("GET", "/api/tasks", nil)
+	wList := httptest.NewRecorder()
+	mux.ServeHTTP(wList, reqList)
+
+	if wList.Code != http.StatusOK {
+		t.Fatalf("expected status 200 GET /api/tasks, got %d", wList.Code)
+	}
+
+	var listTasks []*model.Task
+	if err := json.NewDecoder(wList.Body).Decode(&listTasks); err != nil {
+		t.Fatalf("failed to decode list response: %v", err)
+	}
+
+	if len(listTasks) != 1 {
+		t.Fatalf("expected 1 task, got %d", len(listTasks))
+	}
+	if listTasks[0].Content != "" {
+		t.Errorf("expected empty content in list view, got %q", listTasks[0].Content)
+	}
+	if listTasks[0].Summary == "" {
+		t.Errorf("expected non-empty summary in list view")
+	}
+
+	// 2. GET /api/tasks/{id} should return full task with content
+	reqDetail := httptest.NewRequest("GET", "/api/tasks/"+task.ID, nil)
+	wDetail := httptest.NewRecorder()
+	mux.ServeHTTP(wDetail, reqDetail)
+
+	if wDetail.Code != http.StatusOK {
+		t.Fatalf("expected status 200 GET /api/tasks/{id}, got %d", wDetail.Code)
+	}
+
+	var detailTask model.Task
+	if err := json.NewDecoder(wDetail.Body).Decode(&detailTask); err != nil {
+		t.Fatalf("failed to decode detail response: %v", err)
+	}
+
+	if detailTask.Content != task.Content {
+		t.Errorf("expected full content %q, got %q", task.Content, detailTask.Content)
+	}
+}
