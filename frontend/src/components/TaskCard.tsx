@@ -39,27 +39,38 @@ export const TaskCard: React.FC<TaskCardProps> = ({
     minute: '2-digit',
   });
 
-  const displayFields = task.custom_fields
-    ? Object.entries(task.custom_fields)
+  const displayFields = Array.isArray(task.custom_fields)
+    ? task.custom_fields
         .filter(
-          ([_, cf]) =>
-            cf && cf.enabled && cf.value !== undefined && cf.value !== '' && cf.value !== false
+          (cf) =>
+            cf &&
+            (cf.enabled ?? true) &&
+            cf.value !== undefined &&
+            cf.value !== '' &&
+            cf.value !== false
         )
-        .map(([fieldId, cf]) => {
-          // Resolve option color if dropdown field definition exists
-          const fieldDef = customFields.find((f) => f.id === fieldId);
+        .map((cf) => {
           let resolvedColor: string | undefined;
-          if (fieldDef && fieldDef.type === 'dropdown' && fieldDef.options) {
-            const matchedOpt = fieldDef.options.find((opt) => opt.value === cf.value);
+          if (cf.type === 'dropdown' && cf.options) {
+            const matchedOpt = cf.options.find((opt) => opt.value === cf.value);
             if (matchedOpt) {
               resolvedColor = matchedOpt.color;
             }
           }
+          if (!resolvedColor && cf.field_id) {
+            const fieldDef = customFields.find((f) => f.id === cf.field_id);
+            if (fieldDef && fieldDef.type === 'dropdown' && fieldDef.options) {
+              const matchedOpt = fieldDef.options.find((opt) => opt.value === cf.value);
+              if (matchedOpt) {
+                resolvedColor = matchedOpt.color;
+              }
+            }
+          }
 
           return {
-            id: fieldId,
-            name: fieldDef ? fieldDef.name : fieldId.replace('cf-', ''),
-            type: fieldDef?.type,
+            id: cf.id || cf.field_id || cf.name,
+            name: cf.name || cf.field_id || 'Field',
+            type: cf.type,
             value: cf.value,
             color: resolvedColor,
           };

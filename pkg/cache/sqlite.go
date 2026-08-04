@@ -109,7 +109,7 @@ func (c *SQLiteCache) UpsertTask(task *model.Task) error {
 
 	customFieldsJSON, err := json.Marshal(task.CustomFields)
 	if err != nil {
-		customFieldsJSON = []byte("{}")
+		customFieldsJSON = []byte("[]")
 	}
 
 	upsertSQL := `

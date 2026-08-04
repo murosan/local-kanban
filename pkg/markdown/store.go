@@ -346,6 +346,9 @@ func (s *Store) SaveTask(task *model.Task) error {
 	defer s.mu.Unlock()
 
 	now := time.Now().UTC()
+	if task.Version < model.CurrentTaskVersion {
+		task.Version = model.CurrentTaskVersion
+	}
 	if task.CreatedAt.IsZero() {
 		task.CreatedAt = now
 	}
@@ -353,6 +356,12 @@ func (s *Store) SaveTask(task *model.Task) error {
 
 	if task.ID == "" {
 		task.ID = generateUUID()
+	}
+
+	for i := range task.CustomFields {
+		if task.CustomFields[i].ID == "" {
+			task.CustomFields[i].ID = generateUUID()
+		}
 	}
 
 	filename := task.FilePath
@@ -439,6 +448,18 @@ func (s *Store) readTaskFile(path string) (*model.Task, error) {
 	return task, nil
 }
 
+type legacyTaskV1 struct {
+	Version      int                               `yaml:"version"`
+	ID           string                            `yaml:"id"`
+	Title        string                            `yaml:"title"`
+	ColumnID     string                            `yaml:"column_id,omitempty"`
+	Rank         string                            `yaml:"rank"`
+	Tags         []string                          `yaml:"tags,omitempty"`
+	CreatedAt    time.Time                         `yaml:"created_at"`
+	UpdatedAt    time.Time                         `yaml:"updated_at"`
+	CustomFields map[string]model.CustomFieldValue `yaml:"custom_fields,omitempty"`
+}
+
 func parseTaskContent(raw string) (*model.Task, error) {
 	lines := strings.Split(raw, "\n")
 	if len(lines) < 3 || strings.TrimSpace(lines[0]) != "---" {
@@ -461,8 +482,59 @@ func parseTaskContent(raw string) (*model.Task, error) {
 	bodyContent := strings.Join(lines[endIdx+1:], "\n")
 
 	var task model.Task
-	if err := yaml.Unmarshal([]byte(yamlContent), &task); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal yaml frontmatter: %w", err)
+	err := yaml.Unmarshal([]byte(yamlContent), &task)
+	if err != nil || task.Version < model.CurrentTaskVersion {
+		// Attempt parsing as legacy v1 (map-based custom fields or unversioned)
+		var legTask legacyTaskV1
+		if legErr := yaml.Unmarshal(
+			[]byte(yamlContent),
+			&legTask,
+		); legErr == nil &&
+			legTask.ID != "" {
+			task = model.Task{
+				Version:   model.CurrentTaskVersion,
+				ID:        legTask.ID,
+				Title:     legTask.Title,
+				ColumnID:  legTask.ColumnID,
+				Rank:      legTask.Rank,
+				Tags:      legTask.Tags,
+				CreatedAt: legTask.CreatedAt,
+				UpdatedAt: legTask.UpdatedAt,
+			}
+			for key, cf := range legTask.CustomFields {
+				id := cf.ID
+				if id == "" {
+					id = key
+				}
+				fieldID := cf.FieldID
+				if fieldID == "" {
+					fieldID = key
+				}
+				name := cf.Name
+				if name == "" {
+					name = key
+				}
+				cType := cf.Type
+				if cType == "" {
+					cType = model.FieldTypeText
+				}
+				task.CustomFields = append(task.CustomFields, model.CustomFieldValue{
+					ID:      id,
+					FieldID: fieldID,
+					Name:    name,
+					Type:    cType,
+					Value:   cf.Value,
+					Options: cf.Options,
+					Enabled: cf.Enabled,
+				})
+			}
+		} else if err != nil {
+			return nil, fmt.Errorf("failed to unmarshal yaml frontmatter: %w", err)
+		}
+	}
+
+	if task.Version < model.CurrentTaskVersion {
+		task.Version = model.CurrentTaskVersion
 	}
 
 	task.Content = strings.TrimPrefix(bodyContent, "\n")
@@ -471,6 +543,9 @@ func parseTaskContent(raw string) (*model.Task, error) {
 }
 
 func serializeTask(t *model.Task) (string, error) {
+	if t.Version < model.CurrentTaskVersion {
+		t.Version = model.CurrentTaskVersion
+	}
 	frontmatterBytes, err := yaml.Marshal(t)
 	if err != nil {
 		return "", err

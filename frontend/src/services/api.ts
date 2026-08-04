@@ -36,7 +36,7 @@ export interface CreateTaskPayload {
   title: string;
   column_id?: string;
   tags?: string[];
-  custom_fields?: Record<string, CustomFieldValue>;
+  custom_fields?: CustomFieldValue[];
   content?: string;
   prev_id?: string;
   next_id?: string;
@@ -56,7 +56,7 @@ export interface UpdateTaskPayload {
   title?: string;
   column_id?: string;
   tags?: string[];
-  custom_fields?: Record<string, CustomFieldValue>;
+  custom_fields?: CustomFieldValue[];
   content?: string;
   rank?: string;
   prev_id?: string;

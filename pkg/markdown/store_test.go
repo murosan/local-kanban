@@ -265,3 +265,48 @@ func TestGetVisibleTasksAndColumnFiltering(t *testing.T) {
 		t.Errorf("expected 0 tasks for deleted col, got %d", len(hiddenTasks))
 	}
 }
+
+func TestLegacyTaskCustomFieldsMigration(t *testing.T) {
+	tmpDir := t.TempDir()
+	store, err := NewStore(tmpDir)
+	if err != nil {
+		t.Fatalf("failed to init store: %v", err)
+	}
+
+	legacyTaskMD := `---
+id: task-legacy-1
+title: Legacy Task
+column_id: col-todo
+rank: 0|a
+custom_fields:
+  cf-priority:
+    field_id: cf-priority
+    value: High
+    enabled: true
+---
+
+Body content
+`
+	taskPath := filepath.Join(tmpDir, "legacy_task.md")
+	if err := os.WriteFile(taskPath, []byte(legacyTaskMD), 0o644); err != nil {
+		t.Fatalf("failed to write legacy task file: %v", err)
+	}
+
+	task, err := store.GetTaskByID("task-legacy-1")
+	if err != nil {
+		t.Fatalf("failed to read legacy task: %v", err)
+	}
+
+	if task.Version != model.CurrentTaskVersion {
+		t.Errorf("expected task version %d, got %d", model.CurrentTaskVersion, task.Version)
+	}
+
+	if len(task.CustomFields) != 1 {
+		t.Fatalf("expected 1 custom field in array, got %d", len(task.CustomFields))
+	}
+
+	cf := task.CustomFields[0]
+	if cf.ID != "cf-priority" || cf.Value != "High" {
+		t.Errorf("unexpected custom field migrated: %+v", cf)
+	}
+}
