@@ -167,13 +167,13 @@ func toLightweightTask(t *model.Task) *model.Task {
 }
 
 type CreateTaskPayload struct {
-	Title        string                            `json:"title"`
-	ColumnID     string                            `json:"column_id"`
-	Tags         []string                          `json:"tags"`
-	CustomFields map[string]model.CustomFieldValue `json:"custom_fields,omitempty"`
-	Content      string                            `json:"content"`
-	PrevID       string                            `json:"prev_id"`
-	NextID       string                            `json:"next_id"`
+	Title        string                   `json:"title"`
+	ColumnID     string                   `json:"column_id"`
+	Tags         []string                 `json:"tags"`
+	CustomFields []model.CustomFieldValue `json:"custom_fields,omitempty"`
+	Content      string                   `json:"content"`
+	PrevID       string                   `json:"prev_id"`
+	NextID       string                   `json:"next_id"`
 }
 
 func (s *Server) handleCreateTask(w http.ResponseWriter, r *http.Request) {
@@ -209,14 +209,14 @@ func (s *Server) handleCreateTask(w http.ResponseWriter, r *http.Request) {
 }
 
 type UpdateTaskPayload struct {
-	Title        *string                           `json:"title"`
-	ColumnID     *string                           `json:"column_id"`
-	Tags         []string                          `json:"tags"`
-	CustomFields map[string]model.CustomFieldValue `json:"custom_fields,omitempty"`
-	Content      *string                           `json:"content"`
-	Rank         *string                           `json:"rank"`
-	PrevID       string                            `json:"prev_id"`
-	NextID       string                            `json:"next_id"`
+	Title        *string                  `json:"title"`
+	ColumnID     *string                  `json:"column_id"`
+	Tags         []string                 `json:"tags"`
+	CustomFields []model.CustomFieldValue `json:"custom_fields,omitempty"`
+	Content      *string                  `json:"content"`
+	Rank         *string                  `json:"rank"`
+	PrevID       string                   `json:"prev_id"`
+	NextID       string                   `json:"next_id"`
 }
 
 func (s *Server) handleUpdateTask(w http.ResponseWriter, r *http.Request) {

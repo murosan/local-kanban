@@ -29,22 +29,29 @@ type CustomFieldDef struct {
 	Options []CustomFieldOption `json:"options,omitempty" yaml:"options,omitempty"`
 }
 
+const CurrentTaskVersion = 2
+
 type CustomFieldValue struct {
-	FieldID string `json:"field_id" yaml:"field_id"`
-	Value   any    `json:"value"    yaml:"value"`
-	Enabled bool   `json:"enabled"  yaml:"enabled"`
+	ID      string              `json:"id"                 yaml:"id"`
+	FieldID string              `json:"field_id,omitempty" yaml:"field_id,omitempty"`
+	Name    string              `json:"name"               yaml:"name"`
+	Type    CustomFieldType     `json:"type"               yaml:"type"`
+	Value   any                 `json:"value"              yaml:"value"`
+	Options []CustomFieldOption `json:"options,omitempty"  yaml:"options,omitempty"`
+	Enabled bool                `json:"enabled"            yaml:"enabled"`
 }
 
 // Task represents a kanban task card and its associated markdown file structure.
 type Task struct {
-	ID           string                      `json:"id"                      yaml:"id"`
-	Title        string                      `json:"title"                   yaml:"title"`
-	ColumnID     string                      `json:"column_id,omitempty"     yaml:"column_id,omitempty"`
-	Rank         string                      `json:"rank"                    yaml:"rank"`
-	Tags         []string                    `json:"tags,omitempty"          yaml:"tags,omitempty"`
-	CreatedAt    time.Time                   `json:"created_at"              yaml:"created_at"`
-	UpdatedAt    time.Time                   `json:"updated_at"              yaml:"updated_at"`
-	CustomFields map[string]CustomFieldValue `json:"custom_fields,omitempty" yaml:"custom_fields,omitempty"`
+	Version      int                `json:"version"                 yaml:"version"`
+	ID           string             `json:"id"                      yaml:"id"`
+	Title        string             `json:"title"                   yaml:"title"`
+	ColumnID     string             `json:"column_id,omitempty"     yaml:"column_id,omitempty"`
+	Rank         string             `json:"rank"                    yaml:"rank"`
+	Tags         []string           `json:"tags,omitempty"          yaml:"tags,omitempty"`
+	CreatedAt    time.Time          `json:"created_at"              yaml:"created_at"`
+	UpdatedAt    time.Time          `json:"updated_at"              yaml:"updated_at"`
+	CustomFields []CustomFieldValue `json:"custom_fields,omitempty" yaml:"custom_fields,omitempty"`
 
 	// Body content of the markdown file (after frontmatter)
 	Content  string `json:"content,omitempty"   yaml:"-"`

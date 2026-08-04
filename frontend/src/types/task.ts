@@ -14,12 +14,17 @@ export interface CustomFieldDef {
 }
 
 export interface CustomFieldValue {
-  field_id: string;
+  id: string;
+  field_id?: string;
+  name: string;
+  type: CustomFieldType;
   value: string | number | boolean | string[] | null;
-  enabled: boolean;
+  options?: CustomFieldOption[];
+  enabled?: boolean;
 }
 
 export interface Task {
+  version?: number;
   id: string;
   title: string;
   column_id?: string;
@@ -27,7 +32,7 @@ export interface Task {
   tags?: string[];
   created_at: string;
   updated_at: string;
-  custom_fields?: Record<string, CustomFieldValue>;
+  custom_fields?: CustomFieldValue[];
   content?: string;
   summary?: string;
   file_path?: string;

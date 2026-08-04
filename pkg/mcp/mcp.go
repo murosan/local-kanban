@@ -40,13 +40,13 @@ type UpdateTaskStatusInput struct {
 }
 
 type UpdateTaskInput struct {
-	TaskID       string                            `json:"task_id"                 jsonschema:"Task ID to update"`
-	Title        string                            `json:"title,omitempty"         jsonschema:"Optional new title"`
-	Description  string                            `json:"description,omitempty"   jsonschema:"Optional new markdown content/description"`
-	Status       string                            `json:"status,omitempty"        jsonschema:"Optional new status column ID"`
-	Tags         []string                          `json:"tags,omitempty"          jsonschema:"Optional new list of tags"`
-	TargetRank   string                            `json:"target_rank,omitempty"   jsonschema:"Optional new LexoRank string"`
-	CustomFields map[string]model.CustomFieldValue `json:"custom_fields,omitempty" jsonschema:"Optional custom field values"`
+	TaskID       string                   `json:"task_id"                 jsonschema:"Task ID to update"`
+	Title        string                   `json:"title,omitempty"         jsonschema:"Optional new title"`
+	Description  string                   `json:"description,omitempty"   jsonschema:"Optional new markdown content/description"`
+	Status       string                   `json:"status,omitempty"        jsonschema:"Optional new status column ID"`
+	Tags         []string                 `json:"tags,omitempty"          jsonschema:"Optional new list of tags"`
+	TargetRank   string                   `json:"target_rank,omitempty"   jsonschema:"Optional new LexoRank string"`
+	CustomFields []model.CustomFieldValue `json:"custom_fields,omitempty" jsonschema:"Optional custom field values"`
 }
 
 type SearchTasksInput struct {
