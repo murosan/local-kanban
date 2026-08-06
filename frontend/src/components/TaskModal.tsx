@@ -849,7 +849,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
           </div>
 
           {/* Form Body */}
-          <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1 flex flex-col">
+          <div className="p-4 sm:p-6 pb-8 sm:pb-12 space-y-4 overflow-y-auto flex-1 flex flex-col">
             {/* Title */}
             <div>
               <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-1.5">
