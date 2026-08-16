@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/murosan/local-kanban/pkg/model"
 
@@ -77,6 +78,13 @@ func (c *SQLiteCache) initSchema() error {
 		tags,
 		tokenize = 'trigram'
 	);
+
+	CREATE TABLE IF NOT EXISTS tags (
+		name TEXT PRIMARY KEY,
+		last_used_at DATETIME NOT NULL
+	);
+
+	CREATE INDEX IF NOT EXISTS idx_tags_last_used_at ON tags(last_used_at DESC);
 	`
 	if _, err := c.db.Exec(schema); err != nil {
 		return err
@@ -156,6 +164,22 @@ func (c *SQLiteCache) UpsertTask(task *model.Task) error {
 		return fmt.Errorf("failed to insert into tasks_fts: %w", err)
 	}
 
+	// Update tags table
+	upsertTagSQL := `
+	INSERT INTO tags (name, last_used_at)
+	VALUES (?, ?)
+	ON CONFLICT(name) DO UPDATE SET last_used_at = excluded.last_used_at;
+	`
+	for _, tag := range task.Tags {
+		trimmed := strings.TrimSpace(tag)
+		if trimmed != "" {
+			_, err = tx.Exec(upsertTagSQL, trimmed, task.UpdatedAt)
+			if err != nil {
+				return fmt.Errorf("failed to upsert tag into tags table: %w", err)
+			}
+		}
+	}
+
 	return tx.Commit()
 }
 
@@ -203,12 +227,22 @@ func (c *SQLiteCache) SyncAll(tasks []*model.Task) error {
 	if _, err := tx.Exec("DELETE FROM tasks_fts"); err != nil {
 		return err
 	}
+	if _, err := tx.Exec("DELETE FROM tags"); err != nil {
+		return err
+	}
 
 	upsertSQL := `
 	INSERT INTO tasks (id, title, column_id, rank, tags, created_at, updated_at, file_path, custom_fields, summary)
 	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 	`
 	ftsSQL := `INSERT INTO tasks_fts (id, title, content, tags) VALUES (?, ?, ?, ?);`
+	upsertTagSQL := `
+	INSERT INTO tags (name, last_used_at)
+	VALUES (?, ?)
+	ON CONFLICT(name) DO UPDATE SET last_used_at = excluded.last_used_at;
+	`
+
+	tagLastUsed := make(map[string]time.Time)
 
 	for _, task := range tasks {
 		if task.Summary == "" && task.Content != "" {
@@ -238,9 +272,50 @@ func (c *SQLiteCache) SyncAll(tasks []*model.Task) error {
 		if err != nil {
 			return err
 		}
+
+		for _, tag := range task.Tags {
+			trimmed := strings.TrimSpace(tag)
+			if trimmed != "" {
+				if last, exists := tagLastUsed[trimmed]; !exists || task.UpdatedAt.After(last) {
+					tagLastUsed[trimmed] = task.UpdatedAt
+				}
+			}
+		}
+	}
+
+	for tag, lastUsed := range tagLastUsed {
+		_, err = tx.Exec(upsertTagSQL, tag, lastUsed)
+		if err != nil {
+			return err
+		}
 	}
 
 	return tx.Commit()
+}
+
+// GetAllTags returns all unique tag names sorted by last_used_at DESC, name ASC.
+func (c *SQLiteCache) GetAllTags() ([]string, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	rows, err := c.db.Query("SELECT name FROM tags ORDER BY last_used_at DESC, name ASC")
+	if err != nil {
+		return nil, fmt.Errorf("failed to query tags: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var tags []string
+	for rows.Next() {
+		var tag string
+		if err := rows.Scan(&tag); err != nil {
+			return nil, fmt.Errorf("failed to scan tag: %w", err)
+		}
+		tags = append(tags, tag)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error during tags iteration: %w", err)
+	}
+	return tags, nil
 }
 
 func (c *SQLiteCache) SearchFTS(query string) ([]string, error) {

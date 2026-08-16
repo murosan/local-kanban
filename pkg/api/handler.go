@@ -43,6 +43,7 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/tasks", s.handleCreateTask)
 	mux.HandleFunc("PUT /api/tasks/{id}", s.handleUpdateTask)
 	mux.HandleFunc("DELETE /api/tasks/{id}", s.handleDeleteTask)
+	mux.HandleFunc("GET /api/tags", s.handleGetTags)
 
 	if s.mcpServer != nil {
 		sseHandler := s.mcpServer.NewSSEHandler()
@@ -303,6 +304,18 @@ func (s *Server) handleRebuildCache(w http.ResponseWriter, r *http.Request) {
 		"message": "Database rebuilt successfully",
 		"count":   count,
 	})
+}
+
+func (s *Server) handleGetTags(w http.ResponseWriter, r *http.Request) {
+	tags, err := s.store.GetAllTags()
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if tags == nil {
+		tags = make([]string, 0)
+	}
+	respondJSON(w, http.StatusOK, tags)
 }
 
 func (s *Server) calculateRank(columnID string, prevID, nextID string) string {

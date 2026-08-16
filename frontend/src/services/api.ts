@@ -32,6 +32,13 @@ export async function fetchTaskById(id: string): Promise<Task> {
   return res.json();
 }
 
+export async function fetchTags(): Promise<string[]> {
+  const res = await fetch(`${API_BASE}/tags`);
+  if (!res.ok) throw new Error('Failed to fetch tags');
+  const data = await res.json();
+  return data || [];
+}
+
 export interface CreateTaskPayload {
   title: string;
   column_id?: string;

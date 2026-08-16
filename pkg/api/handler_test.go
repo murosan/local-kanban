@@ -273,3 +273,77 @@ func TestGetTasksLightweightAndGetTaskByID(t *testing.T) {
 		t.Errorf("expected full content %q, got %q", task.Content, detailTask.Content)
 	}
 }
+
+func TestGetTags(t *testing.T) {
+	tempDir := t.TempDir()
+	store, err := markdown.NewStore(tempDir)
+	if err != nil {
+		t.Fatalf("failed to create store: %v", err)
+	}
+
+	server := NewServer(store, nil)
+	mux := http.NewServeMux()
+	server.RegisterRoutes(mux)
+
+	// 1. Initial GET /api/tags (empty)
+	reqEmpty := httptest.NewRequest("GET", "/api/tags", nil)
+	wEmpty := httptest.NewRecorder()
+	mux.ServeHTTP(wEmpty, reqEmpty)
+
+	if wEmpty.Code != http.StatusOK {
+		t.Fatalf("expected status 200 GET /api/tags, got %d", wEmpty.Code)
+	}
+
+	var tagsEmpty []string
+	if err := json.NewDecoder(wEmpty.Body).Decode(&tagsEmpty); err != nil {
+		t.Fatalf("failed to decode tags response: %v", err)
+	}
+	if len(tagsEmpty) != 0 {
+		t.Errorf("expected 0 tags, got %d", len(tagsEmpty))
+	}
+
+	// 2. Add tasks with tags (including duplicates, empty strings, spaces)
+	task1 := &model.Task{
+		Title:    "Task 1",
+		ColumnID: "col-todo",
+		Rank:     "0|a",
+		Tags:     []string{"frontend", "react", "ui"},
+	}
+	task2 := &model.Task{
+		Title:    "Task 2",
+		ColumnID: "col-in-progress",
+		Rank:     "0|b",
+		Tags:     []string{"backend", "go", "react", "  "},
+	}
+	if err := store.SaveTask(task1); err != nil {
+		t.Fatalf("failed to save task1: %v", err)
+	}
+	if err := store.SaveTask(task2); err != nil {
+		t.Fatalf("failed to save task2: %v", err)
+	}
+
+	// 3. GET /api/tags after tasks added
+	req := httptest.NewRequest("GET", "/api/tags", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200 GET /api/tags, got %d", w.Code)
+	}
+
+	var tags []string
+	if err := json.NewDecoder(w.Body).Decode(&tags); err != nil {
+		t.Fatalf("failed to decode tags response: %v", err)
+	}
+
+	expectedTags := []string{"backend", "frontend", "go", "react", "ui"}
+	if len(tags) != len(expectedTags) {
+		t.Fatalf("expected %d unique tags, got %d: %+v", len(expectedTags), len(tags), tags)
+	}
+
+	for i, expected := range expectedTags {
+		if tags[i] != expected {
+			t.Errorf("expected tag[%d]=%q, got %q", i, expected, tags[i])
+		}
+	}
+}

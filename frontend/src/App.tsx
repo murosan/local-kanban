@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { BoardConfig, Column, CustomFieldDef, Task, ThemeConfig } from './types/task';
 import {
   fetchBoardConfig,
   fetchTasks,
+  fetchTags,
   createTask,
   updateTask,
   deleteTask,
@@ -22,6 +23,7 @@ export const App: React.FC = () => {
   const { language, t } = useI18n();
   const [config, setConfig] = useState<BoardConfig | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [availableTags, setAvailableTags] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [isSyncing, setIsSyncing] = useState(false);
@@ -72,9 +74,14 @@ export const App: React.FC = () => {
   const loadData = useCallback(async () => {
     setIsSyncing(true);
     try {
-      const [cfg, taskList] = await Promise.all([fetchBoardConfig(), fetchTasks(debouncedQuery)]);
+      const [cfg, taskList, tagList] = await Promise.all([
+        fetchBoardConfig(),
+        fetchTasks(debouncedQuery),
+        fetchTags(),
+      ]);
       setConfig(cfg);
       setTasks(taskList || []);
+      setAvailableTags(tagList || []);
 
       if (cfg.theme && cfg.theme.name) {
         applyTheme(cfg.theme);
@@ -318,6 +325,7 @@ export const App: React.FC = () => {
           columns={config.columns}
           initialColumnId={initialColumnId}
           customFields={config.custom_fields}
+          availableTags={availableTags}
           onClose={() => setIsTaskModalOpen(false)}
           onSave={handleSaveTask}
           onDelete={handleDeleteTask}

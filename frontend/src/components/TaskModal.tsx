@@ -31,6 +31,7 @@ import {
   CheckSquare,
 } from 'lucide-react';
 import { MarkdownEditor, ChangeOptions } from './MarkdownEditor';
+import { TagInput } from './TagInput';
 import { useI18n } from '../i18n/useI18n';
 import { fetchTaskById } from '../services/api';
 import { getSafeUrl } from '../utils/url';
@@ -42,6 +43,7 @@ interface TaskModalProps {
   columns?: Column[];
   initialColumnId?: string;
   customFields?: CustomFieldDef[];
+  availableTags?: string[];
   onClose: () => void;
   onSave: (taskData: Partial<Task>, options?: { silent?: boolean }) => Promise<void>;
   onDelete?: (id: string) => Promise<void>;
@@ -65,6 +67,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   columns = [],
   initialColumnId = '',
   customFields = [],
+  availableTags = [],
   onClose,
   onSave,
   onDelete,
@@ -1640,12 +1643,11 @@ export const TaskModal: React.FC<TaskModalProps> = ({
               <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-1.5 flex items-center gap-1">
                 <Tag className="w-3.5 h-3.5 text-[var(--text-muted)]" /> {t('taskModal.tagsLabel')}
               </label>
-              <input
-                type="text"
+              <TagInput
                 value={tagsInput}
-                onChange={(e) => handleTagsChange(e.target.value)}
+                onChange={handleTagsChange}
+                availableTags={availableTags}
                 placeholder={t('taskModal.tagsPlaceholder')}
-                className="w-full px-3.5 py-2 text-sm bg-[var(--bg-input)] border border-[var(--border-color)] rounded-xl text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-blue-500"
               />
             </div>
 

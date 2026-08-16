@@ -340,6 +340,40 @@ func (s *Store) GetTaskByID(id string) (*model.Task, error) {
 	return nil, os.ErrNotExist
 }
 
+// GetAllTags returns all unique tags sorted by last_used_at DESC (if cached) or alphabetically across all tasks.
+func (s *Store) GetAllTags() ([]string, error) {
+	s.mu.RLock()
+	c := s.cache
+	s.mu.RUnlock()
+
+	if c != nil {
+		cachedTags, err := c.GetAllTags()
+		if err == nil {
+			return cachedTags, nil
+		}
+	}
+
+	tasks, err := s.GetAllTasks()
+	if err != nil {
+		return nil, err
+	}
+	tagSet := make(map[string]bool)
+	for _, t := range tasks {
+		for _, tag := range t.Tags {
+			trimmed := strings.TrimSpace(tag)
+			if trimmed != "" {
+				tagSet[trimmed] = true
+			}
+		}
+	}
+	tags := make([]string, 0, len(tagSet))
+	for tag := range tagSet {
+		tags = append(tags, tag)
+	}
+	sort.Strings(tags)
+	return tags, nil
+}
+
 // SaveTask writes a Task struct to its corresponding Markdown file.
 func (s *Store) SaveTask(task *model.Task) error {
 	s.mu.Lock()
