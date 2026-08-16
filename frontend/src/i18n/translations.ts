@@ -100,6 +100,7 @@ export const translations = {
     'taskModal.addChecklistItem': '＋ チェック項目を追加',
     'taskModal.checklistCompleted': '{completed}/{total} 完了',
     'taskModal.noChecklistItems': 'チェック項目がありません。「＋」から項目を追加できます。',
+    'taskModal.itemPlaceholder': 'チェック項目の内容を入力...',
     'taskModal.hierarchyLabel': 'サブタスク・親タスク',
     'taskModal.notSet': '未設定',
     'taskModal.subtasksLabel': 'サブタスク',
