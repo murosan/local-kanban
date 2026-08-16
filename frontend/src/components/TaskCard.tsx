@@ -21,6 +21,7 @@ interface TaskCardProps {
   onCardClick?: (task: Task) => void;
   onSubtaskToggle?: (subtask: Task) => void;
   onAddSubtask?: (parentId: string, title: string) => Promise<void> | void;
+  onChecklistItemToggle?: (task: Task, fieldId: string, itemId: string) => Promise<void> | void;
   isOverlay?: boolean;
 }
 
@@ -30,11 +31,13 @@ export const TaskCard: React.FC<TaskCardProps> = ({
   onCardClick,
   onSubtaskToggle,
   onAddSubtask,
+  onChecklistItemToggle,
   isOverlay,
 }) => {
   const { t } = useI18n();
   const [isSubtasksExpanded, setIsSubtasksExpanded] = useState(false);
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
+  const [expandedChecklists, setExpandedChecklists] = useState<Record<string, boolean>>({});
   const { attributes, listeners, setNodeRef, transform, isDragging } = useSortable({
     id: task.id,
     data: { task },
@@ -60,6 +63,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
     ? task.custom_fields
         .filter((cf) => {
           if (!cf || cf.enabled === false) return false;
+          if (cf.type === 'checklist') return true;
           if (Array.isArray(cf.value)) return cf.value.length > 0;
           return cf.value !== undefined && cf.value !== '' && cf.value !== false;
         })
@@ -131,12 +135,129 @@ export const TaskCard: React.FC<TaskCardProps> = ({
         </div>
       )}
 
-      {/* User Custom Fields with Color Badges */}
+      {/* User Custom Fields with Color Badges & Expandable Checklists */}
       {displayFields.length > 0 && (
-        <div className="flex flex-col space-y-1 mt-3">
+        <div className="flex flex-col space-y-1.5 mt-3">
           {displayFields.map((field) => {
             const hasColor = !!field.color;
             const safeUrl = field.type === 'link' ? getSafeUrl(field.value) : null;
+            const isChecklist = field.type === 'checklist';
+            const isExpanded = Boolean(expandedChecklists[field.id]);
+
+            if (isChecklist) {
+              const items = Array.isArray(field.value) ? (field.value as ChecklistItem[]) : [];
+              const completedCount = items.filter((i) => i.completed).length;
+              const totalCount = items.length;
+              const isAllDone = totalCount > 0 && completedCount === totalCount;
+              const progressPercent =
+                totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+
+              return (
+                <div
+                  key={field.id}
+                  className="rounded-lg bg-[var(--bg-input)] text-[var(--text-secondary)] border border-[var(--border-color)] overflow-hidden transition-all"
+                >
+                  <div
+                    className="flex items-center justify-between text-[11px] px-2.5 py-1.5 cursor-pointer select-none hover:bg-[var(--bg-surface)] transition-colors group/chk"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setExpandedChecklists((prev) => ({
+                        ...prev,
+                        [field.id]: !prev[field.id],
+                      }));
+                    }}
+                  >
+                    <span className="text-[var(--text-secondary)] font-medium truncate max-w-[50%] flex items-center space-x-1.5">
+                      <CheckSquare className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                      <span className="truncate">{field.name}</span>
+                    </span>
+                    <div className="flex items-center space-x-1.5">
+                      <span
+                        className={`font-semibold font-mono text-[11px] px-1.5 py-0.5 rounded-full ${
+                          isAllDone
+                            ? 'bg-emerald-500/10 text-emerald-500 font-bold'
+                            : 'bg-blue-500/10 text-blue-500'
+                        }`}
+                      >
+                        {completedCount}/{totalCount}
+                      </span>
+                      <button
+                        type="button"
+                        className="p-0.5 rounded text-[var(--text-muted)] group-hover/chk:text-[var(--text-primary)] transition-colors"
+                      >
+                        {isExpanded ? (
+                          <ChevronDown className="w-3.5 h-3.5" />
+                        ) : (
+                          <ChevronRight className="w-3.5 h-3.5" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Expanded Checklist Content */}
+                  {isExpanded && (
+                    <div className="px-2.5 pb-2 pt-0.5 border-t border-[var(--border-color)] space-y-1.5">
+                      {/* Progress bar */}
+                      <div className="w-full bg-[var(--bg-surface)] rounded-full h-1 mt-1 overflow-hidden">
+                        <div
+                          className={`h-full transition-all duration-300 ${
+                            isAllDone ? 'bg-emerald-500' : 'bg-blue-500'
+                          }`}
+                          style={{ width: `${progressPercent}%` }}
+                        />
+                      </div>
+
+                      {/* Items List */}
+                      {items.length > 0 ? (
+                        <div className="space-y-1 pt-0.5">
+                          {items.map((item) => (
+                            <div
+                              key={item.id}
+                              className="flex items-center justify-between text-xs py-0.5 px-1 rounded hover:bg-[var(--bg-surface)] transition-colors group/item cursor-pointer"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onChecklistItemToggle?.(task, field.id, item.id);
+                              }}
+                            >
+                              <div className="flex items-center space-x-1.5 flex-1 min-w-0">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onChecklistItemToggle?.(task, field.id, item.id);
+                                  }}
+                                  className="shrink-0 text-[var(--text-muted)] hover:text-blue-500 transition-colors"
+                                >
+                                  {item.completed ? (
+                                    <CheckSquare className="w-3.5 h-3.5 text-emerald-500" />
+                                  ) : (
+                                    <Square className="w-3.5 h-3.5" />
+                                  )}
+                                </button>
+                                <span
+                                  className={`truncate text-xs ${
+                                    item.completed
+                                      ? 'line-through text-[var(--text-muted)]'
+                                      : 'text-[var(--text-primary)]'
+                                  }`}
+                                >
+                                  {item.text}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-[11px] text-[var(--text-muted)] italic py-1 text-center">
+                          {t('taskModal.noChecklistItems') || 'チェック項目がありません'}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
             return (
               <div
                 key={field.id}
@@ -165,28 +286,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
                       style={{ backgroundColor: field.color }}
                     />
                   )}
-                  {field.type === 'checklist' ? (
-                    (() => {
-                      const items = Array.isArray(field.value)
-                        ? (field.value as ChecklistItem[])
-                        : [];
-                      const completedCount = items.filter((i) => i.completed).length;
-                      const totalCount = items.length;
-                      const isAllDone = totalCount > 0 && completedCount === totalCount;
-                      return (
-                        <span
-                          className={`inline-flex items-center space-x-1 font-mono text-[11px] ${
-                            isAllDone ? 'text-emerald-500 font-bold' : 'text-[var(--text-primary)]'
-                          }`}
-                        >
-                          <CheckSquare className="w-3 h-3" />
-                          <span>
-                            {completedCount}/{totalCount}
-                          </span>
-                        </span>
-                      );
-                    })()
-                  ) : safeUrl ? (
+                  {safeUrl ? (
                     <a
                       href={safeUrl}
                       target="_blank"
@@ -230,7 +330,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
               <ListTree className="w-3.5 h-3.5 text-blue-500" />
               <span>{t('taskCard.subtasks')}</span>
               <span
-                className={`text-[11px] font-mono font-semibold px-1.5 py-0.2 rounded-full ${
+                className={`text-[11px] font-mono font-semibold px-1.5 py-0.5 rounded-full ${
                   (task.subtasks_completed_count || 0) === (task.subtasks_count || 0) &&
                   (task.subtasks_count || 0) > 0
                     ? 'bg-emerald-500/10 text-emerald-500'

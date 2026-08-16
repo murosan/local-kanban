@@ -1,5 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { BoardConfig, Column, CustomFieldDef, SubtaskRef, Task, ThemeConfig } from './types/task';
+import {
+  BoardConfig,
+  Column,
+  CustomFieldDef,
+  ChecklistItem,
+  SubtaskRef,
+  Task,
+  ThemeConfig,
+} from './types/task';
 import {
   fetchBoardConfig,
   fetchTasks,
@@ -259,6 +267,35 @@ export const App: React.FC = () => {
     }
   };
 
+  const handleChecklistItemToggle = async (task: Task, fieldId: string, itemId: string) => {
+    if (!task.custom_fields) return;
+    const newCustomFields = task.custom_fields.map((cf) => {
+      const match = cf.id === fieldId || cf.field_id === fieldId || cf.name === fieldId;
+      if (match && cf.type === 'checklist') {
+        const currentItems = Array.isArray(cf.value) ? (cf.value as ChecklistItem[]) : [];
+        const newItems = currentItems.map((item) =>
+          item.id === itemId ? { ...item, completed: !item.completed } : item
+        );
+        return { ...cf, value: newItems };
+      }
+      return cf;
+    });
+
+    // Optimistic UI update
+    setTasks((prev) =>
+      prev.map((t) => (t.id === task.id ? { ...t, custom_fields: newCustomFields } : t))
+    );
+
+    try {
+      await updateTask(task.id, { custom_fields: newCustomFields });
+      await loadData();
+    } catch (err) {
+      console.error('Failed to toggle checklist item:', err);
+      addToast('Failed to update checklist item', 'error');
+      await loadData();
+    }
+  };
+
   const handleDeleteTask = async (id: string) => {
     try {
       await deleteTask(id);
@@ -358,6 +395,7 @@ export const App: React.FC = () => {
           onCardClick={handleCardClick}
           onSubtaskToggle={handleSubtaskToggle}
           onAddSubtask={handleAddSubtask}
+          onChecklistItemToggle={handleChecklistItemToggle}
           onAddCard={(columnId) => handleOpenNewCardModal(columnId)}
         />
       </main>
