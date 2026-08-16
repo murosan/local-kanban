@@ -1,4 +1,11 @@
-export type CustomFieldType = 'dropdown' | 'text' | 'number' | 'date' | 'checkbox' | 'link';
+export type CustomFieldType =
+  'dropdown' | 'text' | 'number' | 'date' | 'checkbox' | 'link' | 'checklist';
+
+export interface ChecklistItem {
+  id: string;
+  text: string;
+  completed: boolean;
+}
 
 export interface CustomFieldOption {
   id: string;
@@ -18,7 +25,7 @@ export interface CustomFieldValue {
   field_id?: string;
   name: string;
   type: CustomFieldType;
-  value: string | number | boolean | string[] | null;
+  value: string | number | boolean | string[] | ChecklistItem[] | null;
   options?: CustomFieldOption[];
   enabled?: boolean;
 }

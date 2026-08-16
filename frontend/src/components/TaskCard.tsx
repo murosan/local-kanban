@@ -1,8 +1,8 @@
 import React from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { CustomFieldDef, Task } from '../types/task';
-import { Tag, Clock, ExternalLink } from 'lucide-react';
+import { ChecklistItem, CustomFieldDef, Task } from '../types/task';
+import { Tag, Clock, ExternalLink, CheckSquare } from 'lucide-react';
 import { getSafeUrl } from '../utils/url';
 
 interface TaskCardProps {
@@ -41,14 +41,11 @@ export const TaskCard: React.FC<TaskCardProps> = ({
 
   const displayFields = Array.isArray(task.custom_fields)
     ? task.custom_fields
-        .filter(
-          (cf) =>
-            cf &&
-            (cf.enabled ?? true) &&
-            cf.value !== undefined &&
-            cf.value !== '' &&
-            cf.value !== false
-        )
+        .filter((cf) => {
+          if (!cf || cf.enabled === false) return false;
+          if (Array.isArray(cf.value)) return cf.value.length > 0;
+          return cf.value !== undefined && cf.value !== '' && cf.value !== false;
+        })
         .map((cf) => {
           let resolvedColor: string | undefined;
           if (cf.type === 'dropdown' && cf.options) {
@@ -151,7 +148,28 @@ export const TaskCard: React.FC<TaskCardProps> = ({
                       style={{ backgroundColor: field.color }}
                     />
                   )}
-                  {safeUrl ? (
+                  {field.type === 'checklist' ? (
+                    (() => {
+                      const items = Array.isArray(field.value)
+                        ? (field.value as ChecklistItem[])
+                        : [];
+                      const completedCount = items.filter((i) => i.completed).length;
+                      const totalCount = items.length;
+                      const isAllDone = totalCount > 0 && completedCount === totalCount;
+                      return (
+                        <span
+                          className={`inline-flex items-center space-x-1 font-mono text-[11px] ${
+                            isAllDone ? 'text-emerald-500 font-bold' : 'text-[var(--text-primary)]'
+                          }`}
+                        >
+                          <CheckSquare className="w-3 h-3" />
+                          <span>
+                            {completedCount}/{totalCount}
+                          </span>
+                        </span>
+                      );
+                    })()
+                  ) : safeUrl ? (
                     <a
                       href={safeUrl}
                       target="_blank"

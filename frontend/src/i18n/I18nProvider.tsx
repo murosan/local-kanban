@@ -28,7 +28,7 @@ export const I18nProvider: React.FC<{ initialLanguage?: string; children: ReactN
   }, []);
 
   const t = useCallback(
-    (key: string, params?: Record<string, string>): string => {
+    (key: string, params?: Record<string, string | number>): string => {
       const dict = translations[language] || translations.ja;
       let text =
         (dict as Record<string, string>)[key] ||
@@ -37,7 +37,7 @@ export const I18nProvider: React.FC<{ initialLanguage?: string; children: ReactN
 
       if (params) {
         Object.entries(params).forEach(([paramKey, paramVal]) => {
-          text = text.replace(new RegExp(`\\{${paramKey}\\}`, 'g'), paramVal);
+          text = text.replace(new RegExp(`\\{${paramKey}\\}`, 'g'), String(paramVal));
         });
       }
 
