@@ -862,7 +862,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
             <span className="hidden sm:inline">{t('editor.toc')}</span>
             {headings.length > 0 && (
               <span
-                className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
+                className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono font-bold ${
                   isTocOpen
                     ? 'bg-blue-500/30 text-blue-300'
                     : 'bg-[var(--bg-card)] text-[var(--text-muted)]'
