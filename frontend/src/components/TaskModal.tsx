@@ -31,6 +31,7 @@ import {
   CheckSquare,
 } from 'lucide-react';
 import { MarkdownEditor, ChangeOptions } from './MarkdownEditor';
+import { TagInput } from './TagInput';
 import { useI18n } from '../i18n/useI18n';
 import { fetchTaskById } from '../services/api';
 import { getSafeUrl } from '../utils/url';
@@ -42,6 +43,7 @@ interface TaskModalProps {
   columns?: Column[];
   initialColumnId?: string;
   customFields?: CustomFieldDef[];
+  availableTags?: string[];
   onClose: () => void;
   onSave: (taskData: Partial<Task>, options?: { silent?: boolean }) => Promise<void>;
   onDelete?: (id: string) => Promise<void>;
@@ -50,7 +52,7 @@ interface TaskModalProps {
 interface FormState {
   title: string;
   columnId: string;
-  tagsInput: string;
+  tags: string[];
   content: string;
   customFieldsState: CustomFieldValue[];
   selectionStart?: number;
@@ -65,6 +67,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   columns = [],
   initialColumnId = '',
   customFields = [],
+  availableTags = [],
   onClose,
   onSave,
   onDelete,
@@ -74,7 +77,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   const [columnId, setColumnId] = useState<string>(() =>
     task ? task.column_id || initialColumnId : initialColumnId || columns[0]?.id || ''
   );
-  const [tagsInput, setTagsInput] = useState(() => (task && task.tags ? task.tags.join(', ') : ''));
+  const [tags, setTags] = useState<string[]>(() => (task && task.tags ? [...task.tags] : []));
   const [content, setContent] = useState(() => (task ? task.content || '' : ''));
 
   const parseInitialCustomFields = useCallback(
@@ -147,7 +150,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   const latestStateRef = useRef<FormState>({
     title,
     columnId,
-    tagsInput,
+    tags,
     content,
     customFieldsState,
   });
@@ -156,11 +159,11 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     latestStateRef.current = {
       title,
       columnId,
-      tagsInput,
+      tags,
       content,
       customFieldsState,
     };
-  }, [title, columnId, tagsInput, content, customFieldsState]);
+  }, [title, columnId, tags, content, customFieldsState]);
 
   const executeSave = useCallback(
     async (formStateToSave?: FormState) => {
@@ -176,17 +179,12 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       setSaveStatus('saving');
       setIsSaving(true);
       try {
-        const tags = currentState.tagsInput
-          .split(',')
-          .map((t) => t.trim())
-          .filter(Boolean);
-
         await onSave(
           {
             id: task.id,
             title: currentState.title.trim(),
             column_id: currentState.columnId || columns[0]?.id,
-            tags,
+            tags: currentState.tags || [],
             custom_fields: currentState.customFieldsState,
             content: currentState.content.trim(),
           },
@@ -266,13 +264,13 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       const initialCol = task
         ? task.column_id || initialColumnId
         : initialColumnId || columns[0]?.id || '';
-      const initialTags = task && task.tags ? task.tags.join(', ') : '';
+      const initialTags = task && task.tags ? [...task.tags] : [];
       const initialContent = task ? task.content || '' : '';
       const initialFields = parseInitialCustomFields(task);
 
       setTitle(initialTitle);
       setColumnId(initialCol);
-      setTagsInput(initialTags);
+      setTags(initialTags);
       setContent(initialContent);
       setCustomFieldsState(initialFields);
       setSaveStatus('saved');
@@ -280,7 +278,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       const initial: FormState = {
         title: initialTitle,
         columnId: initialCol,
-        tagsInput: initialTags,
+        tags: initialTags,
         content: initialContent,
         customFieldsState: initialFields,
       };
@@ -354,7 +352,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 
       setTitle(prevState.title);
       setColumnId(prevState.columnId);
-      setTagsInput(prevState.tagsInput);
+      setTags(prevState.tags);
       setContent(prevState.content);
       setCustomFieldsState(prevState.customFieldsState);
 
@@ -374,7 +372,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 
       setTitle(nextState.title);
       setColumnId(nextState.columnId);
-      setTagsInput(nextState.tagsInput);
+      setTags(nextState.tags);
       setContent(nextState.content);
       setCustomFieldsState(nextState.customFieldsState);
 
@@ -427,7 +425,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     const newState = {
       title: newTitle,
       columnId,
-      tagsInput,
+      tags,
       content,
       customFieldsState,
     };
@@ -440,7 +438,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     const newState = {
       title,
       columnId: newColumnId,
-      tagsInput,
+      tags,
       content,
       customFieldsState,
     };
@@ -448,17 +446,17 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     triggerAutoSave(newState, true);
   };
 
-  const handleTagsChange = (newTagsInput: string) => {
-    setTagsInput(newTagsInput);
+  const handleTagsChange = (newTags: string[]) => {
+    setTags(newTags);
     const newState = {
       title,
       columnId,
-      tagsInput: newTagsInput,
+      tags: newTags,
       content,
       customFieldsState,
     };
-    recordHistory(newState);
-    triggerAutoSave(newState, false);
+    recordHistory(newState, { immediate: true });
+    triggerAutoSave(newState, true);
   };
 
   const handleUpdateCustomField = (id: string, updates: Partial<CustomFieldValue>) => {
@@ -468,7 +466,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       const newState = {
         title,
         columnId,
-        tagsInput,
+        tags,
         content,
         customFieldsState: nextCustomFields,
       };
@@ -488,7 +486,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       const newState = {
         title,
         columnId,
-        tagsInput,
+        tags,
         content,
         customFieldsState: nextCustomFields,
       };
@@ -528,7 +526,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       const newState = {
         title,
         columnId,
-        tagsInput,
+        tags,
         content,
         customFieldsState: nextCustomFields,
       };
@@ -584,7 +582,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       const newState = {
         title,
         columnId,
-        tagsInput,
+        tags,
         content,
         customFieldsState: nextCustomFields,
       };
@@ -612,7 +610,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       const newState = {
         title,
         columnId,
-        tagsInput,
+        tags,
         content,
         customFieldsState: nextCustomFields,
       };
@@ -637,7 +635,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       const newState = {
         title,
         columnId,
-        tagsInput,
+        tags,
         content,
         customFieldsState: nextCustomFields,
       };
@@ -660,7 +658,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       const newState = {
         title,
         columnId,
-        tagsInput,
+        tags,
         content,
         customFieldsState: nextCustomFields,
       };
@@ -689,7 +687,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       const newState = {
         title,
         columnId,
-        tagsInput,
+        tags,
         content,
         customFieldsState: nextCustomFields,
       };
@@ -723,7 +721,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       const newState = {
         title,
         columnId,
-        tagsInput,
+        tags,
         content,
         customFieldsState: nextCustomFields,
       };
@@ -750,7 +748,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       const newState = {
         title,
         columnId,
-        tagsInput,
+        tags,
         content,
         customFieldsState: nextCustomFields,
       };
@@ -777,7 +775,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       const newState = {
         title,
         columnId,
-        tagsInput,
+        tags,
         content,
         customFieldsState: nextCustomFields,
       };
@@ -804,7 +802,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       const newState = {
         title,
         columnId,
-        tagsInput,
+        tags,
         content,
         customFieldsState: nextCustomFields,
       };
@@ -819,7 +817,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     const newState = {
       title,
       columnId,
-      tagsInput,
+      tags,
       content: newContent,
       customFieldsState,
       selectionStart: options?.selectionStart,
@@ -838,15 +836,10 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     } else {
       setIsSaving(true);
       try {
-        const tags = tagsInput
-          .split(',')
-          .map((t) => t.trim())
-          .filter(Boolean);
-
         await onSave({
           title: title.trim(),
           column_id: columnId || columns[0]?.id,
-          tags,
+          tags: tags || [],
           custom_fields: customFieldsState,
           content: content.trim(),
         });
@@ -1640,12 +1633,11 @@ export const TaskModal: React.FC<TaskModalProps> = ({
               <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-1.5 flex items-center gap-1">
                 <Tag className="w-3.5 h-3.5 text-[var(--text-muted)]" /> {t('taskModal.tagsLabel')}
               </label>
-              <input
-                type="text"
-                value={tagsInput}
-                onChange={(e) => handleTagsChange(e.target.value)}
+              <TagInput
+                tags={tags}
+                onChange={handleTagsChange}
+                availableTags={availableTags}
                 placeholder={t('taskModal.tagsPlaceholder')}
-                className="w-full px-3.5 py-2 text-sm bg-[var(--bg-input)] border border-[var(--border-color)] rounded-xl text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-blue-500"
               />
             </div>
 
