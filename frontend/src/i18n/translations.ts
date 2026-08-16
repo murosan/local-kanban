@@ -130,6 +130,10 @@ export const translations = {
     'editor.link': 'リンク',
     'editor.horizontalRule': '水平線',
     'editor.timestamp': '現在日時',
+    'editor.toc': '目次',
+    'editor.tocEmpty': '見出し（# 見出し）を追加すると自動で目次が作成されます',
+    'editor.tocToggle': '目次の表示切り替え',
+    'editor.tocClose': '目次を閉じる',
 
     // Presets Names
     'preset.dark': '標準ダーク',
@@ -282,6 +286,10 @@ export const translations = {
     'editor.link': 'Link',
     'editor.horizontalRule': 'Horizontal Line',
     'editor.timestamp': 'Timestamp',
+    'editor.toc': 'Table of Contents',
+    'editor.tocEmpty': 'Add headings (# Heading) to generate a table of contents',
+    'editor.tocToggle': 'Toggle Table of Contents',
+    'editor.tocClose': 'Close Table of Contents',
 
     // Presets Names
     'preset.dark': 'Default Dark',
