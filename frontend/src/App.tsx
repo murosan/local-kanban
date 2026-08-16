@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { BoardConfig, Column, CustomFieldDef, Task, ThemeConfig } from './types/task';
+import { BoardConfig, Column, CustomFieldDef, SubtaskRef, Task, ThemeConfig } from './types/task';
 import {
   fetchBoardConfig,
   fetchTasks,
@@ -205,6 +205,60 @@ export const App: React.FC = () => {
     }
   };
 
+  const handleSubtaskToggle = async (subtask: Task) => {
+    const parentTask = tasks.find(
+      (t) =>
+        t.subtask_details?.some((s) => s.id === subtask.id) ||
+        t.subtasks?.some((s) => s.id === subtask.id) ||
+        (subtask.parent_id && t.id === subtask.parent_id)
+    );
+    if (!parentTask) return;
+
+    const existingSubRefs: SubtaskRef[] =
+      parentTask.subtasks && parentTask.subtasks.length > 0
+        ? [...parentTask.subtasks]
+        : (parentTask.subtask_details || []).map((s) => ({
+            id: s.id,
+            completed: Boolean(s.completed),
+          }));
+
+    const targetRef = existingSubRefs.find((s) => s.id === subtask.id);
+    let newSubtasks: SubtaskRef[];
+    if (targetRef) {
+      newSubtasks = existingSubRefs.map((s) =>
+        s.id === subtask.id ? { ...s, completed: !s.completed } : s
+      );
+    } else {
+      newSubtasks = [...existingSubRefs, { id: subtask.id, completed: true }];
+    }
+
+    try {
+      await updateTask(parentTask.id, { subtasks: newSubtasks });
+      await loadData();
+    } catch (err) {
+      console.error('Failed to toggle subtask:', err);
+      addToast('Failed to update subtask', 'error');
+    }
+  };
+
+  const handleAddSubtask = async (parentId: string, title: string) => {
+    if (!config || config.columns.length === 0) return;
+    const parentTask = tasks.find((t) => t.id === parentId);
+    const targetColumn = parentTask?.column_id || config.columns[0].id;
+    try {
+      await createTask({
+        parent_id: parentId,
+        title,
+        column_id: targetColumn,
+      });
+      addToast(t('common.created') || 'Subtask created', 'success');
+      await loadData();
+    } catch (err) {
+      console.error('Failed to create subtask:', err);
+      addToast('Failed to create subtask', 'error');
+    }
+  };
+
   const handleDeleteTask = async (id: string) => {
     try {
       await deleteTask(id);
@@ -302,6 +356,8 @@ export const App: React.FC = () => {
           onTaskUpdated={loadData}
           onTasksChange={setTasks}
           onCardClick={handleCardClick}
+          onSubtaskToggle={handleSubtaskToggle}
+          onAddSubtask={handleAddSubtask}
           onAddCard={(columnId) => handleOpenNewCardModal(columnId)}
         />
       </main>
@@ -326,9 +382,11 @@ export const App: React.FC = () => {
           initialColumnId={initialColumnId}
           customFields={config.custom_fields}
           availableTags={availableTags}
+          allTasks={tasks}
           onClose={() => setIsTaskModalOpen(false)}
           onSave={handleSaveTask}
           onDelete={handleDeleteTask}
+          onOpenTask={(task) => setSelectedTask(task)}
         />
       )}
 

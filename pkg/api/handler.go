@@ -89,25 +89,46 @@ func (s *Server) handleGetTasks(w http.ResponseWriter, r *http.Request) {
 		tasks = make([]*model.Task, 0)
 	}
 
+	taskByID := make(map[string]*model.Task, len(tasks))
+	childIDs := make(map[string]bool)
+	for _, t := range tasks {
+		taskByID[t.ID] = t
+		for _, ref := range t.Subtasks {
+			childIDs[ref.ID] = true
+		}
+		if t.ParentID != "" {
+			childIDs[t.ID] = true
+		}
+	}
+
+	// Filter tasks if query exists
+	var matchedRootIDs map[string]bool
 	if query != "" {
+		matchedRootIDs = make(map[string]bool)
 		if s.searchEngine != nil {
 			matchedIDs, err := s.searchEngine.Search(rawQuery)
 			if err == nil {
-				idMap := make(map[string]bool, len(matchedIDs))
 				for _, id := range matchedIDs {
-					idMap[id] = true
-				}
-				filtered := make([]*model.Task, 0)
-				for _, t := range tasks {
-					if idMap[t.ID] {
-						filtered = append(filtered, t)
+					if t, exists := taskByID[id]; exists {
+						if childIDs[t.ID] {
+							// Find parent of this subtask
+							for _, parent := range tasks {
+								for _, ref := range parent.Subtasks {
+									if ref.ID == t.ID {
+										matchedRootIDs[parent.ID] = true
+									}
+								}
+								if parent.ID == t.ParentID {
+									matchedRootIDs[parent.ID] = true
+								}
+							}
+						} else {
+							matchedRootIDs[t.ID] = true
+						}
 					}
 				}
-				tasks = filtered
 			}
 		} else {
-			// Fallback to in-memory search if searchEngine is nil or failed
-			filtered := make([]*model.Task, 0)
 			for _, t := range tasks {
 				match := strings.Contains(strings.ToLower(t.Title), query) ||
 					strings.Contains(strings.ToLower(t.Content), query) ||
@@ -121,19 +142,53 @@ func (s *Server) handleGetTasks(w http.ResponseWriter, r *http.Request) {
 					}
 				}
 				if match {
-					filtered = append(filtered, t)
+					if childIDs[t.ID] {
+						for _, parent := range tasks {
+							for _, ref := range parent.Subtasks {
+								if ref.ID == t.ID {
+									matchedRootIDs[parent.ID] = true
+								}
+							}
+							if parent.ID == t.ParentID {
+								matchedRootIDs[parent.ID] = true
+							}
+						}
+					} else {
+						matchedRootIDs[t.ID] = true
+					}
 				}
 			}
-			tasks = filtered
 		}
 	}
 
-	lightweightTasks := make([]*model.Task, len(tasks))
-	for i, t := range tasks {
-		lightweightTasks[i] = toLightweightTask(t)
+	// Build root tasks list with attached subtasks
+	rootTasks := make([]*model.Task, 0)
+	for _, t := range tasks {
+		if childIDs[t.ID] {
+			// Subtasks are attached to root tasks
+			continue
+		}
+		if matchedRootIDs != nil && !matchedRootIDs[t.ID] {
+			continue
+		}
+
+		subs, _ := s.store.GetSubtasksByParentID(t.ID)
+		t.SubtasksCount = len(subs)
+		completed := 0
+		lightweightSubs := make([]*model.Task, len(subs))
+		for i, sub := range subs {
+			if sub.Completed {
+				completed++
+			}
+			lightweightSubs[i] = toLightweightTask(sub)
+		}
+		t.SubtasksCompletedCount = completed
+		t.SubtaskDetails = lightweightSubs
+
+		rootTasks = append(rootTasks, toLightweightTask(t))
 	}
 
-	respondJSON(w, http.StatusOK, lightweightTasks)
+	respondJSON(w, http.StatusOK, rootTasks)
 }
 
 func (s *Server) handleGetTask(w http.ResponseWriter, r *http.Request) {
@@ -153,6 +208,19 @@ func (s *Server) handleGetTask(w http.ResponseWriter, r *http.Request) {
 		task.Summary = model.GenerateSummary(task.Content)
 	}
 
+	subs, _ := s.store.GetSubtasksByParentID(task.ID)
+	task.SubtasksCount = len(subs)
+	completed := 0
+	lightweightSubs := make([]*model.Task, len(subs))
+	for i, sub := range subs {
+		if sub.Completed {
+			completed++
+		}
+		lightweightSubs[i] = toLightweightTask(sub)
+	}
+	task.SubtasksCompletedCount = completed
+	task.SubtaskDetails = lightweightSubs
+
 	respondJSON(w, http.StatusOK, task)
 }
 
@@ -168,10 +236,12 @@ func toLightweightTask(t *model.Task) *model.Task {
 }
 
 type CreateTaskPayload struct {
+	ParentID     string                   `json:"parent_id,omitempty"`
 	Title        string                   `json:"title"`
 	ColumnID     string                   `json:"column_id"`
 	Tags         []string                 `json:"tags"`
 	CustomFields []model.CustomFieldValue `json:"custom_fields,omitempty"`
+	Subtasks     []model.SubtaskRef       `json:"subtasks,omitempty"`
 	Content      string                   `json:"content"`
 	PrevID       string                   `json:"prev_id"`
 	NextID       string                   `json:"next_id"`
@@ -189,15 +259,44 @@ func (s *Server) handleCreateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if payload.ParentID != "" {
+		if err := s.store.ValidateParentID("", payload.ParentID); err != nil {
+			respondError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
+
+	colID := payload.ColumnID
+	if colID == "" {
+		if payload.ParentID != "" {
+			if parent, err := s.store.GetTaskByID(payload.ParentID); err == nil && parent != nil {
+				colID = parent.ColumnID
+			}
+		}
+		if colID == "" {
+			colID = "col-todo"
+		}
+	}
+
 	// Calculate LexoRank
-	rank := s.calculateRank(payload.ColumnID, payload.PrevID, payload.NextID)
+	rank := s.calculateRank(colID, payload.PrevID, payload.NextID)
+	if payload.ParentID != "" && payload.PrevID == "" && payload.NextID == "" {
+		if subtasks, err := s.store.GetSubtasksByParentID(
+			payload.ParentID,
+		); err == nil &&
+			len(subtasks) > 0 {
+			rank = lexorank.Between(subtasks[len(subtasks)-1].Rank, "")
+		}
+	}
 
 	task := &model.Task{
+		ParentID:     payload.ParentID,
 		Title:        payload.Title,
-		ColumnID:     payload.ColumnID,
+		ColumnID:     colID,
 		Rank:         rank,
 		Tags:         payload.Tags,
 		CustomFields: payload.CustomFields,
+		Subtasks:     payload.Subtasks,
 		Content:      payload.Content,
 	}
 
@@ -206,14 +305,36 @@ func (s *Server) handleCreateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// If parent_id is specified, add this task to parent's Subtasks
+	if payload.ParentID != "" {
+		if parent, err := s.store.GetTaskByID(payload.ParentID); err == nil && parent != nil {
+			alreadyExists := false
+			for _, ref := range parent.Subtasks {
+				if ref.ID == task.ID {
+					alreadyExists = true
+					break
+				}
+			}
+			if !alreadyExists {
+				parent.Subtasks = append(parent.Subtasks, model.SubtaskRef{
+					ID:        task.ID,
+					Completed: false,
+				})
+				_ = s.store.SaveTask(parent)
+			}
+		}
+	}
+
 	respondJSON(w, http.StatusCreated, task)
 }
 
 type UpdateTaskPayload struct {
+	ParentID     *string                  `json:"parent_id,omitempty"`
 	Title        *string                  `json:"title"`
 	ColumnID     *string                  `json:"column_id"`
 	Tags         []string                 `json:"tags"`
 	CustomFields []model.CustomFieldValue `json:"custom_fields,omitempty"`
+	Subtasks     *[]model.SubtaskRef      `json:"subtasks,omitempty"`
 	Content      *string                  `json:"content"`
 	Rank         *string                  `json:"rank"`
 	PrevID       string                   `json:"prev_id"`
@@ -239,6 +360,13 @@ func (s *Server) handleUpdateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if payload.ParentID != nil {
+		if err := s.store.ValidateParentID(task.ID, *payload.ParentID); err != nil {
+			respondError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		task.ParentID = *payload.ParentID
+	}
 	if payload.Title != nil {
 		task.Title = *payload.Title
 	}
@@ -252,6 +380,9 @@ func (s *Server) handleUpdateTask(w http.ResponseWriter, r *http.Request) {
 	}
 	if payload.CustomFields != nil {
 		task.CustomFields = payload.CustomFields
+	}
+	if payload.Subtasks != nil {
+		task.Subtasks = *payload.Subtasks
 	}
 	if payload.Content != nil {
 		task.Content = *payload.Content
@@ -319,27 +450,22 @@ func (s *Server) handleGetTags(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) calculateRank(columnID string, prevID, nextID string) string {
-	var tasks []*model.Task
-	var err error
-	if columnID != "" {
-		tasks, err = s.store.GetTasksByColumnID(columnID)
-	} else {
-		tasks, err = s.store.GetVisibleTasks()
+	var prevRank, nextRank string
+	if prevID != "" {
+		if prevTask, err := s.store.GetTaskByID(prevID); err == nil && prevTask != nil {
+			prevRank = prevTask.Rank
+		}
 	}
-	if err != nil {
-		return lexorank.Between("", "")
+	if nextID != "" {
+		if nextTask, err := s.store.GetTaskByID(nextID); err == nil && nextTask != nil {
+			nextRank = nextTask.Rank
+		}
 	}
 
-	var prevRank, nextRank string
-	for _, t := range tasks {
-		if columnID != "" && t.ColumnID != columnID {
-			continue
-		}
-		if prevID != "" && t.ID == prevID {
-			prevRank = t.Rank
-		}
-		if nextID != "" && t.ID == nextID {
-			nextRank = t.Rank
+	if prevID == "" && nextID == "" && columnID != "" {
+		tasks, err := s.store.GetTasksByColumnID(columnID)
+		if err == nil && len(tasks) > 0 {
+			prevRank = tasks[len(tasks)-1].Rank
 		}
 	}
 

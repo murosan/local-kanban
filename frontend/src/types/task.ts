@@ -30,9 +30,15 @@ export interface CustomFieldValue {
   enabled?: boolean;
 }
 
+export interface SubtaskRef {
+  id: string;
+  completed: boolean;
+}
+
 export interface Task {
   version?: number;
   id: string;
+  parent_id?: string;
   title: string;
   column_id?: string;
   rank: string;
@@ -43,6 +49,11 @@ export interface Task {
   content?: string;
   summary?: string;
   file_path?: string;
+  subtasks?: SubtaskRef[];
+  subtasks_count?: number;
+  subtasks_completed_count?: number;
+  subtask_details?: Task[];
+  completed?: boolean;
 }
 
 export interface Column {

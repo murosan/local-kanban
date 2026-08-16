@@ -11,6 +11,8 @@ interface KanbanColumnProps {
   customFields?: CustomFieldDef[];
   tasks: Task[];
   onCardClick: (task: Task) => void;
+  onSubtaskToggle?: (subtask: Task) => void;
+  onAddSubtask?: (parentId: string, title: string) => Promise<void> | void;
   onAddCard?: (columnId: string) => void;
 }
 
@@ -19,6 +21,8 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
   customFields = [],
   tasks,
   onCardClick,
+  onSubtaskToggle,
+  onAddSubtask,
   onAddCard,
 }) => {
   const { t } = useI18n();
@@ -75,6 +79,8 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
               task={task}
               customFields={customFields}
               onCardClick={onCardClick}
+              onSubtaskToggle={onSubtaskToggle}
+              onAddSubtask={onAddSubtask}
             />
           ))}
         </SortableContext>

@@ -1,4 +1,4 @@
-import { BoardConfig, CustomFieldValue, Task } from '../types/task';
+import { BoardConfig, CustomFieldValue, SubtaskRef, Task } from '../types/task';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 
@@ -40,10 +40,12 @@ export async function fetchTags(): Promise<string[]> {
 }
 
 export interface CreateTaskPayload {
+  parent_id?: string;
   title: string;
   column_id?: string;
   tags?: string[];
   custom_fields?: CustomFieldValue[];
+  subtasks?: SubtaskRef[];
   content?: string;
   prev_id?: string;
   next_id?: string;
@@ -60,10 +62,12 @@ export async function createTask(payload: CreateTaskPayload): Promise<Task> {
 }
 
 export interface UpdateTaskPayload {
+  parent_id?: string;
   title?: string;
   column_id?: string;
   tags?: string[];
   custom_fields?: CustomFieldValue[];
+  subtasks?: SubtaskRef[];
   content?: string;
   rank?: string;
   prev_id?: string;

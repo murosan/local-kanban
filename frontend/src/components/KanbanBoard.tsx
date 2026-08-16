@@ -23,6 +23,8 @@ interface KanbanBoardProps {
   onTaskUpdated: () => void;
   onTasksChange?: (tasks: Task[]) => void;
   onCardClick: (task: Task) => void;
+  onSubtaskToggle?: (subtask: Task) => void;
+  onAddSubtask?: (parentId: string, title: string) => Promise<void> | void;
   onAddCard?: (columnId: string) => void;
 }
 
@@ -33,6 +35,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   onTaskUpdated,
   onTasksChange,
   onCardClick,
+  onSubtaskToggle,
+  onAddSubtask,
   onAddCard,
 }) => {
   const { t } = useI18n();
@@ -195,6 +199,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
               customFields={customFields}
               tasks={colTasks}
               onCardClick={onCardClick}
+              onSubtaskToggle={onSubtaskToggle}
+              onAddSubtask={onAddSubtask}
               onAddCard={onAddCard}
             />
           );

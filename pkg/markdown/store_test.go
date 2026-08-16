@@ -366,3 +366,137 @@ func TestChecklistCustomField(t *testing.T) {
 		t.Fatalf("expected 2 items, got %d", len(items))
 	}
 }
+
+func TestSubtasksCRUDAndCascade(t *testing.T) {
+	tmpDir := t.TempDir()
+	store, err := NewStore(tmpDir)
+	if err != nil {
+		t.Fatalf("failed to init store: %v", err)
+	}
+
+	cacheDBPath := filepath.Join(tmpDir, "cache.db")
+	c, err := cache.NewSQLiteCache(cacheDBPath)
+	if err != nil {
+		t.Fatalf("failed to init cache: %v", err)
+	}
+	defer func() { _ = c.Close() }()
+	store.SetCache(c)
+
+	parent := &model.Task{
+		Title:    "Parent Task",
+		ColumnID: "col-todo",
+		Rank:     "0|a",
+		Content:  "Parent content",
+	}
+	if err := store.SaveTask(parent); err != nil {
+		t.Fatalf("failed to save parent: %v", err)
+	}
+
+	sub1 := &model.Task{
+		ParentID: parent.ID,
+		Title:    "Subtask 1",
+		ColumnID: "col-todo",
+		Rank:     "0|a",
+		Content:  "Subtask 1 content",
+	}
+	if err := store.SaveTask(sub1); err != nil {
+		t.Fatalf("failed to save sub1: %v", err)
+	}
+
+	sub2 := &model.Task{
+		ParentID: parent.ID,
+		Title:    "Subtask 2",
+		ColumnID: "col-done",
+		Rank:     "0|b",
+		Content:  "Subtask 2 content",
+	}
+	if err := store.SaveTask(sub2); err != nil {
+		t.Fatalf("failed to save sub2: %v", err)
+	}
+
+	// Verify GetSubtasksByParentID
+	subtasks, err := store.GetSubtasksByParentID(parent.ID)
+	if err != nil {
+		t.Fatalf("failed to get subtasks: %v", err)
+	}
+	if len(subtasks) != 2 {
+		t.Fatalf("expected 2 subtasks, got %d", len(subtasks))
+	}
+
+	// Verify subtask markdown file contains parent_id
+	loadedSub1, err := store.GetTaskByID(sub1.ID)
+	if err != nil {
+		t.Fatalf("failed to get sub1: %v", err)
+	}
+	if loadedSub1.ParentID != parent.ID {
+		t.Errorf("expected parent_id %s, got %s", parent.ID, loadedSub1.ParentID)
+	}
+
+	// Cascade delete parent
+	if err := store.DeleteTask(parent.ID); err != nil {
+		t.Fatalf("failed to delete parent: %v", err)
+	}
+
+	// Verify parent and all subtasks are deleted
+	allTasks, err := store.GetAllTasks()
+	if err != nil {
+		t.Fatalf("failed to get all tasks: %v", err)
+	}
+	if len(allTasks) != 0 {
+		t.Errorf("expected 0 tasks after cascade delete, got %d", len(allTasks))
+	}
+}
+
+func TestValidateParentID(t *testing.T) {
+	tmpDir := t.TempDir()
+	store, err := NewStore(tmpDir)
+	if err != nil {
+		t.Fatalf("failed to init store: %v", err)
+	}
+
+	// Empty parentID is always valid
+	if err := store.ValidateParentID("any-id", ""); err != nil {
+		t.Errorf("expected empty parent_id to be valid, got %v", err)
+	}
+
+	// 1. Non-existent parent
+	if err := store.ValidateParentID("task-1", "non-existent-id"); err == nil {
+		t.Error("expected error for non-existent parent, got nil")
+	}
+
+	// 2. Self parent
+	if err := store.ValidateParentID("task-1", "task-1"); err == nil {
+		t.Error("expected error for self-parent, got nil")
+	}
+
+	// Create root tasks A and B
+	taskA := &model.Task{Title: "Task A", ColumnID: "col-todo", Rank: "0|a"}
+	if err := store.SaveTask(taskA); err != nil {
+		t.Fatalf("failed to save taskA: %v", err)
+	}
+	taskB := &model.Task{Title: "Task B", ColumnID: "col-todo", Rank: "0|b"}
+	if err := store.SaveTask(taskB); err != nil {
+		t.Fatalf("failed to save taskB: %v", err)
+	}
+
+	// Valid parent setting: B is parent of A
+	if err := store.ValidateParentID(taskA.ID, taskB.ID); err != nil {
+		t.Errorf("expected valid parent setting, got %v", err)
+	}
+
+	// Make sub1 a subtask of taskA
+	sub1 := &model.Task{ParentID: taskA.ID, Title: "Sub 1", ColumnID: "col-todo", Rank: "0|a"}
+	if err := store.SaveTask(sub1); err != nil {
+		t.Fatalf("failed to save sub1: %v", err)
+	}
+
+	// 3. Multi-level nesting: setting sub1 as parent of taskB should fail (sub1 is already a subtask)
+	if err := store.ValidateParentID(taskB.ID, sub1.ID); err == nil {
+		t.Error("expected error when setting a subtask as parent, got nil")
+	}
+
+	// 4. Task with existing subtasks cannot become a subtask of another task: taskA has sub1, so taskA cannot have parent taskB
+	if err := store.ValidateParentID(taskA.ID, taskB.ID); err == nil {
+		t.Error("expected error when task with subtasks tries to become a subtask, got nil")
+	}
+}

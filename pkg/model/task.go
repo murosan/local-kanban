@@ -42,10 +42,16 @@ type CustomFieldValue struct {
 	Enabled bool                `json:"enabled"            yaml:"enabled"`
 }
 
+type SubtaskRef struct {
+	ID        string `json:"id"        yaml:"id"`
+	Completed bool   `json:"completed" yaml:"completed"`
+}
+
 // Task represents a kanban task card and its associated markdown file structure.
 type Task struct {
 	Version      int                `json:"version"                 yaml:"version"`
 	ID           string             `json:"id"                      yaml:"id"`
+	ParentID     string             `json:"parent_id,omitempty"     yaml:"parent_id,omitempty"`
 	Title        string             `json:"title"                   yaml:"title"`
 	ColumnID     string             `json:"column_id,omitempty"     yaml:"column_id,omitempty"`
 	Rank         string             `json:"rank"                    yaml:"rank"`
@@ -53,6 +59,15 @@ type Task struct {
 	CreatedAt    time.Time          `json:"created_at"              yaml:"created_at"`
 	UpdatedAt    time.Time          `json:"updated_at"              yaml:"updated_at"`
 	CustomFields []CustomFieldValue `json:"custom_fields,omitempty" yaml:"custom_fields,omitempty"`
+
+	// Subtasks references defined on parent task (SSOT)
+	Subtasks []SubtaskRef `json:"subtasks,omitempty" yaml:"subtasks,omitempty"`
+
+	// Subtask computed / populated fields for API responses
+	SubtasksCount          int  `json:"subtasks_count,omitempty"           yaml:"-"`
+	SubtasksCompletedCount int  `json:"subtasks_completed_count,omitempty" yaml:"-"`
+	SubtaskDetails         any  `json:"subtask_details,omitempty"          yaml:"-"`
+	Completed              bool `json:"completed,omitempty"                yaml:"-"`
 
 	// Body content of the markdown file (after frontmatter)
 	Content  string `json:"content,omitempty"   yaml:"-"`

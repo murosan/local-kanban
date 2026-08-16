@@ -21,15 +21,18 @@ type Server struct {
 }
 
 type GetTasksInput struct {
-	Status string `json:"status,omitempty" jsonschema:"Filter tasks by column status ID (e.g. col-todo, col-in-progress, col-done)"`
-	Tag    string `json:"tag,omitempty"    jsonschema:"Filter tasks by tag"`
-	Limit  int    `json:"limit,omitempty"  jsonschema:"Maximum number of tasks to return"`
+	Status          string `json:"status,omitempty"           jsonschema:"Filter tasks by column status ID (e.g. col-todo, col-in-progress, col-done)"`
+	Tag             string `json:"tag,omitempty"              jsonschema:"Filter tasks by tag"`
+	ParentID        string `json:"parent_id,omitempty"        jsonschema:"Filter tasks by parent task ID"`
+	IncludeSubtasks bool   `json:"include_subtasks,omitempty" jsonschema:"Whether to include subtasks when parent_id is empty (default false)"`
+	Limit           int    `json:"limit,omitempty"            jsonschema:"Maximum number of tasks to return"`
 }
 
 type CreateTaskInput struct {
 	Title       string   `json:"title"                 jsonschema:"Task title"`
 	Description string   `json:"description,omitempty" jsonschema:"Task markdown description"`
 	Status      string   `json:"status,omitempty"      jsonschema:"Status column ID (defaults to col-todo)"`
+	ParentID    string   `json:"parent_id,omitempty"   jsonschema:"Optional parent task ID to create as a subtask"`
 	Tags        []string `json:"tags,omitempty"        jsonschema:"Tags list"`
 }
 
@@ -41,6 +44,7 @@ type UpdateTaskStatusInput struct {
 
 type UpdateTaskInput struct {
 	TaskID       string                   `json:"task_id"                 jsonschema:"Task ID to update"`
+	ParentID     *string                  `json:"parent_id,omitempty"     jsonschema:"Optional new parent task ID"`
 	Title        string                   `json:"title,omitempty"         jsonschema:"Optional new title"`
 	Description  string                   `json:"description,omitempty"   jsonschema:"Optional new markdown content/description"`
 	Status       string                   `json:"status,omitempty"        jsonschema:"Optional new status column ID"`
@@ -95,7 +99,12 @@ func (s *Server) registerTools() {
 		}
 
 		var tasks []*model.Task
-		if input.Status != "" {
+		if input.ParentID != "" {
+			tasks, err = s.store.GetSubtasksByParentID(input.ParentID)
+			if err != nil {
+				return nil, nil, fmt.Errorf("failed to fetch subtasks: %w", err)
+			}
+		} else if input.Status != "" {
 			if visibleMap[input.Status] {
 				tasks, err = s.store.GetTasksByColumnID(input.Status)
 				if err != nil {
@@ -109,10 +118,12 @@ func (s *Server) registerTools() {
 			}
 		}
 
-		filtered := tasks
-		if input.Tag != "" {
-			filtered = make([]*model.Task, 0)
-			for _, t := range tasks {
+		filtered := make([]*model.Task, 0, len(tasks))
+		for _, t := range tasks {
+			if input.ParentID == "" && !input.IncludeSubtasks && t.ParentID != "" {
+				continue
+			}
+			if input.Tag != "" {
 				hasTag := false
 				for _, tag := range t.Tags {
 					if strings.EqualFold(tag, input.Tag) {
@@ -120,10 +131,11 @@ func (s *Server) registerTools() {
 						break
 					}
 				}
-				if hasTag {
-					filtered = append(filtered, t)
+				if !hasTag {
+					continue
 				}
 			}
+			filtered = append(filtered, t)
 		}
 
 		if input.Limit > 0 && len(filtered) > input.Limit {
@@ -142,9 +154,22 @@ func (s *Server) registerTools() {
 			return nil, nil, fmt.Errorf("task title cannot be empty")
 		}
 
+		if input.ParentID != "" {
+			if err := s.store.ValidateParentID("", input.ParentID); err != nil {
+				return nil, nil, fmt.Errorf("invalid parent_id: %w", err)
+			}
+		}
+
 		status := input.Status
 		if status == "" {
-			status = "col-todo"
+			if input.ParentID != "" {
+				if parent, err := s.store.GetTaskByID(input.ParentID); err == nil && parent != nil {
+					status = parent.ColumnID
+				}
+			}
+			if status == "" {
+				status = "col-todo"
+			}
 		}
 
 		colTasks, _ := s.store.GetTasksByColumnID(status)
@@ -158,6 +183,7 @@ func (s *Server) registerTools() {
 		}
 
 		newTask := &model.Task{
+			ParentID: input.ParentID,
 			Title:    strings.TrimSpace(input.Title),
 			ColumnID: status,
 			Rank:     newRank,
@@ -249,6 +275,12 @@ func (s *Server) registerTools() {
 			return nil, nil, fmt.Errorf("task not found: %w", err)
 		}
 
+		if input.ParentID != nil {
+			if err := s.store.ValidateParentID(task.ID, *input.ParentID); err != nil {
+				return nil, nil, fmt.Errorf("invalid parent_id: %w", err)
+			}
+			task.ParentID = *input.ParentID
+		}
 		if strings.TrimSpace(input.Title) != "" {
 			task.Title = strings.TrimSpace(input.Title)
 		}

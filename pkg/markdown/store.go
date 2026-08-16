@@ -298,7 +298,10 @@ func (s *Store) GetTasksByColumnID(columnID string) ([]*model.Task, error) {
 func (s *Store) GetAllTasks() ([]*model.Task, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	return s.getAllTasksUnlocked()
+}
 
+func (s *Store) getAllTasksUnlocked() ([]*model.Task, error) {
 	entries, err := os.ReadDir(s.dir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read directory: %w", err)
@@ -326,18 +329,111 @@ func (s *Store) GetAllTasks() ([]*model.Task, error) {
 	return tasks, nil
 }
 
-// GetTaskByID finds a task by its ID.
-func (s *Store) GetTaskByID(id string) (*model.Task, error) {
-	tasks, err := s.GetAllTasks()
+// GetSubtasksByParentID returns all subtasks belonging to the given parent task ID.
+func (s *Store) GetSubtasksByParentID(parentID string) ([]*model.Task, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	parentTask, err := s.getTaskByIDUnlocked(parentID)
 	if err != nil {
 		return nil, err
 	}
-	for _, t := range tasks {
-		if t.ID == id {
-			return t, nil
+
+	var subtasks []*model.Task
+
+	// 1. If parent task has Subtasks defined (SSOT), retrieve each subtask directly
+	if len(parentTask.Subtasks) > 0 {
+		for _, ref := range parentTask.Subtasks {
+			sub, err := s.getTaskByIDUnlocked(ref.ID)
+			if err == nil && sub != nil {
+				subCopy := *sub
+				subCopy.Completed = ref.Completed
+				subtasks = append(subtasks, &subCopy)
+			}
+		}
+		return subtasks, nil
+	}
+
+	// 2. Legacy fallback: retrieve subtasks that have t.ParentID == parentID
+	if s.cache != nil {
+		cached, err := s.cache.GetSubtasksByParentID(parentID)
+		if err == nil {
+			return cached, nil
 		}
 	}
-	return nil, os.ErrNotExist
+
+	allTasks, err := s.getAllTasksUnlocked()
+	if err != nil {
+		return nil, err
+	}
+	for _, t := range allTasks {
+		if t.ParentID == parentID {
+			subtasks = append(subtasks, t)
+		}
+	}
+
+	return subtasks, nil
+}
+
+// ValidateParentID verifies that setting parentID on taskID is valid.
+// It checks parent existence, prevents self-parenting, prevents cycles, and ensures 1-level hierarchy.
+func (s *Store) ValidateParentID(taskID string, parentID string) error {
+	if parentID == "" {
+		return nil
+	}
+	if taskID != "" && parentID == taskID {
+		return fmt.Errorf("task cannot be its own parent")
+	}
+
+	parentTask, err := s.GetTaskByID(parentID)
+	if err != nil || parentTask == nil {
+		return fmt.Errorf("parent task with ID %q not found", parentID)
+	}
+
+	if parentTask.ParentID != "" {
+		return fmt.Errorf(
+			"parent task is already a subtask of another task (multi-level nesting is not supported)",
+		)
+	}
+
+	if taskID != "" {
+		task, err := s.GetTaskByID(taskID)
+		if err == nil && task != nil && len(task.Subtasks) > 0 {
+			return fmt.Errorf("task already has subtasks and cannot become a subtask")
+		}
+		subs, err := s.GetSubtasksByParentID(taskID)
+		if err == nil && len(subs) > 0 {
+			return fmt.Errorf("task already has subtasks and cannot become a subtask")
+		}
+
+		// Detect cycles by traversing ancestors
+		currID := parentID
+		visited := make(map[string]bool)
+		for currID != "" {
+			if currID == taskID {
+				return fmt.Errorf("circular parent-child relationship detected")
+			}
+			if visited[currID] {
+				break
+			}
+			visited[currID] = true
+
+			p, err := s.GetTaskByID(currID)
+			if err != nil || p == nil {
+				break
+			}
+			currID = p.ParentID
+		}
+	}
+
+	return nil
+}
+
+// GetTaskByID finds a task by its ID.
+func (s *Store) GetTaskByID(id string) (*model.Task, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.getTaskByIDUnlocked(id)
 }
 
 // GetAllTags returns all unique tags sorted by last_used_at DESC (if cached) or alphabetically across all tasks.
@@ -378,7 +474,10 @@ func (s *Store) GetAllTags() ([]string, error) {
 func (s *Store) SaveTask(task *model.Task) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.saveTaskUnlocked(task)
+}
 
+func (s *Store) saveTaskUnlocked(task *model.Task) error {
 	now := time.Now().UTC()
 	if task.Version < model.CurrentTaskVersion {
 		task.Version = model.CurrentTaskVersion
@@ -428,7 +527,7 @@ func (s *Store) SaveTask(task *model.Task) error {
 	return nil
 }
 
-// DeleteTask removes the task file with the given ID.
+// DeleteTask removes the task file with the given ID and any child subtasks.
 func (s *Store) DeleteTask(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -436,6 +535,44 @@ func (s *Store) DeleteTask(id string) error {
 	task, err := s.getTaskByIDUnlocked(id)
 	if err != nil {
 		return err
+	}
+
+	// 1. If this task has subtasks, delete child subtasks directly
+	for _, ref := range task.Subtasks {
+		if child, err := s.getTaskByIDUnlocked(ref.ID); err == nil && child != nil {
+			_ = os.Remove(child.FilePath)
+			if s.cache != nil {
+				_ = s.cache.DeleteTask(child.ID)
+			}
+		}
+	}
+	// Fallback for legacy child tasks if any
+	if len(task.Subtasks) == 0 && s.cache != nil {
+		if legacySubs, err := s.cache.GetSubtasksByParentID(id); err == nil {
+			for _, sub := range legacySubs {
+				_ = os.Remove(sub.FilePath)
+				_ = s.cache.DeleteTask(sub.ID)
+			}
+		}
+	}
+
+	// 2. If this task is a subtask of another parent, remove it from that parent's Subtasks
+	if task.ParentID != "" {
+		if parent, err := s.getTaskByIDUnlocked(task.ParentID); err == nil && parent != nil {
+			modified := false
+			var newSubs []model.SubtaskRef
+			for _, ref := range parent.Subtasks {
+				if ref.ID == id {
+					modified = true
+				} else {
+					newSubs = append(newSubs, ref)
+				}
+			}
+			if modified {
+				parent.Subtasks = newSubs
+				_ = s.saveTaskUnlocked(parent)
+			}
+		}
 	}
 
 	if err := os.Remove(task.FilePath); err != nil {
@@ -450,6 +587,13 @@ func (s *Store) DeleteTask(id string) error {
 }
 
 func (s *Store) getTaskByIDUnlocked(id string) (*model.Task, error) {
+	if s.cache != nil {
+		task, err := s.cache.GetTaskByID(id)
+		if err == nil && task != nil {
+			return task, nil
+		}
+	}
+
 	entries, err := os.ReadDir(s.dir)
 	if err != nil {
 		return nil, err
@@ -485,6 +629,7 @@ func (s *Store) readTaskFile(path string) (*model.Task, error) {
 type legacyTaskV1 struct {
 	Version      int                               `yaml:"version"`
 	ID           string                            `yaml:"id"`
+	ParentID     string                            `yaml:"parent_id,omitempty"`
 	Title        string                            `yaml:"title"`
 	ColumnID     string                            `yaml:"column_id,omitempty"`
 	Rank         string                            `yaml:"rank"`
@@ -528,6 +673,7 @@ func parseTaskContent(raw string) (*model.Task, error) {
 			task = model.Task{
 				Version:   model.CurrentTaskVersion,
 				ID:        legTask.ID,
+				ParentID:  legTask.ParentID,
 				Title:     legTask.Title,
 				ColumnID:  legTask.ColumnID,
 				Rank:      legTask.Rank,

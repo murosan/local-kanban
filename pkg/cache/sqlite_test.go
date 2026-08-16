@@ -55,6 +55,15 @@ func TestSQLiteCache(t *testing.T) {
 		t.Fatalf("failed to upsert task2: %v", err)
 	}
 
+	// Test GetTaskByID
+	fetched1, err := cache.GetTaskByID("task-1")
+	if err != nil {
+		t.Fatalf("failed to get task-1 by id: %v", err)
+	}
+	if fetched1.Title != "認証ミドルウェアの実装" {
+		t.Errorf("expected title '認証ミドルウェアの実装', got %q", fetched1.Title)
+	}
+
 	// Test Search FTS
 	results, err := cache.SearchFTS("認証")
 	if err != nil {
@@ -212,5 +221,115 @@ func TestTagsCache(t *testing.T) {
 	// 'synced-a' has t1Time (should be last)
 	if tagsAfterSync[2] != "synced-a" {
 		t.Errorf("expected last tag to be 'synced-a', got %s", tagsAfterSync[2])
+	}
+}
+
+func TestSubtasksCache(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "kanban_subtasks_test_*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	dbPath := filepath.Join(tmpDir, "subtasks_test.db")
+	cache, err := NewSQLiteCache(dbPath)
+	if err != nil {
+		t.Fatalf("failed to init SQLiteCache: %v", err)
+	}
+	defer func() { _ = cache.Close() }()
+
+	now := time.Now().UTC()
+	parent := &model.Task{
+		ID:       "parent-1",
+		Title:    "Parent Task",
+		ColumnID: "col-todo",
+		Rank:     "0|a",
+		Subtasks: []model.SubtaskRef{
+			{ID: "sub-1", Completed: false},
+			{ID: "sub-2", Completed: true},
+		},
+		CreatedAt: now,
+		UpdatedAt: now,
+		FilePath:  "/tmp/parent.md",
+	}
+
+	sub1 := &model.Task{
+		ID:        "sub-1",
+		ParentID:  "parent-1",
+		Title:     "Subtask 1",
+		ColumnID:  "col-todo",
+		Rank:      "0|a",
+		CreatedAt: now,
+		UpdatedAt: now,
+		FilePath:  "/tmp/sub1.md",
+	}
+
+	sub2 := &model.Task{
+		ID:        "sub-2",
+		ParentID:  "parent-1",
+		Title:     "Subtask 2",
+		ColumnID:  "col-done",
+		Rank:      "0|b",
+		CreatedAt: now,
+		UpdatedAt: now,
+		FilePath:  "/tmp/sub2.md",
+	}
+
+	if err := cache.UpsertTask(parent); err != nil {
+		t.Fatalf("failed to upsert parent: %v", err)
+	}
+	if err := cache.UpsertTask(sub1); err != nil {
+		t.Fatalf("failed to upsert sub1: %v", err)
+	}
+	if err := cache.UpsertTask(sub2); err != nil {
+		t.Fatalf("failed to upsert sub2: %v", err)
+	}
+
+	subtasks, err := cache.GetSubtasksByParentID("parent-1")
+	if err != nil {
+		t.Fatalf("failed to get subtasks: %v", err)
+	}
+	if len(subtasks) != 2 {
+		t.Fatalf("expected 2 subtasks, got %d", len(subtasks))
+	}
+	if subtasks[0].ID != "sub-1" || subtasks[0].ParentID != "parent-1" {
+		t.Errorf("unexpected subtask 0: %+v", subtasks[0])
+	}
+	if subtasks[1].ID != "sub-2" || subtasks[1].ParentID != "parent-1" {
+		t.Errorf("unexpected subtask 1: %+v", subtasks[1])
+	}
+
+	// Verify parent task has Subtasks correctly retrieved
+	parentTasks, err := cache.GetTasksByColumnIDs([]string{"col-todo"})
+	if err != nil {
+		t.Fatalf("failed to get parent tasks: %v", err)
+	}
+	var foundParent *model.Task
+	for _, pt := range parentTasks {
+		if pt.ID == "parent-1" {
+			foundParent = pt
+			break
+		}
+	}
+	if foundParent == nil {
+		t.Fatalf("expected to find parent-1 in col-todo")
+	}
+	if len(foundParent.Subtasks) != 2 {
+		t.Fatalf("expected parent to have 2 subtask refs, got %d", len(foundParent.Subtasks))
+	}
+	if foundParent.Subtasks[0].ID != "sub-1" || foundParent.Subtasks[0].Completed != false {
+		t.Errorf("unexpected subtask ref 0: %+v", foundParent.Subtasks[0])
+	}
+	if foundParent.Subtasks[1].ID != "sub-2" || foundParent.Subtasks[1].Completed != true {
+		t.Errorf("unexpected subtask ref 1: %+v", foundParent.Subtasks[1])
+	}
+
+	// Test GetTasksByColumnIDs retrieves parent_id correctly
+	tasksInTodo, err := cache.GetTasksByColumnIDs([]string{"col-todo"})
+	if err != nil {
+		t.Fatalf("failed to get tasks by column: %v", err)
+	}
+	if len(tasksInTodo) != 2 {
+		t.Fatalf("expected 2 tasks in col-todo, got %d", len(tasksInTodo))
 	}
 }
