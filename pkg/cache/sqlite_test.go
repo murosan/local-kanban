@@ -173,7 +173,7 @@ func TestTagsCache(t *testing.T) {
 		t.Errorf("expected top two tags to be 'new-tag' and 'old-tag', got %v", tagsAfterUpdate)
 	}
 
-	// 3. Test SyncAll rebuilds tags table properly
+	// 3. Test SyncAll rebuilds tags table properly from active tasks
 	allTasks := []*model.Task{
 		{
 			ID:        "task-a",

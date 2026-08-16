@@ -1,68 +1,64 @@
 import { describe, expect, it } from 'vitest';
 import {
   parseTags,
-  getActiveTokenInfo,
-  getExistingTags,
+  normalizeTag,
+  addTagIfUnique,
+  addMultipleTags,
+  removeTagAtIndex,
   getTagSuggestions,
-  computeNextTagValue,
-  computeNextTagValueWithCursor,
 } from '../utils/tag';
 
 describe('TagInput utilities', () => {
   describe('parseTags', () => {
-    it('parses comma-separated tag string into trimmed non-empty array', () => {
+    it('parses comma and newline separated tag string into trimmed non-empty array', () => {
       expect(parseTags('')).toEqual([]);
       expect(parseTags('   ')).toEqual([]);
       expect(parseTags('react, frontend, go')).toEqual(['react', 'frontend', 'go']);
       expect(parseTags('  react  , ,  frontend ,  ')).toEqual(['react', 'frontend']);
+      expect(parseTags('react\nfrontend\ngo')).toEqual(['react', 'frontend', 'go']);
     });
   });
 
-  describe('getActiveTokenInfo', () => {
-    it('detects single token when no commas exist', () => {
-      const info = getActiveTokenInfo('react', 3);
-      expect(info.token).toBe('react');
-      expect(info.start).toBe(0);
-      expect(info.end).toBe(5);
-    });
-
-    it('detects active token in comma-separated list based on cursor position', () => {
-      const text = 'frontend, backend, database';
-      // Cursor inside 'frontend' (index 4)
-      const info1 = getActiveTokenInfo(text, 4);
-      expect(info1.token).toBe('frontend');
-      expect(info1.start).toBe(0);
-      expect(info1.end).toBe(8);
-
-      // Cursor inside 'backend' (index 13)
-      const info2 = getActiveTokenInfo(text, 13);
-      expect(info2.token).toBe('backend');
-      expect(info2.start).toBe(9);
-      expect(info2.end).toBe(17);
-
-      // Cursor at the very end after comma 'database, ' (index 28)
-      const trailingText = 'frontend, backend, ';
-      const info3 = getActiveTokenInfo(trailingText, trailingText.length);
-      expect(info3.token).toBe('');
-      expect(info3.start).toBe(18);
-      expect(info3.end).toBe(19);
+  describe('normalizeTag', () => {
+    it('trims leading and trailing whitespace', () => {
+      expect(normalizeTag('  frontend  ')).toBe('frontend');
+      expect(normalizeTag('tag')).toBe('tag');
     });
   });
 
-  describe('getExistingTags', () => {
-    it('extracts existing tags excluding the active token region', () => {
-      const text = 'react, frontend, database';
-      // Active token is 'frontend' (index 7..15)
-      const tokenInfo = { token: 'frontend', start: 7, end: 15 };
-      const existing = getExistingTags(text, tokenInfo);
-      expect(existing).toEqual(['react', 'database']);
+  describe('addTagIfUnique', () => {
+    it('adds new tag to list', () => {
+      expect(addTagIfUnique(['react'], 'frontend')).toEqual(['react', 'frontend']);
     });
 
-    it('extracts all preceding tags when active token is at the end', () => {
-      const text = 'react, bug, ';
-      const tokenInfo = { token: '', start: 12, end: 12 };
-      const existing = getExistingTags(text, tokenInfo);
-      expect(existing).toEqual(['react', 'bug']);
+    it('does not add duplicate tags case-insensitively', () => {
+      expect(addTagIfUnique(['react', 'frontend'], 'React')).toEqual(['react', 'frontend']);
+      expect(addTagIfUnique(['react', 'frontend'], 'FRONTEND')).toEqual(['react', 'frontend']);
+    });
+
+    it('ignores empty or whitespace-only tags', () => {
+      expect(addTagIfUnique(['react'], '   ')).toEqual(['react']);
+    });
+  });
+
+  describe('addMultipleTags', () => {
+    it('adds multiple unique tags preserving order and ignoring duplicates', () => {
+      const initial = ['react'];
+      const newTags = ['frontend', 'react', 'Backend', 'frontend'];
+      expect(addMultipleTags(initial, newTags)).toEqual(['react', 'frontend', 'Backend']);
+    });
+  });
+
+  describe('removeTagAtIndex', () => {
+    it('removes tag at specified index', () => {
+      expect(removeTagAtIndex(['a', 'b', 'c'], 1)).toEqual(['a', 'c']);
+      expect(removeTagAtIndex(['a', 'b', 'c'], 0)).toEqual(['b', 'c']);
+      expect(removeTagAtIndex(['a', 'b', 'c'], 2)).toEqual(['a', 'b']);
+    });
+
+    it('returns unchanged list if index is out of bounds', () => {
+      expect(removeTagAtIndex(['a', 'b'], -1)).toEqual(['a', 'b']);
+      expect(removeTagAtIndex(['a', 'b'], 5)).toEqual(['a', 'b']);
     });
   });
 
@@ -120,39 +116,4 @@ describe('TagInput utilities', () => {
       expect(suggestions).toEqual(['refactor', 'redux', 'react', 'feature']);
     });
   });
-
-  describe('computeNextTagValue & computeNextTagValueWithCursor', () => {
-    it('inserts tag when value is initially empty', () => {
-      const tokenInfo = { token: '', start: 0, end: 0 };
-      const next = computeNextTagValue('', tokenInfo, 'frontend');
-      expect(next).toBe('frontend, ');
-
-      const res = computeNextTagValueWithCursor('', tokenInfo, 'frontend');
-      expect(res.nextValue).toBe('frontend, ');
-      expect(res.nextCursorPos).toBe('frontend, '.length);
-    });
-
-    it('replaces active token at the end of input', () => {
-      const value = 'react, re';
-      const tokenInfo = { token: 're', start: 6, end: 9 };
-      const next = computeNextTagValue(value, tokenInfo, 'refactor');
-      expect(next).toBe('react, refactor, ');
-
-      const res = computeNextTagValueWithCursor(value, tokenInfo, 'refactor');
-      expect(res.nextValue).toBe('react, refactor, ');
-      expect(res.nextCursorPos).toBe('react, refactor, '.length);
-    });
-
-    it('replaces active token in the middle of input', () => {
-      const value = 'alpha, bet, gamma';
-      const tokenInfo = { token: 'bet', start: 6, end: 11 };
-      const next = computeNextTagValue(value, tokenInfo, 'beta');
-      expect(next).toBe('alpha, beta, gamma');
-
-      const res = computeNextTagValueWithCursor(value, tokenInfo, 'beta');
-      expect(res.nextValue).toBe('alpha, beta, gamma');
-      expect(res.nextCursorPos).toBe('alpha, beta, '.length);
-    });
-  });
 });
-

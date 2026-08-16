@@ -1,56 +1,70 @@
-export interface TokenInfo {
-  token: string;
-  start: number;
-  end: number;
-}
-
-export interface ComputeNextTagResult {
-  nextValue: string;
-  nextCursorPos: number;
-}
-
+/**
+ * Parses raw text containing tags separated by commas or newlines.
+ */
 export function parseTags(input: string): string[] {
+  if (!input) return [];
   return input
-    .split(',')
+    .split(/[\r\n,]+/)
     .map((t) => t.trim())
     .filter(Boolean);
 }
 
-export function getActiveTokenInfo(text: string, pos: number): TokenInfo {
-  const safePos = Math.max(0, Math.min(pos, text.length));
-  const lastComma = text.lastIndexOf(',', safePos - 1);
-  const start = lastComma === -1 ? 0 : lastComma + 1;
-
-  const nextComma = text.indexOf(',', safePos);
-  const end = nextComma === -1 ? text.length : nextComma;
-
-  const rawToken = text.substring(start, end);
-  return {
-    token: rawToken.trim(),
-    start,
-    end,
-  };
+/**
+ * Normalizes a tag string by trimming leading/trailing whitespace.
+ */
+export function normalizeTag(tag: string): string {
+  return tag.trim();
 }
 
-export function getExistingTags(text: string, tokenInfo: TokenInfo): string[] {
-  const before = text.substring(0, tokenInfo.start);
-  const after = text.substring(tokenInfo.end);
-  return parseTags(`${before},${after}`);
+/**
+ * Adds a tag to the list if not already present (case-insensitive check).
+ */
+export function addTagIfUnique(tags: string[], newTag: string): string[] {
+  const normalized = normalizeTag(newTag);
+  if (!normalized) return tags;
+  const lower = normalized.toLowerCase();
+  if (tags.some((t) => t.toLowerCase() === lower)) {
+    return tags;
+  }
+  return [...tags, normalized];
 }
 
+/**
+ * Adds multiple tags to the list, skipping duplicates.
+ */
+export function addMultipleTags(tags: string[], newTags: string[]): string[] {
+  let result = [...tags];
+  for (const t of newTags) {
+    result = addTagIfUnique(result, t);
+  }
+  return result;
+}
+
+/**
+ * Removes a tag at the given index.
+ */
+export function removeTagAtIndex(tags: string[], index: number): string[] {
+  if (index < 0 || index >= tags.length) return tags;
+  return tags.filter((_, i) => i !== index);
+}
+
+/**
+ * Returns tag suggestions filtered by query and excluding existing tags.
+ * Preserves MRU order while prioritizing prefix matches.
+ */
 export function getTagSuggestions(
   availableTags: string[],
-  activeToken: string,
-  existingTags: string[]
+  query: string,
+  existingTags: string[] = []
 ): string[] {
   if (!availableTags || availableTags.length === 0) return [];
 
   const existingTagsLowerSet = new Set(existingTags.map((t) => t.toLowerCase()));
-  const tokenQuery = activeToken.toLowerCase();
+  const tokenQuery = (query || '').trim().toLowerCase();
 
   const candidates = availableTags.filter((tag) => {
     const tagLower = tag.toLowerCase();
-    // Do not suggest any tag that is already specified in the input
+    // Do not suggest any tag that is already specified in the card
     if (existingTagsLowerSet.has(tagLower)) {
       return false;
     }
@@ -71,36 +85,4 @@ export function getTagSuggestions(
   });
 
   return candidates;
-}
-
-export function computeNextTagValue(
-  currentValue: string,
-  tokenInfo: { start: number; end: number },
-  tagToInsert: string
-): string {
-  return computeNextTagValueWithCursor(currentValue, tokenInfo, tagToInsert).nextValue;
-}
-
-export function computeNextTagValueWithCursor(
-  currentValue: string,
-  tokenInfo: { start: number; end: number },
-  tagToInsert: string
-): ComputeNextTagResult {
-  let before = currentValue.substring(0, tokenInfo.start).replace(/\s*$/, '');
-  if (before && !before.endsWith(',')) {
-    before += ',';
-  }
-  const prefix = before ? `${before} ` : '';
-
-  const after = currentValue.substring(tokenInfo.end);
-  const cleanAfter = after.replace(/^[,\s]+/, '');
-  const suffix = cleanAfter ? `, ${cleanAfter}` : ', ';
-
-  const nextValue = `${prefix}${tagToInsert}${suffix}`;
-  const nextCursorPos = (prefix + tagToInsert + ', ').length;
-
-  return {
-    nextValue,
-    nextCursorPos,
-  };
 }
