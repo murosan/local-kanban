@@ -298,7 +298,10 @@ func (s *Store) GetTasksByColumnID(columnID string) ([]*model.Task, error) {
 func (s *Store) GetAllTasks() ([]*model.Task, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	return s.getAllTasksUnlocked()
+}
 
+func (s *Store) getAllTasksUnlocked() ([]*model.Task, error) {
 	entries, err := os.ReadDir(s.dir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read directory: %w", err)
@@ -324,6 +327,80 @@ func (s *Store) GetAllTasks() ([]*model.Task, error) {
 	})
 
 	return tasks, nil
+}
+
+// GetSubtasksByParentID returns all subtasks belonging to the given parent task ID.
+func (s *Store) GetSubtasksByParentID(parentID string) ([]*model.Task, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.cache != nil {
+		cached, err := s.cache.GetSubtasksByParentID(parentID)
+		if err == nil {
+			return cached, nil
+		}
+	}
+
+	tasks, err := s.getAllTasksUnlocked()
+	if err != nil {
+		return nil, err
+	}
+
+	var subtasks []*model.Task
+	for _, t := range tasks {
+		if t.ParentID == parentID {
+			subtasks = append(subtasks, t)
+		}
+	}
+	return subtasks, nil
+}
+
+// ValidateParentID verifies that setting parentID on taskID is valid.
+// It checks parent existence, prevents self-parenting, prevents cycles, and ensures 1-level hierarchy.
+func (s *Store) ValidateParentID(taskID string, parentID string) error {
+	if parentID == "" {
+		return nil
+	}
+	if taskID != "" && parentID == taskID {
+		return fmt.Errorf("task cannot be its own parent")
+	}
+
+	parentTask, err := s.GetTaskByID(parentID)
+	if err != nil || parentTask == nil {
+		return fmt.Errorf("parent task with ID %q not found", parentID)
+	}
+
+	if parentTask.ParentID != "" {
+		return fmt.Errorf("parent task is already a subtask of another task (multi-level nesting is not supported)")
+	}
+
+	if taskID != "" {
+		subs, err := s.GetSubtasksByParentID(taskID)
+		if err == nil && len(subs) > 0 {
+			return fmt.Errorf("task already has subtasks and cannot become a subtask")
+		}
+
+		// Detect cycles by traversing ancestors
+		currID := parentID
+		visited := make(map[string]bool)
+		for currID != "" {
+			if currID == taskID {
+				return fmt.Errorf("circular parent-child relationship detected")
+			}
+			if visited[currID] {
+				break
+			}
+			visited[currID] = true
+
+			p, err := s.GetTaskByID(currID)
+			if err != nil || p == nil {
+				break
+			}
+			currID = p.ParentID
+		}
+	}
+
+	return nil
 }
 
 // GetTaskByID finds a task by its ID.
@@ -428,7 +505,7 @@ func (s *Store) SaveTask(task *model.Task) error {
 	return nil
 }
 
-// DeleteTask removes the task file with the given ID.
+// DeleteTask removes the task file with the given ID and any child subtasks.
 func (s *Store) DeleteTask(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -436,6 +513,17 @@ func (s *Store) DeleteTask(id string) error {
 	task, err := s.getTaskByIDUnlocked(id)
 	if err != nil {
 		return err
+	}
+
+	// Delete child subtasks if any
+	allTasks, _ := s.getAllTasksUnlocked()
+	for _, t := range allTasks {
+		if t.ParentID == id {
+			_ = os.Remove(t.FilePath)
+			if s.cache != nil {
+				_ = s.cache.DeleteTask(t.ID)
+			}
+		}
 	}
 
 	if err := os.Remove(task.FilePath); err != nil {
@@ -485,6 +573,7 @@ func (s *Store) readTaskFile(path string) (*model.Task, error) {
 type legacyTaskV1 struct {
 	Version      int                               `yaml:"version"`
 	ID           string                            `yaml:"id"`
+	ParentID     string                            `yaml:"parent_id,omitempty"`
 	Title        string                            `yaml:"title"`
 	ColumnID     string                            `yaml:"column_id,omitempty"`
 	Rank         string                            `yaml:"rank"`
@@ -528,6 +617,7 @@ func parseTaskContent(raw string) (*model.Task, error) {
 			task = model.Task{
 				Version:   model.CurrentTaskVersion,
 				ID:        legTask.ID,
+				ParentID:  legTask.ParentID,
 				Title:     legTask.Title,
 				ColumnID:  legTask.ColumnID,
 				Rank:      legTask.Rank,

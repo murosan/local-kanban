@@ -214,3 +214,84 @@ func TestTagsCache(t *testing.T) {
 		t.Errorf("expected last tag to be 'synced-a', got %s", tagsAfterSync[2])
 	}
 }
+
+func TestSubtasksCache(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "kanban_subtasks_test_*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	dbPath := filepath.Join(tmpDir, "subtasks_test.db")
+	cache, err := NewSQLiteCache(dbPath)
+	if err != nil {
+		t.Fatalf("failed to init SQLiteCache: %v", err)
+	}
+	defer func() { _ = cache.Close() }()
+
+	now := time.Now().UTC()
+	parent := &model.Task{
+		ID:        "parent-1",
+		Title:     "Parent Task",
+		ColumnID:  "col-todo",
+		Rank:      "0|a",
+		CreatedAt: now,
+		UpdatedAt: now,
+		FilePath:  "/tmp/parent.md",
+	}
+
+	sub1 := &model.Task{
+		ID:        "sub-1",
+		ParentID:  "parent-1",
+		Title:     "Subtask 1",
+		ColumnID:  "col-todo",
+		Rank:      "0|a",
+		CreatedAt: now,
+		UpdatedAt: now,
+		FilePath:  "/tmp/sub1.md",
+	}
+
+	sub2 := &model.Task{
+		ID:        "sub-2",
+		ParentID:  "parent-1",
+		Title:     "Subtask 2",
+		ColumnID:  "col-done",
+		Rank:      "0|b",
+		CreatedAt: now,
+		UpdatedAt: now,
+		FilePath:  "/tmp/sub2.md",
+	}
+
+	if err := cache.UpsertTask(parent); err != nil {
+		t.Fatalf("failed to upsert parent: %v", err)
+	}
+	if err := cache.UpsertTask(sub1); err != nil {
+		t.Fatalf("failed to upsert sub1: %v", err)
+	}
+	if err := cache.UpsertTask(sub2); err != nil {
+		t.Fatalf("failed to upsert sub2: %v", err)
+	}
+
+	subtasks, err := cache.GetSubtasksByParentID("parent-1")
+	if err != nil {
+		t.Fatalf("failed to get subtasks: %v", err)
+	}
+	if len(subtasks) != 2 {
+		t.Fatalf("expected 2 subtasks, got %d", len(subtasks))
+	}
+	if subtasks[0].ID != "sub-1" || subtasks[0].ParentID != "parent-1" {
+		t.Errorf("unexpected subtask 0: %+v", subtasks[0])
+	}
+	if subtasks[1].ID != "sub-2" || subtasks[1].ParentID != "parent-1" {
+		t.Errorf("unexpected subtask 1: %+v", subtasks[1])
+	}
+
+	// Test GetTasksByColumnIDs retrieves parent_id correctly
+	tasksInTodo, err := cache.GetTasksByColumnIDs([]string{"col-todo"})
+	if err != nil {
+		t.Fatalf("failed to get tasks by column: %v", err)
+	}
+	if len(tasksInTodo) != 2 {
+		t.Fatalf("expected 2 tasks in col-todo, got %d", len(tasksInTodo))
+	}
+}

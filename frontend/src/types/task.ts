@@ -33,6 +33,7 @@ export interface CustomFieldValue {
 export interface Task {
   version?: number;
   id: string;
+  parent_id?: string;
   title: string;
   column_id?: string;
   rank: string;
@@ -43,6 +44,9 @@ export interface Task {
   content?: string;
   summary?: string;
   file_path?: string;
+  subtasks_count?: number;
+  subtasks_completed_count?: number;
+  subtasks?: Task[];
 }
 
 export interface Column {

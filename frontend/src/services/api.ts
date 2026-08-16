@@ -40,6 +40,7 @@ export async function fetchTags(): Promise<string[]> {
 }
 
 export interface CreateTaskPayload {
+  parent_id?: string;
   title: string;
   column_id?: string;
   tags?: string[];
@@ -60,6 +61,7 @@ export async function createTask(payload: CreateTaskPayload): Promise<Task> {
 }
 
 export interface UpdateTaskPayload {
+  parent_id?: string;
   title?: string;
   column_id?: string;
   tags?: string[];

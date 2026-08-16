@@ -23,6 +23,8 @@ interface KanbanBoardProps {
   onTaskUpdated: () => void;
   onTasksChange?: (tasks: Task[]) => void;
   onCardClick: (task: Task) => void;
+  onSubtaskToggle?: (subtask: Task) => void;
+  onAddSubtask?: (parentId: string, title: string) => Promise<void> | void;
   onAddCard?: (columnId: string) => void;
 }
 
@@ -33,6 +35,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   onTaskUpdated,
   onTasksChange,
   onCardClick,
+  onSubtaskToggle,
+  onAddSubtask,
   onAddCard,
 }) => {
   const { t } = useI18n();
@@ -192,9 +196,12 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
             <KanbanColumn
               key={column.id}
               column={column}
+              columns={columns}
               customFields={customFields}
               tasks={colTasks}
               onCardClick={onCardClick}
+              onSubtaskToggle={onSubtaskToggle}
+              onAddSubtask={onAddSubtask}
               onAddCard={onAddCard}
             />
           );
@@ -204,7 +211,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
       <DragOverlay dropAnimation={null}>
         {activeTask ? (
           <div className="rotate-2 scale-105 shadow-2xl">
-            <TaskCard task={activeTask} customFields={customFields} isOverlay />
+            <TaskCard task={activeTask} columns={columns} customFields={customFields} isOverlay />
           </div>
         ) : null}
       </DragOverlay>

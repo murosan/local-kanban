@@ -208,3 +208,107 @@ func TestMCPGetTasksFiltering(t *testing.T) {
 		t.Errorf("expected task title 'Visible Task', got '%s'", output.Tasks[0].Title)
 	}
 }
+
+func TestMCPSubtasks(t *testing.T) {
+	tempDir := t.TempDir()
+	store, err := markdown.NewStore(tempDir)
+	if err != nil {
+		t.Fatalf("failed to create store: %v", err)
+	}
+
+	mcpSrv, err := NewMCPServer(store, search.NewEngine(nil))
+	if err != nil {
+		t.Fatalf("failed to create MCP server: %v", err)
+	}
+
+	clientTransport, serverTransport := mcpSDK.NewInMemoryTransports()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go func() {
+		_ = mcpSrv.MCPServer().Run(ctx, serverTransport)
+	}()
+
+	client := mcpSDK.NewClient(&mcpSDK.Implementation{
+		Name:    "TestClient",
+		Version: "1.0.0",
+	}, nil)
+
+	session, err := client.Connect(ctx, clientTransport, nil)
+	if err != nil {
+		t.Fatalf("failed to connect client: %v", err)
+	}
+	defer func() { _ = session.Close() }()
+
+	// 1. Create parent task via create_task
+	resCreateParent, err := session.CallTool(ctx, &mcpSDK.CallToolParams{
+		Name: "create_task",
+		Arguments: map[string]any{
+			"title":  "Parent Task MCP",
+			"status": "col-todo",
+		},
+	})
+	if err != nil {
+		t.Fatalf("create_task failed: %v", err)
+	}
+	var parentTask model.Task
+	pData, _ := json.Marshal(resCreateParent.StructuredContent)
+	_ = json.Unmarshal(pData, &parentTask)
+
+	if parentTask.ID == "" {
+		t.Fatalf("expected parent task ID to be generated")
+	}
+
+	// 2. Create subtask via create_task with parent_id
+	resCreateSub, err := session.CallTool(ctx, &mcpSDK.CallToolParams{
+		Name: "create_task",
+		Arguments: map[string]any{
+			"parent_id": parentTask.ID,
+			"title":     "Subtask MCP",
+			"status":    "col-todo",
+		},
+	})
+	if err != nil {
+		t.Fatalf("create_task subtask failed: %v", err)
+	}
+	var subTask model.Task
+	sData, _ := json.Marshal(resCreateSub.StructuredContent)
+	_ = json.Unmarshal(sData, &subTask)
+
+	if subTask.ParentID != parentTask.ID {
+		t.Errorf("expected subtask parent_id %s, got %s", parentTask.ID, subTask.ParentID)
+	}
+
+	// 3. get_tasks (default: include_subtasks false) should return 1 root task
+	resGetRoot, err := session.CallTool(ctx, &mcpSDK.CallToolParams{
+		Name: "get_tasks",
+	})
+	if err != nil {
+		t.Fatalf("get_tasks failed: %v", err)
+	}
+	var outRoot GetTasksOutput
+	rData, _ := json.Marshal(resGetRoot.StructuredContent)
+	_ = json.Unmarshal(rData, &outRoot)
+
+	if len(outRoot.Tasks) != 1 || outRoot.Tasks[0].ID != parentTask.ID {
+		t.Errorf("expected 1 root task, got %+v", outRoot.Tasks)
+	}
+
+	// 4. get_tasks with parent_id should return the subtask
+	resGetSubs, err := session.CallTool(ctx, &mcpSDK.CallToolParams{
+		Name: "get_tasks",
+		Arguments: map[string]any{
+			"parent_id": parentTask.ID,
+		},
+	})
+	if err != nil {
+		t.Fatalf("get_tasks with parent_id failed: %v", err)
+	}
+	var outSubs GetTasksOutput
+	subOutData, _ := json.Marshal(resGetSubs.StructuredContent)
+	_ = json.Unmarshal(subOutData, &outSubs)
+
+	if len(outSubs.Tasks) != 1 || outSubs.Tasks[0].ID != subTask.ID {
+		t.Errorf("expected 1 subtask, got %+v", outSubs.Tasks)
+	}
+}

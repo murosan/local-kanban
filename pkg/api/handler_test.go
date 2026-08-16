@@ -347,3 +347,169 @@ func TestGetTags(t *testing.T) {
 		}
 	}
 }
+
+func TestSubtasksAPI(t *testing.T) {
+	tempDir := t.TempDir()
+	store, err := markdown.NewStore(tempDir)
+	if err != nil {
+		t.Fatalf("failed to create store: %v", err)
+	}
+
+	server := NewServer(store, nil)
+	mux := http.NewServeMux()
+	server.RegisterRoutes(mux)
+
+	// 1. Create Parent Task via POST /api/tasks
+	parentPayload := map[string]any{
+		"title":     "Parent Task",
+		"column_id": "col-todo",
+	}
+	bodyBytes, _ := json.Marshal(parentPayload)
+	reqParent := httptest.NewRequest("POST", "/api/tasks", bytes.NewReader(bodyBytes))
+	wParent := httptest.NewRecorder()
+	mux.ServeHTTP(wParent, reqParent)
+
+	if wParent.Code != http.StatusCreated {
+		t.Fatalf("expected 201 Created for parent, got %d", wParent.Code)
+	}
+
+	var parentTask model.Task
+	if err := json.NewDecoder(wParent.Body).Decode(&parentTask); err != nil {
+		t.Fatalf("failed to decode parent: %v", err)
+	}
+
+	// 2. Create Subtask 1 via POST /api/tasks
+	sub1Payload := map[string]any{
+		"parent_id": parentTask.ID,
+		"title":     "Subtask 1",
+		"column_id": "col-todo",
+	}
+	sub1Bytes, _ := json.Marshal(sub1Payload)
+	reqSub1 := httptest.NewRequest("POST", "/api/tasks", bytes.NewReader(sub1Bytes))
+	wSub1 := httptest.NewRecorder()
+	mux.ServeHTTP(wSub1, reqSub1)
+
+	if wSub1.Code != http.StatusCreated {
+		t.Fatalf("expected 201 Created for sub1, got %d", wSub1.Code)
+	}
+
+	// 3. Create Subtask 2 (Done) via POST /api/tasks
+	sub2Payload := map[string]any{
+		"parent_id": parentTask.ID,
+		"title":     "Subtask 2 Done",
+		"column_id": "col-done",
+	}
+	sub2Bytes, _ := json.Marshal(sub2Payload)
+	reqSub2 := httptest.NewRequest("POST", "/api/tasks", bytes.NewReader(sub2Bytes))
+	wSub2 := httptest.NewRecorder()
+	mux.ServeHTTP(wSub2, reqSub2)
+
+	if wSub2.Code != http.StatusCreated {
+		t.Fatalf("expected 201 Created for sub2, got %d", wSub2.Code)
+	}
+
+	// 4. GET /api/tasks (verify parent has subtasks count 2, completed 1, and only root task returned)
+	reqGetTasks := httptest.NewRequest("GET", "/api/tasks", nil)
+	wGetTasks := httptest.NewRecorder()
+	mux.ServeHTTP(wGetTasks, reqGetTasks)
+
+	if wGetTasks.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d", wGetTasks.Code)
+	}
+
+	var tasks []*model.Task
+	if err := json.NewDecoder(wGetTasks.Body).Decode(&tasks); err != nil {
+		t.Fatalf("failed to decode tasks: %v", err)
+	}
+
+	if len(tasks) != 1 {
+		t.Fatalf("expected 1 root task, got %d", len(tasks))
+	}
+	if tasks[0].ID != parentTask.ID {
+		t.Errorf("expected parent task ID %s, got %s", parentTask.ID, tasks[0].ID)
+	}
+	if tasks[0].SubtasksCount != 2 {
+		t.Errorf("expected subtasks count 2, got %d", tasks[0].SubtasksCount)
+	}
+	if tasks[0].SubtasksCompletedCount != 1 {
+		t.Errorf("expected subtasks completed count 1, got %d", tasks[0].SubtasksCompletedCount)
+	}
+	subsSlice, ok := tasks[0].Subtasks.([]any)
+	if !ok || len(subsSlice) != 2 {
+		t.Errorf("expected 2 subtasks attached, got %+v", tasks[0].Subtasks)
+	}
+
+	// 5. Search query matching subtask title returns parent task
+	reqSearch := httptest.NewRequest("GET", "/api/tasks?q=Done", nil)
+	wSearch := httptest.NewRecorder()
+	mux.ServeHTTP(wSearch, reqSearch)
+
+	if wSearch.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for search, got %d", wSearch.Code)
+	}
+	var searchResults []*model.Task
+	if err := json.NewDecoder(wSearch.Body).Decode(&searchResults); err != nil {
+		t.Fatalf("failed to decode search results: %v", err)
+	}
+	if len(searchResults) != 1 || searchResults[0].ID != parentTask.ID {
+		t.Errorf("expected parent task to match subtask query, got %+v", searchResults)
+	}
+
+	// 6. Test subtask reordering (move sub2 before sub1 using next_id: sub1.ID)
+	subtasksBefore, _ := store.GetSubtasksByParentID(parentTask.ID)
+	if len(subtasksBefore) == 2 {
+		reorderPayload := map[string]any{
+			"next_id": subtasksBefore[0].ID,
+		}
+		reorderBytes, _ := json.Marshal(reorderPayload)
+		reqReorder := httptest.NewRequest(
+			"PUT",
+			"/api/tasks/"+subtasksBefore[1].ID,
+			bytes.NewReader(reorderBytes),
+		)
+		wReorder := httptest.NewRecorder()
+		mux.ServeHTTP(wReorder, reqReorder)
+
+		if wReorder.Code != http.StatusOK {
+			t.Fatalf("expected 200 OK for reorder, got %d", wReorder.Code)
+		}
+
+		subtasksAfter, _ := store.GetSubtasksByParentID(parentTask.ID)
+		if subtasksAfter[0].ID != subtasksBefore[1].ID {
+			t.Errorf(
+				"expected subtask %s to be first after reordering, got %s",
+				subtasksBefore[1].ID,
+				subtasksAfter[0].ID,
+			)
+		}
+	}
+
+	// 7. Test parent validation: create with invalid parent returns 400
+	invalidCreatePayload := map[string]any{
+		"parent_id": "non-existent-parent",
+		"title":     "Invalid Subtask",
+	}
+	icBytes, _ := json.Marshal(invalidCreatePayload)
+	reqInvalidCreate := httptest.NewRequest("POST", "/api/tasks", bytes.NewReader(icBytes))
+	wInvalidCreate := httptest.NewRecorder()
+	mux.ServeHTTP(wInvalidCreate, reqInvalidCreate)
+	if wInvalidCreate.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 Bad Request for non-existent parent, got %d", wInvalidCreate.Code)
+	}
+
+	// 8. Test parent validation: update parent to self returns 400
+	selfParentPayload := map[string]any{
+		"parent_id": parentTask.ID,
+	}
+	spBytes, _ := json.Marshal(selfParentPayload)
+	reqSelfParent := httptest.NewRequest(
+		"PUT",
+		"/api/tasks/"+parentTask.ID,
+		bytes.NewReader(spBytes),
+	)
+	wSelfParent := httptest.NewRecorder()
+	mux.ServeHTTP(wSelfParent, reqSelfParent)
+	if wSelfParent.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 Bad Request for self-parent update, got %d", wSelfParent.Code)
+	}
+}

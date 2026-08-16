@@ -205,6 +205,39 @@ export const App: React.FC = () => {
     }
   };
 
+  const handleSubtaskToggle = async (subtask: Task) => {
+    if (!config || config.columns.length === 0) return;
+    const isDone = subtask.column_id === config.columns[config.columns.length - 1].id;
+    const targetColumnId = isDone
+      ? config.columns[0].id
+      : config.columns[config.columns.length - 1].id;
+    try {
+      await updateTask(subtask.id, { column_id: targetColumnId });
+      await loadData();
+    } catch (err) {
+      console.error('Failed to toggle subtask:', err);
+      addToast('Failed to update subtask', 'error');
+    }
+  };
+
+  const handleAddSubtask = async (parentId: string, title: string) => {
+    if (!config || config.columns.length === 0) return;
+    const parentTask = tasks.find((t) => t.id === parentId);
+    const targetColumn = parentTask?.column_id || config.columns[0].id;
+    try {
+      await createTask({
+        parent_id: parentId,
+        title,
+        column_id: targetColumn,
+      });
+      addToast(t('common.created') || 'Subtask created', 'success');
+      await loadData();
+    } catch (err) {
+      console.error('Failed to create subtask:', err);
+      addToast('Failed to create subtask', 'error');
+    }
+  };
+
   const handleDeleteTask = async (id: string) => {
     try {
       await deleteTask(id);
@@ -302,6 +335,8 @@ export const App: React.FC = () => {
           onTaskUpdated={loadData}
           onTasksChange={setTasks}
           onCardClick={handleCardClick}
+          onSubtaskToggle={handleSubtaskToggle}
+          onAddSubtask={handleAddSubtask}
           onAddCard={(columnId) => handleOpenNewCardModal(columnId)}
         />
       </main>
@@ -326,9 +361,11 @@ export const App: React.FC = () => {
           initialColumnId={initialColumnId}
           customFields={config.custom_fields}
           availableTags={availableTags}
+          allTasks={tasks}
           onClose={() => setIsTaskModalOpen(false)}
           onSave={handleSaveTask}
           onDelete={handleDeleteTask}
+          onOpenTask={(task) => setSelectedTask(task)}
         />
       )}
 

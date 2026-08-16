@@ -57,6 +57,7 @@ func (c *SQLiteCache) initSchema() error {
 	schema := `
 	CREATE TABLE IF NOT EXISTS tasks (
 		id TEXT PRIMARY KEY,
+		parent_id TEXT,
 		title TEXT NOT NULL,
 		column_id TEXT NOT NULL,
 		rank TEXT NOT NULL,
@@ -70,6 +71,7 @@ func (c *SQLiteCache) initSchema() error {
 
 	CREATE INDEX IF NOT EXISTS idx_tasks_column_rank ON tasks(column_id, rank);
 	CREATE INDEX IF NOT EXISTS idx_tasks_updated_at ON tasks(updated_at DESC);
+	CREATE INDEX IF NOT EXISTS idx_tasks_parent_id ON tasks(parent_id);
 
 	CREATE VIRTUAL TABLE IF NOT EXISTS tasks_fts USING fts5(
 		id UNINDEXED,
@@ -89,8 +91,10 @@ func (c *SQLiteCache) initSchema() error {
 	if _, err := c.db.Exec(schema); err != nil {
 		return err
 	}
-	// Migrate existing tables if summary column is missing
+	// Migrate existing tables if summary or parent_id column is missing
 	_, _ = c.db.Exec("ALTER TABLE tasks ADD COLUMN summary TEXT;")
+	_, _ = c.db.Exec("ALTER TABLE tasks ADD COLUMN parent_id TEXT;")
+	_, _ = c.db.Exec("CREATE INDEX IF NOT EXISTS idx_tasks_parent_id ON tasks(parent_id);")
 	return nil
 }
 
@@ -121,9 +125,10 @@ func (c *SQLiteCache) UpsertTask(task *model.Task) error {
 	}
 
 	upsertSQL := `
-	INSERT INTO tasks (id, title, column_id, rank, tags, created_at, updated_at, file_path, custom_fields, summary)
-	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	INSERT INTO tasks (id, parent_id, title, column_id, rank, tags, created_at, updated_at, file_path, custom_fields, summary)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	ON CONFLICT(id) DO UPDATE SET
+		parent_id=excluded.parent_id,
 		title=excluded.title,
 		column_id=excluded.column_id,
 		rank=excluded.rank,
@@ -136,6 +141,7 @@ func (c *SQLiteCache) UpsertTask(task *model.Task) error {
 	`
 	_, err = tx.Exec(upsertSQL,
 		task.ID,
+		task.ParentID,
 		task.Title,
 		task.ColumnID,
 		task.Rank,
@@ -232,8 +238,8 @@ func (c *SQLiteCache) SyncAll(tasks []*model.Task) error {
 	}
 
 	upsertSQL := `
-	INSERT INTO tasks (id, title, column_id, rank, tags, created_at, updated_at, file_path, custom_fields, summary)
-	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+	INSERT INTO tasks (id, parent_id, title, column_id, rank, tags, created_at, updated_at, file_path, custom_fields, summary)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 	`
 	ftsSQL := `INSERT INTO tasks_fts (id, title, content, tags) VALUES (?, ?, ?, ?);`
 	upsertTagSQL := `
@@ -253,6 +259,7 @@ func (c *SQLiteCache) SyncAll(tasks []*model.Task) error {
 
 		_, err := tx.Exec(upsertSQL,
 			task.ID,
+			task.ParentID,
 			task.Title,
 			task.ColumnID,
 			task.Rank,
@@ -454,7 +461,7 @@ func (c *SQLiteCache) GetTasksByColumnIDs(columnIDs []string) ([]*model.Task, er
 	}
 
 	query := fmt.Sprintf(
-		"SELECT id, title, column_id, rank, tags, created_at, updated_at, file_path, custom_fields, summary FROM tasks WHERE column_id IN (%s) ORDER BY rank ASC",
+		"SELECT id, parent_id, title, column_id, rank, tags, created_at, updated_at, file_path, custom_fields, summary FROM tasks WHERE column_id IN (%s) ORDER BY rank ASC",
 		strings.Join(placeholders, ","),
 	) // #nosec G201 -- placeholders construction uses sanitized '?' placeholders
 
@@ -467,9 +474,10 @@ func (c *SQLiteCache) GetTasksByColumnIDs(columnIDs []string) ([]*model.Task, er
 	var tasks []*model.Task
 	for rows.Next() {
 		var t model.Task
-		var tagsJSON, customFieldsJSON, summary sql.NullString
+		var parentID, tagsJSON, customFieldsJSON, summary sql.NullString
 		err := rows.Scan(
 			&t.ID,
+			&parentID,
 			&t.Title,
 			&t.ColumnID,
 			&t.Rank,
@@ -482,6 +490,9 @@ func (c *SQLiteCache) GetTasksByColumnIDs(columnIDs []string) ([]*model.Task, er
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan task: %w", err)
+		}
+		if parentID.Valid {
+			t.ParentID = parentID.String
 		}
 		if tagsJSON.Valid && tagsJSON.String != "" {
 			_ = json.Unmarshal([]byte(tagsJSON.String), &t.Tags)
@@ -496,6 +507,58 @@ func (c *SQLiteCache) GetTasksByColumnIDs(columnIDs []string) ([]*model.Task, er
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("error during rows iteration: %w", err)
+	}
+	return tasks, nil
+}
+
+// GetSubtasksByParentID returns all subtasks belonging to the specified parent task ID from SQLite cache.
+func (c *SQLiteCache) GetSubtasksByParentID(parentID string) ([]*model.Task, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	query := "SELECT id, parent_id, title, column_id, rank, tags, created_at, updated_at, file_path, custom_fields, summary FROM tasks WHERE parent_id = ? ORDER BY rank ASC"
+	rows, err := c.db.Query(query, parentID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query subtasks by parent_id: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var tasks []*model.Task
+	for rows.Next() {
+		var t model.Task
+		var pID, tagsJSON, customFieldsJSON, summary sql.NullString
+		err := rows.Scan(
+			&t.ID,
+			&pID,
+			&t.Title,
+			&t.ColumnID,
+			&t.Rank,
+			&tagsJSON,
+			&t.CreatedAt,
+			&t.UpdatedAt,
+			&t.FilePath,
+			&customFieldsJSON,
+			&summary,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan subtask: %w", err)
+		}
+		if pID.Valid {
+			t.ParentID = pID.String
+		}
+		if tagsJSON.Valid && tagsJSON.String != "" {
+			_ = json.Unmarshal([]byte(tagsJSON.String), &t.Tags)
+		}
+		if customFieldsJSON.Valid && customFieldsJSON.String != "" {
+			_ = json.Unmarshal([]byte(customFieldsJSON.String), &t.CustomFields)
+		}
+		if summary.Valid {
+			t.Summary = summary.String
+		}
+		tasks = append(tasks, &t)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error during subtasks iteration: %w", err)
 	}
 	return tasks, nil
 }

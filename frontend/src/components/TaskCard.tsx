@@ -1,23 +1,42 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { ChecklistItem, CustomFieldDef, Task } from '../types/task';
-import { Tag, Clock, ExternalLink, CheckSquare } from 'lucide-react';
+import {
+  Tag,
+  Clock,
+  ExternalLink,
+  CheckSquare,
+  Square,
+  ChevronDown,
+  ChevronRight,
+  ListTree,
+} from 'lucide-react';
 import { getSafeUrl } from '../utils/url';
+import { useI18n } from '../i18n/useI18n';
 
 interface TaskCardProps {
   task: Task;
+  columns?: Column[];
   customFields?: CustomFieldDef[];
   onCardClick?: (task: Task) => void;
+  onSubtaskToggle?: (subtask: Task) => void;
+  onAddSubtask?: (parentId: string, title: string) => Promise<void> | void;
   isOverlay?: boolean;
 }
 
 export const TaskCard: React.FC<TaskCardProps> = ({
   task,
+  columns = [],
   customFields = [],
   onCardClick,
+  onSubtaskToggle,
+  onAddSubtask,
   isOverlay,
 }) => {
+  const { t } = useI18n();
+  const [isSubtasksExpanded, setIsSubtasksExpanded] = useState(false);
+  const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
   const { attributes, listeners, setNodeRef, transform, isDragging } = useSortable({
     id: task.id,
     data: { task },
@@ -194,6 +213,138 @@ export const TaskCard: React.FC<TaskCardProps> = ({
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Subtasks Section */}
+      {((task.subtasks_count !== undefined && task.subtasks_count > 0) ||
+        (task.subtasks && task.subtasks.length > 0)) && (
+        <div className="mt-3 pt-2.5 border-t border-[var(--border-color)]">
+          <div
+            className="flex items-center justify-between cursor-pointer py-1 select-none group/sub"
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsSubtasksExpanded((prev) => !prev);
+            }}
+          >
+            <div className="flex items-center space-x-1.5 text-xs text-[var(--text-secondary)] font-medium">
+              <ListTree className="w-3.5 h-3.5 text-blue-500" />
+              <span>{t('taskCard.subtasks')}</span>
+              <span
+                className={`text-[11px] font-mono font-semibold px-1.5 py-0.2 rounded-full ${
+                  (task.subtasks_completed_count || 0) === (task.subtasks_count || 0) &&
+                  (task.subtasks_count || 0) > 0
+                    ? 'bg-emerald-500/10 text-emerald-500'
+                    : 'bg-blue-500/10 text-blue-500'
+                }`}
+              >
+                {task.subtasks_completed_count || 0}/
+                {task.subtasks_count || (task.subtasks ? task.subtasks.length : 0)}
+              </span>
+            </div>
+            <button
+              type="button"
+              className="p-1 rounded text-[var(--text-muted)] group-hover/sub:text-[var(--text-primary)] transition-colors"
+            >
+              {isSubtasksExpanded ? (
+                <ChevronDown className="w-3.5 h-3.5" />
+              ) : (
+                <ChevronRight className="w-3.5 h-3.5" />
+              )}
+            </button>
+          </div>
+
+          {/* Progress bar */}
+          <div className="w-full bg-[var(--bg-input)] rounded-full h-1 mt-1 overflow-hidden">
+            <div
+              className={`h-full transition-all duration-300 ${
+                (task.subtasks_completed_count || 0) === (task.subtasks_count || 0) &&
+                (task.subtasks_count || 0) > 0
+                  ? 'bg-emerald-500'
+                  : 'bg-blue-500'
+              }`}
+              style={{
+                width: `${
+                  (task.subtasks_count || 0) > 0
+                    ? Math.round(
+                        ((task.subtasks_completed_count || 0) / (task.subtasks_count || 1)) * 100
+                      )
+                    : 0
+                }%`,
+              }}
+            />
+          </div>
+
+          {/* Expanded Subtasks List */}
+          {isSubtasksExpanded && (
+            <div className="mt-2 space-y-1.5 pl-1">
+              {Array.isArray(task.subtasks) &&
+                task.subtasks.map((sub) => {
+                  const lastColId =
+                    columns && columns.length > 0 ? columns[columns.length - 1].id : undefined;
+                  const isDone = Boolean(lastColId && sub.column_id === lastColId);
+                  return (
+                    <div
+                      key={sub.id}
+                      className="flex items-center justify-between text-xs py-1 px-1.5 rounded-lg hover:bg-[var(--bg-input)] transition-colors group/item cursor-pointer"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onCardClick?.(sub);
+                      }}
+                    >
+                      <div className="flex items-center space-x-2 flex-1 min-w-0">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onSubtaskToggle?.(sub);
+                          }}
+                          className="shrink-0 text-[var(--text-muted)] hover:text-blue-500 transition-colors"
+                        >
+                          {isDone ? (
+                            <CheckSquare className="w-3.5 h-3.5 text-emerald-500" />
+                          ) : (
+                            <Square className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                        <span
+                          className={`truncate text-xs ${
+                            isDone
+                              ? 'line-through text-[var(--text-muted)]'
+                              : 'text-[var(--text-primary)]'
+                          }`}
+                        >
+                          {sub.title}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+
+              {/* Quick Add Subtask in Card */}
+              {onAddSubtask && (
+                <div className="pt-1">
+                  <input
+                    type="text"
+                    value={newSubtaskTitle}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => setNewSubtaskTitle(e.target.value)}
+                    onKeyDown={async (e) => {
+                      if (e.key === 'Enter' && newSubtaskTitle.trim()) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const title = newSubtaskTitle.trim();
+                        setNewSubtaskTitle('');
+                        await onAddSubtask(task.id, title);
+                      }
+                    }}
+                    placeholder={t('taskCard.addSubtask')}
+                    className="w-full text-xs px-2 py-1 bg-[var(--bg-input)] border border-[var(--border-color)] rounded-lg text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 

@@ -9,6 +9,23 @@ import {
   Task,
 } from '../types/task';
 import {
+  DndContext,
+  DragEndEvent,
+  PointerSensor,
+  KeyboardSensor,
+  useSensor,
+  useSensors,
+  closestCenter,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import {
   X,
   Trash2,
   Save,
@@ -19,6 +36,7 @@ import {
   Minimize2,
   Sliders,
   ChevronDown,
+  ChevronRight,
   Columns,
   MoreVertical,
   Check,
@@ -29,13 +47,113 @@ import {
   Plus,
   Settings,
   CheckSquare,
+  Square,
+  ListTree,
+  Link2,
+  Unlink,
+  Copy,
+  GripVertical,
 } from 'lucide-react';
 import { MarkdownEditor, ChangeOptions } from './MarkdownEditor';
 import { TagInput } from './TagInput';
 import { useI18n } from '../i18n/useI18n';
-import { fetchTaskById } from '../services/api';
+import { fetchTaskById, createTask, updateTask, deleteTask } from '../services/api';
 import { getSafeUrl } from '../utils/url';
 import { COLOR_PRESETS } from '../constants/colors';
+
+interface SortableSubtaskItemProps {
+  sub: Task;
+  columns: Column[];
+  onToggle: (sub: Task) => void;
+  onOpen: (sub: Task) => void;
+  onDelete: (sub: Task) => void;
+}
+
+const SortableSubtaskItem: React.FC<SortableSubtaskItemProps> = ({
+  sub,
+  columns,
+  onToggle,
+  onOpen,
+  onDelete,
+}) => {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: sub.id,
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  const isDone = Boolean(
+    columns.length > 0 && sub.column_id === columns[columns.length - 1]?.id
+  );
+  const matchedCol = columns.find((c) => c.id === sub.column_id);
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`flex items-center justify-between px-3 py-2 rounded-xl bg-[var(--bg-input)] border border-[var(--border-color)] group/subtask hover:border-blue-500/40 transition-all ${
+        isDragging ? 'opacity-50 ring-2 ring-blue-500 z-50 shadow-lg' : ''
+      }`}
+    >
+      <div className="flex items-center space-x-2.5 flex-1 min-w-0">
+        <button
+          type="button"
+          {...attributes}
+          {...listeners}
+          className="cursor-grab active:cursor-grabbing text-[var(--text-muted)] hover:text-[var(--text-primary)] p-0.5 rounded transition-colors shrink-0"
+          title="ドラッグして並び替え"
+        >
+          <GripVertical className="w-3.5 h-3.5" />
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onToggle(sub)}
+          className="shrink-0 text-[var(--text-muted)] hover:text-blue-500 transition-colors cursor-pointer"
+        >
+          {isDone ? (
+            <CheckSquare className="w-4 h-4 text-emerald-500" />
+          ) : (
+            <Square className="w-4 h-4" />
+          )}
+        </button>
+        <span
+          onClick={() => onOpen(sub)}
+          className={`text-sm cursor-pointer truncate hover:text-blue-400 transition-colors ${
+            isDone ? 'line-through text-[var(--text-muted)]' : 'text-[var(--text-primary)]'
+          }`}
+        >
+          {sub.title}
+        </span>
+      </div>
+      <div className="flex items-center space-x-2 shrink-0">
+        {matchedCol && (
+          <span
+            className="text-[10px] font-semibold px-2 py-0.5 rounded-md border"
+            style={{
+              backgroundColor: `${matchedCol.color || '#3b82f6'}15`,
+              color: matchedCol.color || '#3b82f6',
+              borderColor: `${matchedCol.color || '#3b82f6'}30`,
+            }}
+          >
+            {matchedCol.name}
+          </span>
+        )}
+        <button
+          type="button"
+          onClick={() => onDelete(sub)}
+          className="p-1 rounded-lg text-[var(--text-muted)] hover:text-rose-500 hover:bg-rose-500/10 opacity-0 group-hover/subtask:opacity-100 transition-all cursor-pointer"
+          title="サブタスクの削除・解除"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      </div>
+    </div>
+  );
+};
 
 interface TaskModalProps {
   isOpen: boolean;
@@ -44,9 +162,11 @@ interface TaskModalProps {
   initialColumnId?: string;
   customFields?: CustomFieldDef[];
   availableTags?: string[];
+  allTasks?: Task[];
   onClose: () => void;
   onSave: (taskData: Partial<Task>, options?: { silent?: boolean }) => Promise<void>;
   onDelete?: (id: string) => Promise<void>;
+  onOpenTask?: (task: Task) => void;
 }
 
 interface FormState {
@@ -71,6 +191,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   onClose,
   onSave,
   onDelete,
+  onOpenTask,
 }) => {
   const { t } = useI18n();
   const [title, setTitle] = useState(() => (task ? task.title : ''));
@@ -139,6 +260,258 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   const menuRef = useRef<HTMLDivElement>(null);
   const addFieldRef = useRef<HTMLDivElement>(null);
 
+  // Subtasks & Parent State
+  const [subtasks, setSubtasks] = useState<Task[]>([]);
+  const [parentTask, setParentTask] = useState<Task | null>(null);
+  const [newSubtaskInput, setNewSubtaskInput] = useState('');
+  const [inputParentId, setInputParentId] = useState('');
+  const [inputSubtaskId, setInputSubtaskId] = useState('');
+  const [isIdCopied, setIsIdCopied] = useState(false);
+  const [isCreatingSubtask, setIsCreatingSubtask] = useState(false);
+  const [isSettingParentOpen, setIsSettingParentOpen] = useState(false);
+  const [isAddingNewSubtask, setIsAddingNewSubtask] = useState(false);
+  const [isLinkingExistingOpen, setIsLinkingExistingOpen] = useState(false);
+  const [isChangingParentOpen, setIsChangingParentOpen] = useState(false);
+  const [isHierarchyOpen, setIsHierarchyOpen] = useState(() =>
+    Boolean(task?.parent_id || (task?.subtasks && task.subtasks.length > 0))
+  );
+  const [subtaskActionTarget, setSubtaskActionTarget] = useState<Task | null>(null);
+
+  const loadSubtasksAndParent = useCallback(async () => {
+    if (!task) {
+      setSubtasks([]);
+      setParentTask(null);
+      return;
+    }
+
+    if (task.parent_id) {
+      setIsHierarchyOpen(true);
+      try {
+        const p = await fetchTaskById(task.parent_id);
+        setParentTask(p);
+      } catch (e) {
+        console.error('Failed to load parent task:', e);
+      }
+    } else {
+      setParentTask(null);
+    }
+
+    try {
+      const fullTask = await fetchTaskById(task.id);
+      if (Array.isArray(fullTask.subtasks)) {
+        setSubtasks(fullTask.subtasks);
+        if (fullTask.subtasks.length > 0) {
+          setIsHierarchyOpen(true);
+        }
+      } else {
+        setSubtasks([]);
+      }
+    } catch (e) {
+      console.error('Failed to load subtasks:', e);
+    }
+  }, [task]);
+
+  useEffect(() => {
+    if (isOpen && task) {
+      loadSubtasksAndParent();
+    }
+  }, [isOpen, task, loadSubtasksAndParent]);
+
+  const handleAddSubtask = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!task || !newSubtaskInput.trim() || isCreatingSubtask) return;
+
+    const titleToAdd = newSubtaskInput.trim();
+    setIsCreatingSubtask(true);
+    try {
+      const created = await createTask({
+        parent_id: task.id,
+        title: titleToAdd,
+        column_id: task.column_id || columns[0]?.id || 'col-todo',
+      });
+      setNewSubtaskInput('');
+      setSubtasks((prev) => [...prev, created]);
+      await onSave({ id: task.id }, { silent: true });
+    } catch (err) {
+      console.error('Failed to create subtask:', err);
+    } finally {
+      setIsCreatingSubtask(false);
+    }
+  };
+
+  const handleToggleSubtask = async (sub: Task) => {
+    const lastColId = columns[columns.length - 1]?.id;
+    const firstColId = columns[0]?.id || 'col-todo';
+    const isDone = Boolean(lastColId && sub.column_id === lastColId);
+    const targetColumn = isDone ? firstColId : (lastColId || 'col-done');
+    try {
+      const updated = await updateTask(sub.id, { column_id: targetColumn });
+      setSubtasks((prev) => prev.map((s) => (s.id === sub.id ? updated : s)));
+      if (task) {
+        await onSave({ id: task.id }, { silent: true });
+      }
+    } catch (err) {
+      console.error('Failed to toggle subtask:', err);
+    }
+  };
+
+  const handleUnlinkSubtask = async (sub: Task) => {
+    if (!task) return;
+    try {
+      await updateTask(sub.id, {
+        parent_id: '',
+      });
+      setSubtasks((prev) => prev.filter((s) => s.id !== sub.id));
+      setSubtaskActionTarget(null);
+      await loadSubtasksAndParent();
+      await onSave({ id: task.id }, { silent: true });
+    } catch (err) {
+      console.error('Failed to unlink subtask:', err);
+    }
+  };
+
+  const handleConfirmDeleteSubtask = async (sub: Task) => {
+    try {
+      await deleteTask(sub.id);
+      setSubtasks((prev) => prev.filter((s) => s.id !== sub.id));
+      setSubtaskActionTarget(null);
+      await loadSubtasksAndParent();
+      if (task) {
+        await onSave({ id: task.id }, { silent: true });
+      }
+    } catch (err) {
+      console.error('Failed to delete subtask:', err);
+    }
+  };
+
+  const subtaskSensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 5,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const handleSubtaskDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = subtasks.findIndex((s) => s.id === active.id);
+    const newIndex = subtasks.findIndex((s) => s.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const reordered = arrayMove(subtasks, oldIndex, newIndex);
+    setSubtasks(reordered);
+
+    let prevId = '';
+    let nextId = '';
+    if (newIndex > 0) {
+      prevId = reordered[newIndex - 1].id;
+    }
+    if (newIndex < reordered.length - 1) {
+      nextId = reordered[newIndex + 1].id;
+    }
+
+    try {
+      await updateTask(active.id as string, {
+        prev_id: prevId,
+        next_id: nextId,
+      });
+      if (task) {
+        await onSave({ id: task.id }, { silent: true });
+      }
+    } catch (err) {
+      console.error('Failed to reorder subtask:', err);
+      await loadSubtasksAndParent();
+    }
+  };
+
+  const handleSetParent = async (newParentId: string) => {
+    const pId = newParentId.trim();
+    if (!task || !pId) return;
+    if (pId === task.id) {
+      alert(t('taskModal.cannotSelfParent') || '自分自身を親タスクに設定することはできません');
+      return;
+    }
+    try {
+      const p = await fetchTaskById(pId);
+      if (!p || !p.id) {
+        alert(t('taskModal.taskNotFound') || '指定されたIDのカードが見つかりません');
+        return;
+      }
+      await updateTask(task.id, {
+        parent_id: p.id,
+      });
+      task.parent_id = p.id;
+      setParentTask(p);
+      setInputParentId('');
+      setIsSettingParentOpen(false);
+      setIsChangingParentOpen(false);
+      await loadSubtasksAndParent();
+      await onSave({ id: task.id, parent_id: p.id }, { silent: true });
+    } catch (err) {
+      console.error('Failed to set parent:', err);
+      alert(t('taskModal.taskNotFound') || '指定されたIDのカードが見つかりません');
+    }
+  };
+
+  const handleUnlinkParent = async () => {
+    if (!task) return;
+    if (
+      window.confirm(
+        t('taskModal.unlinkParentConfirm') || '親タスクとの紐付けを解除して単独カードに戻しますか？'
+      )
+    ) {
+      try {
+        const emptyParent = '';
+        await updateTask(task.id, {
+          parent_id: emptyParent,
+        });
+        task.parent_id = undefined;
+        setParentTask(null);
+        setInputParentId('');
+        setIsChangingParentOpen(false);
+        await loadSubtasksAndParent();
+        await onSave({ id: task.id, parent_id: '' }, { silent: true });
+      } catch (err) {
+        console.error('Failed to unlink parent:', err);
+      }
+    }
+  };
+
+  const handleAttachExistingTask = async (targetSubtaskId: string) => {
+    const sId = targetSubtaskId.trim();
+    if (!task || !sId) return;
+    if (sId === task.id) {
+      alert(t('taskModal.cannotSelfSubtask') || '自分自身をサブタスクに設定することはできません');
+      return;
+    }
+    if (subtasks.some((s) => s.id === sId)) {
+      alert(t('taskModal.alreadySubtask') || '既にこのタスクのサブタスクです');
+      return;
+    }
+    try {
+      const sub = await fetchTaskById(sId);
+      if (!sub || !sub.id) {
+        alert(t('taskModal.taskNotFound') || '指定されたIDのカードが見つかりません');
+        return;
+      }
+      await updateTask(sub.id, {
+        parent_id: task.id,
+      });
+      setInputSubtaskId('');
+      setIsLinkingExistingOpen(false);
+      await loadSubtasksAndParent();
+      await onSave({ id: task.id }, { silent: true });
+    } catch (err) {
+      console.error('Failed to attach existing card as subtask:', err);
+      alert(t('taskModal.taskNotFound') || '指定されたIDのカードが見つかりません');
+    }
+  };
+
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
 
@@ -182,6 +555,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         await onSave(
           {
             id: task.id,
+            parent_id: task.parent_id,
             title: currentState.title.trim(),
             column_id: currentState.columnId || columns[0]?.id,
             tags: currentState.tags || [],
@@ -879,6 +1253,32 @@ export const TaskModal: React.FC<TaskModalProps> = ({
               <h2 className="text-lg font-bold text-[var(--text-primary)]">
                 {task ? t('taskModal.editTitle') : t('taskModal.createTitle')}
               </h2>
+              {task && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(task.id);
+                    setIsIdCopied(true);
+                    setTimeout(() => setIsIdCopied(false), 1500);
+                  }}
+                  className="flex items-center space-x-1 text-xs font-mono text-[var(--text-muted)] hover:text-blue-400 bg-[var(--bg-input)] hover:bg-[var(--bg-card)] px-2 py-0.5 rounded-lg border border-[var(--border-color)] transition-all cursor-pointer group/id"
+                  title={t('taskModal.copyId')}
+                >
+                  {isIdCopied ? (
+                    <>
+                      <Check className="w-3 h-3 text-emerald-400" />
+                      <span className="text-emerald-400 font-sans font-medium text-[11px]">
+                        {t('taskModal.copied')}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3 h-3 group-hover/id:scale-110 transition-transform" />
+                      <span className="text-[11px]">{task.id}</span>
+                    </>
+                  )}
+                </button>
+              )}
             </div>
             <div className="flex items-center space-x-2">
               {/* Header Save Control: Auto-Save status badge for task edit, or Manual Save for task create */}
@@ -1628,6 +2028,355 @@ export const TaskModal: React.FC<TaskModalProps> = ({
               )}
             </div>
 
+            {/* Unified Hierarchy (Subtasks & Parent) Section */}
+            {task && (
+              <div className="bg-[var(--bg-surface)] p-4 rounded-xl border border-[var(--border-color)] space-y-3">
+                {/* Header with Accordion Toggle */}
+                <div
+                  className="flex items-center justify-between cursor-pointer select-none group/hier"
+                  onClick={() => setIsHierarchyOpen((prev) => !prev)}
+                >
+                  <div className="flex items-center space-x-2 text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider min-w-0">
+                    <ListTree className="w-4 h-4 text-blue-500 shrink-0" />
+                    <span className="shrink-0">
+                      {t('taskModal.hierarchyLabel') || 'サブタスク・親タスク'}
+                    </span>
+                    {task.parent_id && (
+                      <span className="text-[10px] font-mono text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded-full border border-purple-500/20 font-semibold normal-case truncate max-w-[150px]">
+                        {t('taskModal.parentTask')}: {parentTask?.title || task.parent_id}
+                      </span>
+                    )}
+                    {subtasks.length > 0 && (
+                      <span className="text-[10px] font-mono text-blue-500 bg-blue-500/10 px-2 py-0.5 rounded-full border border-blue-500/20 font-bold shrink-0">
+                        {subtasks.length}
+                      </span>
+                    )}
+                    {!task.parent_id && subtasks.length === 0 && (
+                      <span className="text-[10px] text-[var(--text-muted)] font-normal normal-case">
+                        ({t('taskModal.notSet') || '未設定'})
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center space-x-2 shrink-0">
+                    {subtasks.length > 0 && (
+                      <span className="text-xs text-[var(--text-muted)] font-mono font-medium">
+                        {(() => {
+                          const lastColId = columns[columns.length - 1]?.id;
+                          const completedCount = subtasks.filter(
+                            (s) => lastColId && s.column_id === lastColId
+                          ).length;
+                          return t('taskModal.subtasksProgress', {
+                            completed: completedCount,
+                            total: subtasks.length,
+                            percent: Math.round((completedCount / (subtasks.length || 1)) * 100),
+                          });
+                        })()}
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      className="p-1 rounded text-[var(--text-muted)] group-hover/hier:text-[var(--text-primary)] transition-colors"
+                    >
+                      {isHierarchyOpen ? (
+                        <ChevronDown className="w-4 h-4" />
+                      ) : (
+                        <ChevronRight className="w-4 h-4" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Expanded Content */}
+                {isHierarchyOpen && (
+                  <div className="space-y-4 pt-2 border-t border-[var(--border-color)]">
+                    {/* Parent Task Area */}
+                    <div className="space-y-2">
+                      <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider flex items-center gap-1">
+                        <Link2 className="w-3.5 h-3.5 text-blue-400" /> {t('taskModal.parentTask')}
+                      </label>
+
+                      {task.parent_id ? (
+                        <div className="flex flex-col gap-2 p-2.5 bg-[var(--bg-input)] border border-[var(--border-color)] rounded-xl">
+                          <div className="flex items-center justify-between gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (parentTask && onOpenTask) {
+                                  onOpenTask(parentTask);
+                                }
+                              }}
+                              className="font-medium text-xs text-[var(--text-primary)] hover:text-blue-400 hover:underline transition-colors truncate text-left cursor-pointer flex-1"
+                            >
+                              {parentTask?.title || task.parent_id}
+                            </button>
+                            <div className="flex items-center space-x-1 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => setIsChangingParentOpen((prev) => !prev)}
+                                className="px-2 py-1 text-[11px] font-medium bg-[var(--modal-bg)] hover:bg-[var(--bg-card)] border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] rounded-lg transition-all cursor-pointer"
+                              >
+                                {t('taskModal.changeParent')}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={handleUnlinkParent}
+                                className="px-2 py-1 text-[11px] font-medium text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 border border-rose-500/20 rounded-lg transition-all cursor-pointer flex items-center space-x-1"
+                                title={t('taskModal.unlinkParent')}
+                              >
+                                <Unlink className="w-3 h-3" />
+                                <span>{t('taskModal.unlinkParent')}</span>
+                              </button>
+                            </div>
+                          </div>
+
+                          {isChangingParentOpen && (
+                            <div className="pt-2 border-t border-[var(--border-color)] flex items-center space-x-2">
+                              <input
+                                type="text"
+                                autoFocus
+                                value={inputParentId}
+                                onChange={(e) => setInputParentId(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    handleSetParent(inputParentId);
+                                  }
+                                }}
+                                placeholder={t('taskModal.parentIdPlaceholder')}
+                                className="flex-1 text-xs py-1.5 px-2.5 bg-[var(--modal-bg)] border border-[var(--border-color)] rounded-lg text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-blue-500 font-mono"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleSetParent(inputParentId)}
+                                disabled={!inputParentId.trim()}
+                                className="px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-500 rounded-lg disabled:opacity-50 transition-all cursor-pointer shrink-0"
+                              >
+                                {t('taskModal.changeParent')}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setIsChangingParentOpen(false);
+                                  setInputParentId('');
+                                }}
+                                className="px-2 py-1 text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
+                              >
+                                {t('taskModal.cancel')}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      ) : isSettingParentOpen ? (
+                        <div className="flex items-center space-x-2 p-2 bg-[var(--bg-input)] border border-blue-500/30 rounded-xl">
+                          <input
+                            type="text"
+                            autoFocus
+                            value={inputParentId}
+                            onChange={(e) => setInputParentId(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleSetParent(inputParentId);
+                              }
+                            }}
+                            placeholder={t('taskModal.parentIdPlaceholder')}
+                            className="flex-1 text-xs py-1.5 px-2.5 bg-[var(--modal-bg)] border border-[var(--border-color)] rounded-lg text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-blue-500 font-mono"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleSetParent(inputParentId)}
+                            disabled={!inputParentId.trim()}
+                            className="px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-500 rounded-lg disabled:opacity-50 transition-all cursor-pointer shrink-0"
+                          >
+                            {t('taskModal.link')}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsSettingParentOpen(false);
+                              setInputParentId('');
+                            }}
+                            className="px-2 py-1 text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
+                          >
+                            {t('taskModal.cancel')}
+                          </button>
+                        </div>
+                      ) : (
+                        <div>
+                          <button
+                            type="button"
+                            onClick={() => setIsSettingParentOpen(true)}
+                            className="inline-flex items-center space-x-1.5 px-3 py-1.5 text-xs font-medium bg-[var(--bg-input)] hover:bg-[var(--bg-card)] border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] rounded-xl transition-all cursor-pointer"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>{t('taskModal.setParent') || '親タスクを設定'}</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Subtasks Area (shown for root tasks) */}
+                    {!task.parent_id && (
+                      <div className="space-y-2 pt-2 border-t border-[var(--border-color)]">
+                        <div className="flex items-center justify-between">
+                          <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider flex items-center gap-1">
+                            <ListTree className="w-3.5 h-3.5 text-blue-500" />{' '}
+                            {t('taskModal.subtasksLabel')}
+                          </label>
+                        </div>
+
+                        {/* Progress Bar */}
+                        {subtasks.length > 0 && (() => {
+                          const lastColId = columns[columns.length - 1]?.id;
+                          const completedCount = subtasks.filter(
+                            (s) => lastColId && s.column_id === lastColId
+                          ).length;
+                          const isAllDone = completedCount === subtasks.length;
+                          const percent = Math.round((completedCount / (subtasks.length || 1)) * 100);
+                          return (
+                            <div className="w-full bg-[var(--bg-input)] rounded-full h-1.5 overflow-hidden">
+                              <div
+                                className={`h-full transition-all duration-300 ${
+                                  isAllDone ? 'bg-emerald-500' : 'bg-blue-500'
+                                }`}
+                                style={{ width: `${percent}%` }}
+                              />
+                            </div>
+                          );
+                        })()}
+
+                        {/* Subtasks List */}
+                        {subtasks.length > 0 && (
+                          <DndContext
+                            sensors={subtaskSensors}
+                            collisionDetection={closestCenter}
+                            onDragEnd={handleSubtaskDragEnd}
+                          >
+                            <SortableContext
+                              items={subtasks.map((s) => s.id)}
+                              strategy={verticalListSortingStrategy}
+                            >
+                              <div className="space-y-1.5 pt-1">
+                                {subtasks.map((sub) => (
+                                  <SortableSubtaskItem
+                                    key={sub.id}
+                                    sub={sub}
+                                    columns={columns}
+                                    onToggle={handleToggleSubtask}
+                                    onOpen={(s) => onOpenTask && onOpenTask(s)}
+                                    onDelete={(s) => setSubtaskActionTarget(s)}
+                                  />
+                                ))}
+                              </div>
+                            </SortableContext>
+                          </DndContext>
+                        )}
+
+                        {/* Subtasks Actions & Forms */}
+                        <div className="pt-1">
+                          {isAddingNewSubtask ? (
+                            <div className="flex items-center space-x-2 p-2 bg-[var(--bg-input)] border border-blue-500/30 rounded-xl">
+                              <input
+                                type="text"
+                                autoFocus
+                                value={newSubtaskInput}
+                                onChange={(e) => setNewSubtaskInput(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    handleAddSubtask();
+                                  }
+                                }}
+                                placeholder={t('taskModal.subtaskPlaceholder')}
+                                className="flex-1 px-3 py-1.5 text-xs bg-[var(--modal-bg)] border border-[var(--border-color)] rounded-lg text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-blue-500 font-medium"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleAddSubtask()}
+                                disabled={!newSubtaskInput.trim() || isCreatingSubtask}
+                                className="px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-500 rounded-lg disabled:opacity-50 transition-all cursor-pointer flex items-center space-x-1 shrink-0"
+                              >
+                                <Plus className="w-3.5 h-3.5" />
+                                <span>{t('configModal.add') || '追加'}</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setIsAddingNewSubtask(false);
+                                  setNewSubtaskInput('');
+                                }}
+                                className="px-2 py-1 text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
+                              >
+                                {t('taskModal.cancel')}
+                              </button>
+                            </div>
+                          ) : isLinkingExistingOpen ? (
+                            <div className="flex items-center space-x-2 p-2 bg-[var(--bg-input)] border border-blue-500/30 rounded-xl">
+                              <input
+                                type="text"
+                                autoFocus
+                                value={inputSubtaskId}
+                                onChange={(e) => setInputSubtaskId(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    handleAttachExistingTask(inputSubtaskId);
+                                  }
+                                }}
+                                placeholder={t('taskModal.subtaskIdPlaceholder')}
+                                className="flex-1 text-xs py-1.5 px-2.5 bg-[var(--modal-bg)] border border-[var(--border-color)] rounded-lg text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-blue-500 font-mono"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleAttachExistingTask(inputSubtaskId)}
+                                disabled={!inputSubtaskId.trim()}
+                                className="px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-500 rounded-lg disabled:opacity-50 transition-all cursor-pointer shrink-0"
+                              >
+                                {t('taskModal.link') || '紐付け'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setIsLinkingExistingOpen(false);
+                                  setInputSubtaskId('');
+                                }}
+                                className="px-2 py-1 text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
+                              >
+                                {t('taskModal.cancel')}
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center space-x-2">
+                              <button
+                                type="button"
+                                onClick={() => setIsAddingNewSubtask(true)}
+                                className="inline-flex items-center space-x-1.5 px-3 py-1.5 text-xs font-medium bg-[var(--bg-input)] hover:bg-[var(--bg-card)] border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] rounded-xl transition-all cursor-pointer"
+                              >
+                                <Plus className="w-3.5 h-3.5" />
+                                <span>{t('taskModal.addSubtask') || '＋ サブタスクを追加'}</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => setIsLinkingExistingOpen(true)}
+                                className="inline-flex items-center space-x-1.5 px-3 py-1.5 text-xs font-medium bg-[var(--bg-input)] hover:bg-[var(--bg-card)] border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] rounded-xl transition-all cursor-pointer"
+                              >
+                                <Link2 className="w-3.5 h-3.5" />
+                                <span>
+                                  {t('taskModal.addExistingSubtask') || '＋ 既存カードを紐付け'}
+                                </span>
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Tags */}
             <div>
               <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-1.5 flex items-center gap-1">
@@ -1668,6 +2417,85 @@ export const TaskModal: React.FC<TaskModalProps> = ({
           </div>
         </form>
       </div>
+
+      {/* Subtask Action / Delete Confirmation Dialog */}
+      {subtaskActionTarget && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="w-full max-w-md bg-[var(--modal-bg)] text-[var(--text-primary)] rounded-2xl border border-[var(--border-color)] shadow-2xl overflow-hidden p-5 space-y-4 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <div className="p-2 rounded-xl bg-blue-500/10 text-blue-500">
+                  <ListTree className="w-5 h-5" />
+                </div>
+                <h3 className="text-base font-bold text-[var(--text-primary)]">
+                  {t('taskModal.subtaskActionTitle')}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSubtaskActionTarget(null)}
+                className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] p-1 rounded-lg transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-[var(--text-secondary)]">
+              {t('taskModal.subtaskActionDesc', { title: subtaskActionTarget.title })}
+            </p>
+
+            <div className="space-y-2 pt-1">
+              {/* Option 1: Unlink from Parent */}
+              <button
+                type="button"
+                onClick={() => handleUnlinkSubtask(subtaskActionTarget)}
+                className="w-full flex items-start space-x-3 p-3 rounded-xl border border-[var(--border-color)] bg-[var(--bg-input)] hover:bg-[var(--bg-card)] hover:border-blue-500/50 transition-all text-left group/action cursor-pointer"
+              >
+                <div className="p-2 rounded-lg bg-blue-500/10 text-blue-500 group-hover/action:scale-105 transition-transform mt-0.5 shrink-0">
+                  <Unlink className="w-4 h-4" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs font-semibold text-[var(--text-primary)]">
+                    {t('taskModal.unlinkSubtask')}
+                  </div>
+                  <div className="text-[11px] text-[var(--text-secondary)] mt-0.5">
+                    {t('taskModal.unlinkSubtaskDesc')}
+                  </div>
+                </div>
+              </button>
+
+              {/* Option 2: Delete Card Permanently */}
+              <button
+                type="button"
+                onClick={() => handleConfirmDeleteSubtask(subtaskActionTarget)}
+                className="w-full flex items-start space-x-3 p-3 rounded-xl border border-rose-500/20 bg-rose-500/5 hover:bg-rose-500/10 hover:border-rose-500/40 transition-all text-left group/action cursor-pointer"
+              >
+                <div className="p-2 rounded-lg bg-rose-500/10 text-rose-500 group-hover/action:scale-105 transition-transform mt-0.5 shrink-0">
+                  <Trash2 className="w-4 h-4" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs font-semibold text-rose-500">
+                    {t('taskModal.deleteSubtaskCompletely')}
+                  </div>
+                  <div className="text-[11px] text-[var(--text-secondary)] mt-0.5">
+                    {t('taskModal.deleteSubtaskCompletelyDesc')}
+                  </div>
+                </div>
+              </button>
+            </div>
+
+            <div className="pt-2 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setSubtaskActionTarget(null)}
+                className="px-4 py-1.5 text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] bg-[var(--bg-input)] hover:bg-[var(--bg-card)] border border-[var(--border-color)] rounded-xl transition-all cursor-pointer"
+              >
+                {t('taskModal.cancel')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

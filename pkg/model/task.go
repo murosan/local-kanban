@@ -46,6 +46,7 @@ type CustomFieldValue struct {
 type Task struct {
 	Version      int                `json:"version"                 yaml:"version"`
 	ID           string             `json:"id"                      yaml:"id"`
+	ParentID     string             `json:"parent_id,omitempty"     yaml:"parent_id,omitempty"`
 	Title        string             `json:"title"                   yaml:"title"`
 	ColumnID     string             `json:"column_id,omitempty"     yaml:"column_id,omitempty"`
 	Rank         string             `json:"rank"                    yaml:"rank"`
@@ -53,6 +54,11 @@ type Task struct {
 	CreatedAt    time.Time          `json:"created_at"              yaml:"created_at"`
 	UpdatedAt    time.Time          `json:"updated_at"              yaml:"updated_at"`
 	CustomFields []CustomFieldValue `json:"custom_fields,omitempty" yaml:"custom_fields,omitempty"`
+
+	// Subtask computed fields
+	SubtasksCount          int `json:"subtasks_count,omitempty"           yaml:"-"`
+	SubtasksCompletedCount int `json:"subtasks_completed_count,omitempty" yaml:"-"`
+	Subtasks               any `json:"subtasks,omitempty"                 yaml:"-"`
 
 	// Body content of the markdown file (after frontmatter)
 	Content  string `json:"content,omitempty"   yaml:"-"`
