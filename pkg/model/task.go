@@ -8,12 +8,13 @@ import (
 type CustomFieldType string
 
 const (
-	FieldTypeDropdown CustomFieldType = "dropdown"
-	FieldTypeText     CustomFieldType = "text"
-	FieldTypeNumber   CustomFieldType = "number"
-	FieldTypeDate     CustomFieldType = "date"
-	FieldTypeCheckbox CustomFieldType = "checkbox"
-	FieldTypeLink     CustomFieldType = "link"
+	FieldTypeDropdown  CustomFieldType = "dropdown"
+	FieldTypeText      CustomFieldType = "text"
+	FieldTypeNumber    CustomFieldType = "number"
+	FieldTypeDate      CustomFieldType = "date"
+	FieldTypeCheckbox  CustomFieldType = "checkbox"
+	FieldTypeLink      CustomFieldType = "link"
+	FieldTypeChecklist CustomFieldType = "checklist"
 )
 
 type CustomFieldOption struct {

@@ -5,6 +5,7 @@ import {
   CustomFieldOption,
   CustomFieldType,
   CustomFieldValue,
+  ChecklistItem,
   Task,
 } from '../types/task';
 import {
@@ -27,6 +28,7 @@ import {
   ExternalLink,
   Plus,
   Settings,
+  CheckSquare,
 } from 'lucide-react';
 import { MarkdownEditor, ChangeOptions } from './MarkdownEditor';
 import { useI18n } from '../i18n/useI18n';
@@ -93,7 +95,10 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         }));
       }
       // Legacy Record<string, CustomFieldValue> fallback
-      const legacyMap = taskData.custom_fields as unknown as Record<string, any>;
+      const legacyMap = taskData.custom_fields as unknown as Record<
+        string,
+        Partial<CustomFieldValue> | undefined
+      >;
       return Object.entries(legacyMap).map(([key, cf]) => {
         const fieldDef = customFields.find((f) => f.id === key);
         return {
@@ -121,6 +126,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   const [newOptionsInput, setNewOptionsInput] = useState(''); // Comma-separated or option list for dropdown
   const [editingOptionFieldId, setEditingOptionFieldId] = useState<string | null>(null);
   const [addOptionInput, setAddOptionInput] = useState('');
+  const [newChecklistItemInputs, setNewChecklistItemInputs] = useState<Record<string, string>>({});
 
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
   const [isSaving, setIsSaving] = useState(false);
@@ -472,7 +478,11 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     });
   };
 
-  const handleRemoveCustomField = (id: string) => {
+  const handleRemoveCustomField = (id: string, name?: string) => {
+    const fieldName = name || customFieldsState.find((cf) => cf.id === id)?.name || 'Field';
+    if (!confirm(t('taskModal.removeFieldConfirm', { name: fieldName }))) {
+      return;
+    }
     setCustomFieldsState((prev) => {
       const nextCustomFields = prev.filter((cf) => cf.id !== id);
       const newState = {
@@ -489,13 +499,28 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   };
 
   const handleAddPresetField = (preset: CustomFieldDef) => {
+    let initialValue: CustomFieldValue['value'] = '';
+    if (preset.type === 'checkbox') {
+      initialValue = false;
+    } else if (preset.type === 'checklist') {
+      if (preset.options && preset.options.length > 0) {
+        initialValue = preset.options.map((opt) => ({
+          id: `item-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          text: opt.value,
+          completed: false,
+        }));
+      } else {
+        initialValue = [];
+      }
+    }
+
     const newField: CustomFieldValue = {
       id: `cf-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       field_id: preset.id,
       name: preset.name,
       type: preset.type,
       options: preset.options ? [...preset.options] : undefined,
-      value: preset.type === 'checkbox' ? false : '',
+      value: initialValue,
       enabled: true,
     };
     setCustomFieldsState((prev) => {
@@ -518,7 +543,9 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     if (!newCustomName.trim()) return;
 
     let options: CustomFieldOption[] | undefined;
-    if (newCustomType === 'dropdown' && newOptionsInput.trim()) {
+    let initialValue: CustomFieldValue['value'] = '';
+
+    if ((newCustomType === 'dropdown' || newCustomType === 'checklist') && newOptionsInput.trim()) {
       const optionValues = newOptionsInput
         .split(',')
         .map((s) => s.trim())
@@ -530,12 +557,26 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       }));
     }
 
+    if (newCustomType === 'checkbox') {
+      initialValue = false;
+    } else if (newCustomType === 'checklist') {
+      if (options && options.length > 0) {
+        initialValue = options.map((opt) => ({
+          id: `item-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          text: opt.value,
+          completed: false,
+        }));
+      } else {
+        initialValue = [];
+      }
+    }
+
     const newField: CustomFieldValue = {
       id: `cf-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       name: newCustomName.trim(),
       type: newCustomType,
       options,
-      value: newCustomType === 'checkbox' ? false : '',
+      value: initialValue,
       enabled: true,
     };
     setCustomFieldsState((prev) => {
@@ -554,6 +595,109 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     setNewCustomName('');
     setNewOptionsInput('');
     setIsAddFieldOpen(false);
+  };
+
+  const handleToggleChecklistItem = (fieldId: string, itemId: string) => {
+    setCustomFieldsState((prev) => {
+      const nextCustomFields = prev.map((cf) => {
+        if (cf.id === fieldId) {
+          const currentItems = Array.isArray(cf.value) ? (cf.value as ChecklistItem[]) : [];
+          const nextItems = currentItems.map((item) =>
+            item.id === itemId ? { ...item, completed: !item.completed } : item
+          );
+          return { ...cf, value: nextItems };
+        }
+        return cf;
+      });
+      const newState = {
+        title,
+        columnId,
+        tagsInput,
+        content,
+        customFieldsState: nextCustomFields,
+      };
+      recordHistory(newState, { immediate: true });
+      triggerAutoSave(newState, true);
+      return nextCustomFields;
+    });
+  };
+
+  const handleUpdateChecklistItemText = (fieldId: string, itemId: string, newText: string) => {
+    setCustomFieldsState((prev) => {
+      const nextCustomFields = prev.map((cf) => {
+        if (cf.id === fieldId) {
+          const currentItems = Array.isArray(cf.value) ? (cf.value as ChecklistItem[]) : [];
+          const nextItems = currentItems.map((item) =>
+            item.id === itemId ? { ...item, text: newText } : item
+          );
+          return { ...cf, value: nextItems };
+        }
+        return cf;
+      });
+      const newState = {
+        title,
+        columnId,
+        tagsInput,
+        content,
+        customFieldsState: nextCustomFields,
+      };
+      recordHistory(newState, { immediate: false });
+      triggerAutoSave(newState, false);
+      return nextCustomFields;
+    });
+  };
+
+  const handleRemoveChecklistItem = (fieldId: string, itemId: string) => {
+    setCustomFieldsState((prev) => {
+      const nextCustomFields = prev.map((cf) => {
+        if (cf.id === fieldId) {
+          const currentItems = Array.isArray(cf.value) ? (cf.value as ChecklistItem[]) : [];
+          const nextItems = currentItems.filter((item) => item.id !== itemId);
+          return { ...cf, value: nextItems };
+        }
+        return cf;
+      });
+      const newState = {
+        title,
+        columnId,
+        tagsInput,
+        content,
+        customFieldsState: nextCustomFields,
+      };
+      recordHistory(newState, { immediate: true });
+      triggerAutoSave(newState, true);
+      return nextCustomFields;
+    });
+  };
+
+  const handleAddChecklistItem = (fieldId: string, itemText: string) => {
+    const trimmed = itemText.trim();
+    if (!trimmed) return;
+    setCustomFieldsState((prev) => {
+      const nextCustomFields = prev.map((cf) => {
+        if (cf.id === fieldId) {
+          const currentItems = Array.isArray(cf.value) ? (cf.value as ChecklistItem[]) : [];
+          const newItem: ChecklistItem = {
+            id: `item-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+            text: trimmed,
+            completed: false,
+          };
+          return { ...cf, value: [...currentItems, newItem] };
+        }
+        return cf;
+      });
+      const newState = {
+        title,
+        columnId,
+        tagsInput,
+        content,
+        customFieldsState: nextCustomFields,
+      };
+      recordHistory(newState, { immediate: true });
+      triggerAutoSave(newState, true);
+      return nextCustomFields;
+    });
+    setNewChecklistItemInputs((prev) => ({ ...prev, [fieldId]: '' }));
   };
 
   const handleAddOptionToField = (fieldId: string, optionValue: string) => {
@@ -996,21 +1140,32 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                               <option value="number">{t('configModal.typeNumber')}</option>
                               <option value="date">{t('configModal.typeDate')}</option>
                               <option value="dropdown">{t('configModal.typeDropdown')}</option>
+                              <option value="checklist">
+                                {t('configModal.typeChecklist') || 'チェックリスト'}
+                              </option>
                               <option value="checkbox">{t('configModal.typeCheckbox')}</option>
                               <option value="link">{t('configModal.typeLink')}</option>
                             </select>
                           </div>
 
-                          {newCustomType === 'dropdown' && (
+                          {(newCustomType === 'dropdown' || newCustomType === 'checklist') && (
                             <div>
                               <label className="block text-[11px] font-semibold text-[var(--text-secondary)] mb-1">
-                                選択肢（カンマ区切り）
+                                {newCustomType === 'checklist'
+                                  ? t('configModal.checklistItemsPlaceholder') ||
+                                    'デフォルト項目（カンマ区切り）'
+                                  : '選択肢（カンマ区切り）'}
                               </label>
                               <input
                                 type="text"
                                 value={newOptionsInput}
                                 onChange={(e) => setNewOptionsInput(e.target.value)}
-                                placeholder="高, 中, 低"
+                                placeholder={
+                                  newCustomType === 'checklist'
+                                    ? t('configModal.checklistItemsPlaceholder') ||
+                                      '例: 要件定義, 実装, テスト'
+                                    : '高, 中, 低'
+                                }
                                 className="w-full px-3 py-2 text-xs bg-[var(--bg-input)] border border-[var(--border-color)] rounded-xl text-[var(--text-primary)] focus:outline-none focus:border-blue-500"
                               />
                             </div>
@@ -1096,7 +1251,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                             )}
                             <button
                               type="button"
-                              onClick={() => handleRemoveCustomField(field.id)}
+                              onClick={() => handleRemoveCustomField(field.id, field.name)}
                               className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-rose-500 hover:bg-rose-500/10 transition-colors"
                               title={t('taskModal.removeField')}
                             >
@@ -1338,6 +1493,133 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                                       <ExternalLink className="w-4 h-4" />
                                     </a>
                                   )}
+                                </div>
+                              );
+                            })()}
+
+                          {field.type === 'checklist' &&
+                            (() => {
+                              const items = Array.isArray(field.value)
+                                ? (field.value as ChecklistItem[])
+                                : [];
+                              const completedCount = items.filter((i) => i.completed).length;
+                              const totalCount = items.length;
+                              const progressPercent =
+                                totalCount > 0
+                                  ? Math.round((completedCount / totalCount) * 100)
+                                  : 0;
+                              const currentInput = newChecklistItemInputs[field.id] || '';
+
+                              return (
+                                <div className="space-y-2.5 bg-[var(--bg-input)] p-3 rounded-xl border border-[var(--border-color)]">
+                                  {/* Progress Header */}
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="font-semibold text-[var(--text-secondary)] flex items-center gap-1.5">
+                                      <CheckSquare className="w-3.5 h-3.5 text-blue-500" />
+                                      <span>進捗状況</span>
+                                    </span>
+                                    <span className="font-bold text-[11px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-500 border border-blue-500/20">
+                                      {t('taskModal.checklistCompleted', {
+                                        completed: completedCount,
+                                        total: totalCount,
+                                      }) || `${completedCount}/${totalCount} 完了`}{' '}
+                                      ({progressPercent}%)
+                                    </span>
+                                  </div>
+
+                                  {/* Progress Bar */}
+                                  <div className="w-full h-1.5 bg-[var(--bg-surface)] rounded-full overflow-hidden border border-[var(--border-color)]">
+                                    <div
+                                      className="h-full bg-emerald-500 transition-all duration-300 rounded-full"
+                                      style={{ width: `${progressPercent}%` }}
+                                    />
+                                  </div>
+
+                                  {/* Items List */}
+                                  <div className="space-y-1.5 pt-1">
+                                    {items.length > 0 ? (
+                                      items.map((item) => (
+                                        <div
+                                          key={item.id}
+                                          className="flex items-center justify-between gap-2 p-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-color)] hover:border-[var(--border-color)]/80 transition-all"
+                                        >
+                                          <label className="flex items-center space-x-2 flex-1 min-w-0 cursor-pointer">
+                                            <input
+                                              type="checkbox"
+                                              checked={item.completed}
+                                              onChange={() =>
+                                                handleToggleChecklistItem(field.id, item.id)
+                                              }
+                                              className="w-4 h-4 text-blue-600 rounded border border-[var(--border-color)] focus:ring-blue-500 shrink-0 cursor-pointer"
+                                            />
+                                            <input
+                                              type="text"
+                                              value={item.text}
+                                              onChange={(e) =>
+                                                handleUpdateChecklistItemText(
+                                                  field.id,
+                                                  item.id,
+                                                  e.target.value
+                                                )
+                                              }
+                                              className={`text-xs bg-transparent border-b border-transparent hover:border-[var(--border-color)] focus:border-blue-500 focus:bg-[var(--bg-input)] px-1 py-0.5 rounded outline-none flex-1 truncate transition-all ${
+                                                item.completed
+                                                  ? 'line-through text-[var(--text-muted)] opacity-70'
+                                                  : 'text-[var(--text-primary)] font-medium'
+                                              }`}
+                                            />
+                                          </label>
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              handleRemoveChecklistItem(field.id, item.id)
+                                            }
+                                            className="p-1 text-[var(--text-muted)] hover:text-rose-500 rounded transition-colors shrink-0 opacity-80 hover:opacity-100"
+                                            title="項目を削除"
+                                          >
+                                            <X className="w-3.5 h-3.5" />
+                                          </button>
+                                        </div>
+                                      ))
+                                    ) : (
+                                      <p className="text-xs text-[var(--text-muted)] italic py-1 text-center">
+                                        {t('taskModal.noChecklistItems') ||
+                                          'チェック項目がありません'}
+                                      </p>
+                                    )}
+                                  </div>
+
+                                  {/* Add Item Input Form */}
+                                  <div className="flex items-center gap-1.5 pt-1">
+                                    <input
+                                      type="text"
+                                      value={currentInput}
+                                      onChange={(e) =>
+                                        setNewChecklistItemInputs((prev) => ({
+                                          ...prev,
+                                          [field.id]: e.target.value,
+                                        }))
+                                      }
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                          e.preventDefault();
+                                          handleAddChecklistItem(field.id, currentInput);
+                                        }
+                                      }}
+                                      placeholder={
+                                        t('taskModal.itemPlaceholder') || '新しい項目を入力...'
+                                      }
+                                      className="flex-1 px-2.5 py-1 text-xs bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-lg text-[var(--text-primary)] focus:outline-none focus:border-blue-500"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => handleAddChecklistItem(field.id, currentInput)}
+                                      disabled={!currentInput.trim()}
+                                      className="px-3 py-1 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-500 rounded-lg shrink-0 disabled:opacity-50 transition-colors"
+                                    >
+                                      {t('taskModal.addChecklistItem') || '追加'}
+                                    </button>
+                                  </div>
                                 </div>
                               );
                             })()}

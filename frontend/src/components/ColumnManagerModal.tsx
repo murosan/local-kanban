@@ -67,7 +67,7 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
     if (!newFieldName.trim()) return;
 
     let options: CustomFieldOption[] | undefined;
-    if (newFieldType === 'dropdown') {
+    if (newFieldType === 'dropdown' || newFieldType === 'checklist') {
       const optionValues = newFieldOptionsInput
         .split(',')
         .map((s) => s.trim())
@@ -75,6 +75,7 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
       options = optionValues.map((val, idx) => ({
         id: `opt-${Date.now()}-${idx}`,
         value: val,
+        color: COLOR_PRESETS[idx % COLOR_PRESETS.length],
       }));
     }
 
@@ -220,7 +221,7 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
       const finalCustomFields = [...localCustomFields];
       if (newFieldName.trim()) {
         let options: CustomFieldOption[] | undefined;
-        if (newFieldType === 'dropdown') {
+        if (newFieldType === 'dropdown' || newFieldType === 'checklist') {
           const optionValues = newFieldOptionsInput
             .split(',')
             .map((s) => s.trim())
@@ -228,6 +229,7 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
           options = optionValues.map((val, idx) => ({
             id: `opt-${Date.now()}-${idx}`,
             value: val,
+            color: COLOR_PRESETS[idx % COLOR_PRESETS.length],
           }));
         }
         const pendingField: CustomFieldDef = {
@@ -479,11 +481,14 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
                       </button>
                     </div>
 
-                    {/* Dropdown Options List with color picker and individual Option Delete buttons */}
-                    {field.type === 'dropdown' && (
+                    {/* Options List with color picker and individual Option Delete buttons for dropdown and checklist */}
+                    {(field.type === 'dropdown' || field.type === 'checklist') && (
                       <div className="space-y-2 pt-1">
                         <span className="text-[11px] font-semibold text-[var(--text-secondary)] block">
-                          プルダウン選択肢（色付け設定）:
+                          {field.type === 'checklist'
+                            ? t('configModal.checklistItems') ||
+                              'チェックリスト初期項目（色付け設定）:'
+                            : 'プルダウン選択肢（色付け設定）:'}
                         </span>
                         <div className="space-y-2">
                           {field.options && field.options.length > 0 ? (
@@ -526,7 +531,7 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
                                     type="button"
                                     onClick={() => handleRemoveOptionFromCustomField(idx, opt.id)}
                                     className="p-1 text-xs text-rose-500 hover:text-rose-600 font-bold ml-1"
-                                    title="選択肢を削除"
+                                    title="項目を削除"
                                   >
                                     ×
                                   </button>
@@ -535,7 +540,9 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
                             ))
                           ) : (
                             <span className="text-xs text-[var(--text-muted)] italic">
-                              選択肢が設定されていません
+                              {field.type === 'checklist'
+                                ? '初期項目が設定されていません'
+                                : '選択肢が設定されていません'}
                             </span>
                           )}
                         </div>
@@ -543,14 +550,18 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
                         <button
                           type="button"
                           onClick={() => {
-                            const val = prompt('新しい選択肢の名前を入力してください:');
+                            const val = prompt(
+                              field.type === 'checklist'
+                                ? '新しいチェック項目の名前を入力してください:'
+                                : '新しい選択肢の名前を入力してください:'
+                            );
                             if (val && val.trim()) {
                               handleAddOptionToField(idx, val.trim());
                             }
                           }}
                           className="mt-2 px-3 py-1 bg-[var(--bg-surface)] hover:opacity-80 border border-[var(--border-color)] text-[var(--text-primary)] rounded-lg text-xs font-medium transition-colors"
                         >
-                          ＋ 選択肢を追加
+                          {field.type === 'checklist' ? '＋ 初期項目を追加' : '＋ 選択肢を追加'}
                         </button>
                       </div>
                     )}
@@ -589,6 +600,9 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
                       className="w-full bg-[var(--bg-input)] border border-[var(--border-color)] focus:border-blue-500 rounded-lg px-3 py-1.5 text-sm text-[var(--text-primary)] outline-none"
                     >
                       <option value="dropdown">{t('configModal.typeDropdown')}</option>
+                      <option value="checklist">
+                        {t('configModal.typeChecklist') || 'チェックリスト'}
+                      </option>
                       <option value="text">{t('configModal.typeText')}</option>
                       <option value="number">{t('configModal.typeNumber')}</option>
                       <option value="date">{t('configModal.typeDate')}</option>
@@ -598,14 +612,22 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
                   </div>
                 </div>
 
-                {newFieldType === 'dropdown' && (
+                {(newFieldType === 'dropdown' || newFieldType === 'checklist') && (
                   <div>
                     <label className="block text-[11px] font-medium text-[var(--text-secondary)] mb-1">
-                      {t('configModal.addOption')} ({t('configModal.optionPlaceholder')})
+                      {newFieldType === 'checklist'
+                        ? t('configModal.checklistItemsPlaceholder') ||
+                          'デフォルト項目（カンマ区切り）'
+                        : `${t('configModal.addOption')} (${t('configModal.optionPlaceholder')})`}
                     </label>
                     <input
                       type="text"
-                      placeholder={t('configModal.optionPlaceholder')}
+                      placeholder={
+                        newFieldType === 'checklist'
+                          ? t('configModal.checklistItemsPlaceholder') ||
+                            '例: 要件定義, 実装, テスト'
+                          : t('configModal.optionPlaceholder')
+                      }
                       value={newFieldOptionsInput}
                       onChange={(e) => setNewFieldOptionsInput(e.target.value)}
                       className="w-full bg-[var(--bg-input)] border border-[var(--border-color)] focus:border-blue-500 rounded-lg px-3 py-1.5 text-sm text-[var(--text-primary)] outline-none"

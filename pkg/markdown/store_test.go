@@ -310,3 +310,59 @@ Body content
 		t.Errorf("unexpected custom field migrated: %+v", cf)
 	}
 }
+
+func TestChecklistCustomField(t *testing.T) {
+	tmpDir := t.TempDir()
+	store, err := NewStore(tmpDir)
+	if err != nil {
+		t.Fatalf("failed to init store: %v", err)
+	}
+
+	checklistItems := []map[string]any{
+		{"id": "item-1", "text": "Design API", "completed": true},
+		{"id": "item-2", "text": "Implement backend", "completed": false},
+	}
+
+	task := &model.Task{
+		Title:    "Checklist Test Task",
+		ColumnID: "col-todo",
+		Rank:     "0|m",
+		CustomFields: []model.CustomFieldValue{
+			{
+				ID:      "cf-checklist-1",
+				Name:    "Subtasks",
+				Type:    model.FieldTypeChecklist,
+				Value:   checklistItems,
+				Enabled: true,
+			},
+		},
+		Content: "Task with checklist field",
+	}
+
+	if err := store.SaveTask(task); err != nil {
+		t.Fatalf("failed to save task with checklist: %v", err)
+	}
+
+	loadedTask, err := store.GetTaskByID(task.ID)
+	if err != nil {
+		t.Fatalf("failed to get task: %v", err)
+	}
+
+	if len(loadedTask.CustomFields) != 1 {
+		t.Fatalf("expected 1 custom field, got %d", len(loadedTask.CustomFields))
+	}
+
+	cf := loadedTask.CustomFields[0]
+	if cf.Type != model.FieldTypeChecklist {
+		t.Errorf("expected type %s, got %s", model.FieldTypeChecklist, cf.Type)
+	}
+
+	// Verify items survived roundtrip
+	items, ok := cf.Value.([]any)
+	if !ok {
+		t.Fatalf("expected []any for checklist value, got %T (%+v)", cf.Value, cf.Value)
+	}
+	if len(items) != 2 {
+		t.Fatalf("expected 2 items, got %d", len(items))
+	}
+}
