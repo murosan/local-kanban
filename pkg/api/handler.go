@@ -77,14 +77,6 @@ func (s *Server) handleSaveConfig(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, cfg)
 }
 
-func isDoneColumn(columnID string, cfg *model.BoardConfig) bool {
-	if cfg != nil && len(cfg.Columns) > 0 {
-		lastCol := cfg.Columns[len(cfg.Columns)-1]
-		return lastCol.ID == columnID
-	}
-	return false
-}
-
 func (s *Server) handleGetTasks(w http.ResponseWriter, r *http.Request) {
 	rawQuery := r.URL.Query().Get("q")
 	query := strings.ToLower(rawQuery)
@@ -97,15 +89,15 @@ func (s *Server) handleGetTasks(w http.ResponseWriter, r *http.Request) {
 		tasks = make([]*model.Task, 0)
 	}
 
-	cfg, _ := s.store.GetBoardConfig()
-
-	// Map all tasks by ID to find parents of subtasks
 	taskByID := make(map[string]*model.Task, len(tasks))
-	subtasksByParent := make(map[string][]*model.Task)
+	childIDs := make(map[string]bool)
 	for _, t := range tasks {
 		taskByID[t.ID] = t
+		for _, ref := range t.Subtasks {
+			childIDs[ref.ID] = true
+		}
 		if t.ParentID != "" {
-			subtasksByParent[t.ParentID] = append(subtasksByParent[t.ParentID], t)
+			childIDs[t.ID] = true
 		}
 	}
 
@@ -118,8 +110,18 @@ func (s *Server) handleGetTasks(w http.ResponseWriter, r *http.Request) {
 			if err == nil {
 				for _, id := range matchedIDs {
 					if t, exists := taskByID[id]; exists {
-						if t.ParentID != "" {
-							matchedRootIDs[t.ParentID] = true
+						if childIDs[t.ID] {
+							// Find parent of this subtask
+							for _, parent := range tasks {
+								for _, ref := range parent.Subtasks {
+									if ref.ID == t.ID {
+										matchedRootIDs[parent.ID] = true
+									}
+								}
+								if parent.ID == t.ParentID {
+									matchedRootIDs[parent.ID] = true
+								}
+							}
 						} else {
 							matchedRootIDs[t.ID] = true
 						}
@@ -140,8 +142,17 @@ func (s *Server) handleGetTasks(w http.ResponseWriter, r *http.Request) {
 					}
 				}
 				if match {
-					if t.ParentID != "" {
-						matchedRootIDs[t.ParentID] = true
+					if childIDs[t.ID] {
+						for _, parent := range tasks {
+							for _, ref := range parent.Subtasks {
+								if ref.ID == t.ID {
+									matchedRootIDs[parent.ID] = true
+								}
+							}
+							if parent.ID == t.ParentID {
+								matchedRootIDs[parent.ID] = true
+							}
+						}
 					} else {
 						matchedRootIDs[t.ID] = true
 					}
@@ -153,7 +164,7 @@ func (s *Server) handleGetTasks(w http.ResponseWriter, r *http.Request) {
 	// Build root tasks list with attached subtasks
 	rootTasks := make([]*model.Task, 0)
 	for _, t := range tasks {
-		if t.ParentID != "" {
+		if childIDs[t.ID] {
 			// Subtasks are attached to root tasks
 			continue
 		}
@@ -161,18 +172,18 @@ func (s *Server) handleGetTasks(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		subs := subtasksByParent[t.ID]
+		subs, _ := s.store.GetSubtasksByParentID(t.ID)
 		t.SubtasksCount = len(subs)
 		completed := 0
 		lightweightSubs := make([]*model.Task, len(subs))
 		for i, sub := range subs {
-			if isDoneColumn(sub.ColumnID, cfg) {
+			if sub.Completed {
 				completed++
 			}
 			lightweightSubs[i] = toLightweightTask(sub)
 		}
 		t.SubtasksCompletedCount = completed
-		t.Subtasks = lightweightSubs
+		t.SubtaskDetails = lightweightSubs
 
 		rootTasks = append(rootTasks, toLightweightTask(t))
 	}
@@ -197,19 +208,18 @@ func (s *Server) handleGetTask(w http.ResponseWriter, r *http.Request) {
 		task.Summary = model.GenerateSummary(task.Content)
 	}
 
-	cfg, _ := s.store.GetBoardConfig()
-	subtasks, _ := s.store.GetSubtasksByParentID(task.ID)
-	task.SubtasksCount = len(subtasks)
+	subs, _ := s.store.GetSubtasksByParentID(task.ID)
+	task.SubtasksCount = len(subs)
 	completed := 0
-	lightweightSubs := make([]*model.Task, len(subtasks))
-	for i, sub := range subtasks {
-		if isDoneColumn(sub.ColumnID, cfg) {
+	lightweightSubs := make([]*model.Task, len(subs))
+	for i, sub := range subs {
+		if sub.Completed {
 			completed++
 		}
 		lightweightSubs[i] = toLightweightTask(sub)
 	}
 	task.SubtasksCompletedCount = completed
-	task.Subtasks = lightweightSubs
+	task.SubtaskDetails = lightweightSubs
 
 	respondJSON(w, http.StatusOK, task)
 }
@@ -231,6 +241,7 @@ type CreateTaskPayload struct {
 	ColumnID     string                   `json:"column_id"`
 	Tags         []string                 `json:"tags"`
 	CustomFields []model.CustomFieldValue `json:"custom_fields,omitempty"`
+	Subtasks     []model.SubtaskRef       `json:"subtasks,omitempty"`
 	Content      string                   `json:"content"`
 	PrevID       string                   `json:"prev_id"`
 	NextID       string                   `json:"next_id"`
@@ -285,12 +296,33 @@ func (s *Server) handleCreateTask(w http.ResponseWriter, r *http.Request) {
 		Rank:         rank,
 		Tags:         payload.Tags,
 		CustomFields: payload.CustomFields,
+		Subtasks:     payload.Subtasks,
 		Content:      payload.Content,
 	}
 
 	if err := s.store.SaveTask(task); err != nil {
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return
+	}
+
+	// If parent_id is specified, add this task to parent's Subtasks
+	if payload.ParentID != "" {
+		if parent, err := s.store.GetTaskByID(payload.ParentID); err == nil && parent != nil {
+			alreadyExists := false
+			for _, ref := range parent.Subtasks {
+				if ref.ID == task.ID {
+					alreadyExists = true
+					break
+				}
+			}
+			if !alreadyExists {
+				parent.Subtasks = append(parent.Subtasks, model.SubtaskRef{
+					ID:        task.ID,
+					Completed: false,
+				})
+				_ = s.store.SaveTask(parent)
+			}
+		}
 	}
 
 	respondJSON(w, http.StatusCreated, task)
@@ -302,6 +334,7 @@ type UpdateTaskPayload struct {
 	ColumnID     *string                  `json:"column_id"`
 	Tags         []string                 `json:"tags"`
 	CustomFields []model.CustomFieldValue `json:"custom_fields,omitempty"`
+	Subtasks     *[]model.SubtaskRef      `json:"subtasks,omitempty"`
 	Content      *string                  `json:"content"`
 	Rank         *string                  `json:"rank"`
 	PrevID       string                   `json:"prev_id"`
@@ -347,6 +380,9 @@ func (s *Server) handleUpdateTask(w http.ResponseWriter, r *http.Request) {
 	}
 	if payload.CustomFields != nil {
 		task.CustomFields = payload.CustomFields
+	}
+	if payload.Subtasks != nil {
+		task.Subtasks = *payload.Subtasks
 	}
 	if payload.Content != nil {
 		task.Content = *payload.Content

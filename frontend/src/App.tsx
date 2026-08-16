@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { BoardConfig, Column, CustomFieldDef, Task, ThemeConfig } from './types/task';
+import { BoardConfig, Column, CustomFieldDef, SubtaskRef, Task, ThemeConfig } from './types/task';
 import {
   fetchBoardConfig,
   fetchTasks,
@@ -206,13 +206,34 @@ export const App: React.FC = () => {
   };
 
   const handleSubtaskToggle = async (subtask: Task) => {
-    if (!config || config.columns.length === 0) return;
-    const isDone = subtask.column_id === config.columns[config.columns.length - 1].id;
-    const targetColumnId = isDone
-      ? config.columns[0].id
-      : config.columns[config.columns.length - 1].id;
+    const parentTask = tasks.find(
+      (t) =>
+        t.subtask_details?.some((s) => s.id === subtask.id) ||
+        t.subtasks?.some((s) => s.id === subtask.id) ||
+        (subtask.parent_id && t.id === subtask.parent_id)
+    );
+    if (!parentTask) return;
+
+    const existingSubRefs: SubtaskRef[] =
+      parentTask.subtasks && parentTask.subtasks.length > 0
+        ? [...parentTask.subtasks]
+        : (parentTask.subtask_details || []).map((s) => ({
+            id: s.id,
+            completed: Boolean(s.completed),
+          }));
+
+    const targetRef = existingSubRefs.find((s) => s.id === subtask.id);
+    let newSubtasks: SubtaskRef[];
+    if (targetRef) {
+      newSubtasks = existingSubRefs.map((s) =>
+        s.id === subtask.id ? { ...s, completed: !s.completed } : s
+      );
+    } else {
+      newSubtasks = [...existingSubRefs, { id: subtask.id, completed: true }];
+    }
+
     try {
-      await updateTask(subtask.id, { column_id: targetColumnId });
+      await updateTask(parentTask.id, { subtasks: newSubtasks });
       await loadData();
     } catch (err) {
       console.error('Failed to toggle subtask:', err);

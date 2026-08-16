@@ -55,6 +55,15 @@ func TestSQLiteCache(t *testing.T) {
 		t.Fatalf("failed to upsert task2: %v", err)
 	}
 
+	// Test GetTaskByID
+	fetched1, err := cache.GetTaskByID("task-1")
+	if err != nil {
+		t.Fatalf("failed to get task-1 by id: %v", err)
+	}
+	if fetched1.Title != "認証ミドルウェアの実装" {
+		t.Errorf("expected title '認証ミドルウェアの実装', got %q", fetched1.Title)
+	}
+
 	// Test Search FTS
 	results, err := cache.SearchFTS("認証")
 	if err != nil {
@@ -231,10 +240,14 @@ func TestSubtasksCache(t *testing.T) {
 
 	now := time.Now().UTC()
 	parent := &model.Task{
-		ID:        "parent-1",
-		Title:     "Parent Task",
-		ColumnID:  "col-todo",
-		Rank:      "0|a",
+		ID:       "parent-1",
+		Title:    "Parent Task",
+		ColumnID: "col-todo",
+		Rank:     "0|a",
+		Subtasks: []model.SubtaskRef{
+			{ID: "sub-1", Completed: false},
+			{ID: "sub-2", Completed: true},
+		},
 		CreatedAt: now,
 		UpdatedAt: now,
 		FilePath:  "/tmp/parent.md",
@@ -284,6 +297,31 @@ func TestSubtasksCache(t *testing.T) {
 	}
 	if subtasks[1].ID != "sub-2" || subtasks[1].ParentID != "parent-1" {
 		t.Errorf("unexpected subtask 1: %+v", subtasks[1])
+	}
+
+	// Verify parent task has Subtasks correctly retrieved
+	parentTasks, err := cache.GetTasksByColumnIDs([]string{"col-todo"})
+	if err != nil {
+		t.Fatalf("failed to get parent tasks: %v", err)
+	}
+	var foundParent *model.Task
+	for _, pt := range parentTasks {
+		if pt.ID == "parent-1" {
+			foundParent = pt
+			break
+		}
+	}
+	if foundParent == nil {
+		t.Fatalf("expected to find parent-1 in col-todo")
+	}
+	if len(foundParent.Subtasks) != 2 {
+		t.Fatalf("expected parent to have 2 subtask refs, got %d", len(foundParent.Subtasks))
+	}
+	if foundParent.Subtasks[0].ID != "sub-1" || foundParent.Subtasks[0].Completed != false {
+		t.Errorf("unexpected subtask ref 0: %+v", foundParent.Subtasks[0])
+	}
+	if foundParent.Subtasks[1].ID != "sub-2" || foundParent.Subtasks[1].Completed != true {
+		t.Errorf("unexpected subtask ref 1: %+v", foundParent.Subtasks[1])
 	}
 
 	// Test GetTasksByColumnIDs retrieves parent_id correctly

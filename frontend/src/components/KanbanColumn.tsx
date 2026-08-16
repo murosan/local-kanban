@@ -8,7 +8,6 @@ import { useI18n } from '../i18n/useI18n';
 
 interface KanbanColumnProps {
   column: Column;
-  columns?: Column[];
   customFields?: CustomFieldDef[];
   tasks: Task[];
   onCardClick: (task: Task) => void;
@@ -19,7 +18,6 @@ interface KanbanColumnProps {
 
 export const KanbanColumn: React.FC<KanbanColumnProps> = ({
   column,
-  columns = [],
   customFields = [],
   tasks,
   onCardClick,
@@ -79,7 +77,6 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
             <TaskCard
               key={task.id}
               task={task}
-              columns={columns}
               customFields={customFields}
               onCardClick={onCardClick}
               onSubtaskToggle={onSubtaskToggle}

@@ -17,7 +17,6 @@ import { useI18n } from '../i18n/useI18n';
 
 interface TaskCardProps {
   task: Task;
-  columns?: Column[];
   customFields?: CustomFieldDef[];
   onCardClick?: (task: Task) => void;
   onSubtaskToggle?: (subtask: Task) => void;
@@ -27,7 +26,6 @@ interface TaskCardProps {
 
 export const TaskCard: React.FC<TaskCardProps> = ({
   task,
-  columns = [],
   customFields = [],
   onCardClick,
   onSubtaskToggle,
@@ -218,6 +216,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
 
       {/* Subtasks Section */}
       {((task.subtasks_count !== undefined && task.subtasks_count > 0) ||
+        (task.subtask_details && task.subtask_details.length > 0) ||
         (task.subtasks && task.subtasks.length > 0)) && (
         <div className="mt-3 pt-2.5 border-t border-[var(--border-color)]">
           <div
@@ -239,7 +238,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
                 }`}
               >
                 {task.subtasks_completed_count || 0}/
-                {task.subtasks_count || (task.subtasks ? task.subtasks.length : 0)}
+                {task.subtasks_count || task.subtask_details?.length || task.subtasks?.length || 0}
               </span>
             </div>
             <button
@@ -278,48 +277,47 @@ export const TaskCard: React.FC<TaskCardProps> = ({
           {/* Expanded Subtasks List */}
           {isSubtasksExpanded && (
             <div className="mt-2 space-y-1.5 pl-1">
-              {Array.isArray(task.subtasks) &&
-                task.subtasks.map((sub) => {
-                  const lastColId =
-                    columns && columns.length > 0 ? columns[columns.length - 1].id : undefined;
-                  const isDone = Boolean(lastColId && sub.column_id === lastColId);
-                  return (
-                    <div
-                      key={sub.id}
-                      className="flex items-center justify-between text-xs py-1 px-1.5 rounded-lg hover:bg-[var(--bg-input)] transition-colors group/item cursor-pointer"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onCardClick?.(sub);
-                      }}
-                    >
-                      <div className="flex items-center space-x-2 flex-1 min-w-0">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onSubtaskToggle?.(sub);
-                          }}
-                          className="shrink-0 text-[var(--text-muted)] hover:text-blue-500 transition-colors"
-                        >
-                          {isDone ? (
-                            <CheckSquare className="w-3.5 h-3.5 text-emerald-500" />
-                          ) : (
-                            <Square className="w-3.5 h-3.5" />
-                          )}
-                        </button>
-                        <span
-                          className={`truncate text-xs ${
-                            isDone
-                              ? 'line-through text-[var(--text-muted)]'
-                              : 'text-[var(--text-primary)]'
-                          }`}
-                        >
-                          {sub.title}
-                        </span>
-                      </div>
+              {(task.subtask_details || []).map((sub) => {
+                const isDone = Boolean(
+                  sub.completed || task.subtasks?.find((s) => s.id === sub.id)?.completed
+                );
+                return (
+                  <div
+                    key={sub.id}
+                    className="flex items-center justify-between text-xs py-1 px-1.5 rounded-lg hover:bg-[var(--bg-input)] transition-colors group/item cursor-pointer"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onCardClick?.(sub);
+                    }}
+                  >
+                    <div className="flex items-center space-x-2 flex-1 min-w-0">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSubtaskToggle?.(sub);
+                        }}
+                        className="shrink-0 text-[var(--text-muted)] hover:text-blue-500 transition-colors"
+                      >
+                        {isDone ? (
+                          <CheckSquare className="w-3.5 h-3.5 text-emerald-500" />
+                        ) : (
+                          <Square className="w-3.5 h-3.5" />
+                        )}
+                      </button>
+                      <span
+                        className={`truncate text-xs ${
+                          isDone
+                            ? 'line-through text-[var(--text-muted)]'
+                            : 'text-[var(--text-primary)]'
+                        }`}
+                      >
+                        {sub.title || sub.id}
+                      </span>
                     </div>
-                  );
-                })}
+                  </div>
+                );
+              })}
 
               {/* Quick Add Subtask in Card */}
               {onAddSubtask && (

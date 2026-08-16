@@ -393,11 +393,14 @@ func TestSubtasksAPI(t *testing.T) {
 		t.Fatalf("expected 201 Created for sub1, got %d", wSub1.Code)
 	}
 
-	// 3. Create Subtask 2 (Done) via POST /api/tasks
+	var createdSub1 model.Task
+	_ = json.NewDecoder(wSub1.Body).Decode(&createdSub1)
+
+	// 3. Create Subtask 2 via POST /api/tasks
 	sub2Payload := map[string]any{
 		"parent_id": parentTask.ID,
 		"title":     "Subtask 2 Done",
-		"column_id": "col-done",
+		"column_id": "col-todo",
 	}
 	sub2Bytes, _ := json.Marshal(sub2Payload)
 	reqSub2 := httptest.NewRequest("POST", "/api/tasks", bytes.NewReader(sub2Bytes))
@@ -406,6 +409,27 @@ func TestSubtasksAPI(t *testing.T) {
 
 	if wSub2.Code != http.StatusCreated {
 		t.Fatalf("expected 201 Created for sub2, got %d", wSub2.Code)
+	}
+	var createdSub2 model.Task
+	_ = json.NewDecoder(wSub2.Body).Decode(&createdSub2)
+
+	// 3.5 Mark sub2 as completed on parent task via PUT /api/tasks/{parentTask.ID}
+	updateParentPayload := map[string]any{
+		"subtasks": []model.SubtaskRef{
+			{ID: createdSub1.ID, Completed: false},
+			{ID: createdSub2.ID, Completed: true},
+		},
+	}
+	upBytes, _ := json.Marshal(updateParentPayload)
+	reqUpdateParent := httptest.NewRequest(
+		"PUT",
+		"/api/tasks/"+parentTask.ID,
+		bytes.NewReader(upBytes),
+	)
+	wUpdateParent := httptest.NewRecorder()
+	mux.ServeHTTP(wUpdateParent, reqUpdateParent)
+	if wUpdateParent.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for parent update, got %d", wUpdateParent.Code)
 	}
 
 	// 4. GET /api/tasks (verify parent has subtasks count 2, completed 1, and only root task returned)
@@ -434,9 +458,9 @@ func TestSubtasksAPI(t *testing.T) {
 	if tasks[0].SubtasksCompletedCount != 1 {
 		t.Errorf("expected subtasks completed count 1, got %d", tasks[0].SubtasksCompletedCount)
 	}
-	subsSlice, ok := tasks[0].Subtasks.([]any)
+	subsSlice, ok := tasks[0].SubtaskDetails.([]any)
 	if !ok || len(subsSlice) != 2 {
-		t.Errorf("expected 2 subtasks attached, got %+v", tasks[0].Subtasks)
+		t.Errorf("expected 2 subtask details attached, got %+v", tasks[0].SubtaskDetails)
 	}
 
 	// 5. Search query matching subtask title returns parent task
@@ -455,33 +479,33 @@ func TestSubtasksAPI(t *testing.T) {
 		t.Errorf("expected parent task to match subtask query, got %+v", searchResults)
 	}
 
-	// 6. Test subtask reordering (move sub2 before sub1 using next_id: sub1.ID)
-	subtasksBefore, _ := store.GetSubtasksByParentID(parentTask.ID)
-	if len(subtasksBefore) == 2 {
-		reorderPayload := map[string]any{
-			"next_id": subtasksBefore[0].ID,
-		}
-		reorderBytes, _ := json.Marshal(reorderPayload)
-		reqReorder := httptest.NewRequest(
-			"PUT",
-			"/api/tasks/"+subtasksBefore[1].ID,
-			bytes.NewReader(reorderBytes),
+	// 6. Test subtask reordering via parent subtasks array (move sub2 before sub1)
+	reorderParentPayload := map[string]any{
+		"subtasks": []model.SubtaskRef{
+			{ID: createdSub2.ID, Completed: true},
+			{ID: createdSub1.ID, Completed: false},
+		},
+	}
+	reorderBytes, _ := json.Marshal(reorderParentPayload)
+	reqReorder := httptest.NewRequest(
+		"PUT",
+		"/api/tasks/"+parentTask.ID,
+		bytes.NewReader(reorderBytes),
+	)
+	wReorder := httptest.NewRecorder()
+	mux.ServeHTTP(wReorder, reqReorder)
+
+	if wReorder.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for reorder, got %d", wReorder.Code)
+	}
+
+	subtasksAfter, _ := store.GetSubtasksByParentID(parentTask.ID)
+	if len(subtasksAfter) != 2 || subtasksAfter[0].ID != createdSub2.ID {
+		t.Errorf(
+			"expected subtask %s to be first after reordering, got %s",
+			createdSub2.ID,
+			subtasksAfter[0].ID,
 		)
-		wReorder := httptest.NewRecorder()
-		mux.ServeHTTP(wReorder, reqReorder)
-
-		if wReorder.Code != http.StatusOK {
-			t.Fatalf("expected 200 OK for reorder, got %d", wReorder.Code)
-		}
-
-		subtasksAfter, _ := store.GetSubtasksByParentID(parentTask.ID)
-		if subtasksAfter[0].ID != subtasksBefore[1].ID {
-			t.Errorf(
-				"expected subtask %s to be first after reordering, got %s",
-				subtasksBefore[1].ID,
-				subtasksAfter[0].ID,
-			)
-		}
 	}
 
 	// 7. Test parent validation: create with invalid parent returns 400

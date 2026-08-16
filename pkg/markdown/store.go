@@ -334,6 +334,27 @@ func (s *Store) GetSubtasksByParentID(parentID string) ([]*model.Task, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
+	parentTask, err := s.getTaskByIDUnlocked(parentID)
+	if err != nil {
+		return nil, err
+	}
+
+	var subtasks []*model.Task
+
+	// 1. If parent task has Subtasks defined (SSOT), retrieve each subtask directly
+	if len(parentTask.Subtasks) > 0 {
+		for _, ref := range parentTask.Subtasks {
+			sub, err := s.getTaskByIDUnlocked(ref.ID)
+			if err == nil && sub != nil {
+				subCopy := *sub
+				subCopy.Completed = ref.Completed
+				subtasks = append(subtasks, &subCopy)
+			}
+		}
+		return subtasks, nil
+	}
+
+	// 2. Legacy fallback: retrieve subtasks that have t.ParentID == parentID
 	if s.cache != nil {
 		cached, err := s.cache.GetSubtasksByParentID(parentID)
 		if err == nil {
@@ -341,17 +362,16 @@ func (s *Store) GetSubtasksByParentID(parentID string) ([]*model.Task, error) {
 		}
 	}
 
-	tasks, err := s.getAllTasksUnlocked()
+	allTasks, err := s.getAllTasksUnlocked()
 	if err != nil {
 		return nil, err
 	}
-
-	var subtasks []*model.Task
-	for _, t := range tasks {
+	for _, t := range allTasks {
 		if t.ParentID == parentID {
 			subtasks = append(subtasks, t)
 		}
 	}
+
 	return subtasks, nil
 }
 
@@ -371,10 +391,16 @@ func (s *Store) ValidateParentID(taskID string, parentID string) error {
 	}
 
 	if parentTask.ParentID != "" {
-		return fmt.Errorf("parent task is already a subtask of another task (multi-level nesting is not supported)")
+		return fmt.Errorf(
+			"parent task is already a subtask of another task (multi-level nesting is not supported)",
+		)
 	}
 
 	if taskID != "" {
+		task, err := s.GetTaskByID(taskID)
+		if err == nil && task != nil && len(task.Subtasks) > 0 {
+			return fmt.Errorf("task already has subtasks and cannot become a subtask")
+		}
 		subs, err := s.GetSubtasksByParentID(taskID)
 		if err == nil && len(subs) > 0 {
 			return fmt.Errorf("task already has subtasks and cannot become a subtask")
@@ -405,16 +431,9 @@ func (s *Store) ValidateParentID(taskID string, parentID string) error {
 
 // GetTaskByID finds a task by its ID.
 func (s *Store) GetTaskByID(id string) (*model.Task, error) {
-	tasks, err := s.GetAllTasks()
-	if err != nil {
-		return nil, err
-	}
-	for _, t := range tasks {
-		if t.ID == id {
-			return t, nil
-		}
-	}
-	return nil, os.ErrNotExist
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.getTaskByIDUnlocked(id)
 }
 
 // GetAllTags returns all unique tags sorted by last_used_at DESC (if cached) or alphabetically across all tasks.
@@ -455,7 +474,10 @@ func (s *Store) GetAllTags() ([]string, error) {
 func (s *Store) SaveTask(task *model.Task) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.saveTaskUnlocked(task)
+}
 
+func (s *Store) saveTaskUnlocked(task *model.Task) error {
 	now := time.Now().UTC()
 	if task.Version < model.CurrentTaskVersion {
 		task.Version = model.CurrentTaskVersion
@@ -515,13 +537,40 @@ func (s *Store) DeleteTask(id string) error {
 		return err
 	}
 
-	// Delete child subtasks if any
-	allTasks, _ := s.getAllTasksUnlocked()
-	for _, t := range allTasks {
-		if t.ParentID == id {
-			_ = os.Remove(t.FilePath)
+	// 1. If this task has subtasks, delete child subtasks directly
+	for _, ref := range task.Subtasks {
+		if child, err := s.getTaskByIDUnlocked(ref.ID); err == nil && child != nil {
+			_ = os.Remove(child.FilePath)
 			if s.cache != nil {
-				_ = s.cache.DeleteTask(t.ID)
+				_ = s.cache.DeleteTask(child.ID)
+			}
+		}
+	}
+	// Fallback for legacy child tasks if any
+	if len(task.Subtasks) == 0 && s.cache != nil {
+		if legacySubs, err := s.cache.GetSubtasksByParentID(id); err == nil {
+			for _, sub := range legacySubs {
+				_ = os.Remove(sub.FilePath)
+				_ = s.cache.DeleteTask(sub.ID)
+			}
+		}
+	}
+
+	// 2. If this task is a subtask of another parent, remove it from that parent's Subtasks
+	if task.ParentID != "" {
+		if parent, err := s.getTaskByIDUnlocked(task.ParentID); err == nil && parent != nil {
+			modified := false
+			var newSubs []model.SubtaskRef
+			for _, ref := range parent.Subtasks {
+				if ref.ID == id {
+					modified = true
+				} else {
+					newSubs = append(newSubs, ref)
+				}
+			}
+			if modified {
+				parent.Subtasks = newSubs
+				_ = s.saveTaskUnlocked(parent)
 			}
 		}
 	}
@@ -538,6 +587,13 @@ func (s *Store) DeleteTask(id string) error {
 }
 
 func (s *Store) getTaskByIDUnlocked(id string) (*model.Task, error) {
+	if s.cache != nil {
+		task, err := s.cache.GetTaskByID(id)
+		if err == nil && task != nil {
+			return task, nil
+		}
+	}
+
 	entries, err := os.ReadDir(s.dir)
 	if err != nil {
 		return nil, err

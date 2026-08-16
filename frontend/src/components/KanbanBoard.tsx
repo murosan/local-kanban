@@ -196,7 +196,6 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
             <KanbanColumn
               key={column.id}
               column={column}
-              columns={columns}
               customFields={customFields}
               tasks={colTasks}
               onCardClick={onCardClick}
@@ -211,7 +210,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
       <DragOverlay dropAnimation={null}>
         {activeTask ? (
           <div className="rotate-2 scale-105 shadow-2xl">
-            <TaskCard task={activeTask} columns={columns} customFields={customFields} isOverlay />
+            <TaskCard task={activeTask} customFields={customFields} isOverlay />
           </div>
         ) : null}
       </DragOverlay>

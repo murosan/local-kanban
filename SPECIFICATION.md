@@ -77,7 +77,6 @@
 ```markdown
 ---
 id: "c8f39b1a-4d2e-4a6b-9c8d-1e2f3a4b5c6d"
-parent_id: "parent-task-uuid"  # （サブカードの場合）親タスクのID
 title: "バックエンドの認証ロジック実装"
 column_id: "col-in-progress"
 rank: "0|i00008:"
@@ -85,6 +84,11 @@ tags:
   - "backend"
   - "go"
   - "auth"
+subtasks:
+  - id: "subtask-1-uuid"
+    completed: true
+  - id: "subtask-2-uuid"
+    completed: false
 created_at: 2026-07-28T19:00:00Z
 updated_at: 2026-07-28T19:30:00Z
 ---
@@ -112,7 +116,7 @@ APIの認可エラーが出る件について、チーム内での疎通確認�
 -- タスクテーブル
 CREATE TABLE IF NOT EXISTS tasks (
     id TEXT PRIMARY KEY,
-    parent_id TEXT,        -- 親タスクID（サブカードの場合）
+    parent_id TEXT,        -- 親タスクID（後方互換用）
     title TEXT NOT NULL,
     column_id TEXT NOT NULL,
     rank TEXT NOT NULL,
@@ -121,7 +125,8 @@ CREATE TABLE IF NOT EXISTS tasks (
     updated_at DATETIME NOT NULL,
     file_path TEXT UNIQUE NOT NULL,
     custom_fields TEXT,    -- JSONオブジェクト文字列
-    summary TEXT
+    summary TEXT,
+    subtasks TEXT          -- JSON配列文字列 e.g. '[{"id":"sub-1","completed":true}]'
 );
 
 -- インデックス
@@ -164,12 +169,12 @@ CREATE VIRTUAL TABLE IF NOT EXISTS tasks_fts USING fts5(
    * **ボード設定ボタン (`Board Config`):** カラムおよびステータスマスター設定モーダルの呼び出し。
    * **リロードボタン (`Reload / Sync`):** 最新データの取得・再描画。
    * 新規作成ボタン (`+ New Task`)
-6. **サブカード（サブタスク）親子管理:**
-   * **親子関係の保持:** 各サブカードも1つの独立したMarkdownファイル（`parent_id` 属性）として保存され、個別の詳細Markdown本文、タグ、カスタムフィールド、ステータスを保持。
+6. **サブカード（サブタスク）親子管理 (親タスクSSOT管理):**
+   * **親タスクによる状態・順序管理:** 親タスクが `subtasks: [{ id, completed }]` 配列を保持し、サブタスクの所属関係・並び順・チェック状態（完了フラグ）のSSOT（Single Source of Truth）となります。
+   * **カラム非依存:** サブタスクのチェック状態はカラム名やカラム位置（最後のカラム等）に依存せず、親タスクの `completed` フラグのみで管理されます。サブタスクがカラム移動してもチェック状態は保持され、チェックしてもカラムは自動変更されません。
    * **ボードカード上の表示:** 親カードに進捗バッジ（例: `✓ 2/4`）とプログレスバー、折りたたみ展開（アコーディオン）を表示。展開時にチェックボックスでのクイック完了切り替えやインライン追加が可能。
-   * **モーダル管理:** 詳細モーダル内に「サブタスク」セクションを設置。連続追加、完了切り替え、親タスクへのパンくずリンク、サブタスク詳細の直接編集に対応。
-   * **カスケード削除:** 親タスク削除時に紐づく子タスクのMarkdownファイルも自動的に連動削除。
-7. **PWA (Progressive Web App) 対応:**
+   * **モーダル管理:** 詳細モーダル内に「サブタスク」セクションを設置。連続追加、完了切り替え、D&D並び替え、親タスクへのパンくずリンク、サブタスク詳細の直接編集に対応。
+   * **カスケード削除:** 親タスク削除時に紐づく子タスクのMarkdownファイルも自動的に連動削除。子タスク削除時は親タスクの `subtasks` リストから安全に除外。7. **PWA (Progressive Web App) 対応:**
    * Chrome/Safariから「アプリとしてインストール」可能。
 
 ### 4.2. ローカルファイル同期メカニズム

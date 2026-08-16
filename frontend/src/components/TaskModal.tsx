@@ -85,9 +85,7 @@ const SortableSubtaskItem: React.FC<SortableSubtaskItemProps> = ({
     transition,
   };
 
-  const isDone = Boolean(
-    columns.length > 0 && sub.column_id === columns[columns.length - 1]?.id
-  );
+  const isDone = Boolean(sub.completed);
   const matchedCol = columns.find((c) => c.id === sub.column_id);
 
   return (
@@ -298,13 +296,10 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 
     try {
       const fullTask = await fetchTaskById(task.id);
-      if (Array.isArray(fullTask.subtasks)) {
-        setSubtasks(fullTask.subtasks);
-        if (fullTask.subtasks.length > 0) {
-          setIsHierarchyOpen(true);
-        }
-      } else {
-        setSubtasks([]);
+      const subtaskItems = fullTask.subtask_details || [];
+      setSubtasks(subtaskItems);
+      if (subtaskItems.length > 0) {
+        setIsHierarchyOpen(true);
       }
     } catch (e) {
       console.error('Failed to load subtasks:', e);
@@ -324,13 +319,13 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     const titleToAdd = newSubtaskInput.trim();
     setIsCreatingSubtask(true);
     try {
-      const created = await createTask({
+      await createTask({
         parent_id: task.id,
         title: titleToAdd,
         column_id: task.column_id || columns[0]?.id || 'col-todo',
       });
       setNewSubtaskInput('');
-      setSubtasks((prev) => [...prev, created]);
+      await loadSubtasksAndParent();
       await onSave({ id: task.id }, { silent: true });
     } catch (err) {
       console.error('Failed to create subtask:', err);
@@ -340,45 +335,56 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   };
 
   const handleToggleSubtask = async (sub: Task) => {
-    const lastColId = columns[columns.length - 1]?.id;
-    const firstColId = columns[0]?.id || 'col-todo';
-    const isDone = Boolean(lastColId && sub.column_id === lastColId);
-    const targetColumn = isDone ? firstColId : (lastColId || 'col-done');
+    if (!task) return;
+    const newCompleted = !sub.completed;
+    const currentSubtaskRefs = subtasks.map((s) => ({
+      id: s.id,
+      completed: s.id === sub.id ? newCompleted : Boolean(s.completed),
+    }));
+    setSubtasks((prev) =>
+      prev.map((s) => (s.id === sub.id ? { ...s, completed: newCompleted } : s))
+    );
     try {
-      const updated = await updateTask(sub.id, { column_id: targetColumn });
-      setSubtasks((prev) => prev.map((s) => (s.id === sub.id ? updated : s)));
-      if (task) {
-        await onSave({ id: task.id }, { silent: true });
-      }
+      await onSave({ id: task.id, subtasks: currentSubtaskRefs }, { silent: true });
     } catch (err) {
       console.error('Failed to toggle subtask:', err);
+      await loadSubtasksAndParent();
     }
   };
 
   const handleUnlinkSubtask = async (sub: Task) => {
     if (!task) return;
+    const remainingSubtasks = subtasks.filter((s) => s.id !== sub.id);
+    setSubtasks(remainingSubtasks);
+    setSubtaskActionTarget(null);
+    const newSubtaskRefs = remainingSubtasks.map((s) => ({
+      id: s.id,
+      completed: Boolean(s.completed),
+    }));
     try {
       await updateTask(sub.id, {
         parent_id: '',
       });
-      setSubtasks((prev) => prev.filter((s) => s.id !== sub.id));
-      setSubtaskActionTarget(null);
+      await onSave({ id: task.id, subtasks: newSubtaskRefs }, { silent: true });
       await loadSubtasksAndParent();
-      await onSave({ id: task.id }, { silent: true });
     } catch (err) {
       console.error('Failed to unlink subtask:', err);
     }
   };
 
   const handleConfirmDeleteSubtask = async (sub: Task) => {
+    if (!task) return;
+    const remainingSubtasks = subtasks.filter((s) => s.id !== sub.id);
+    setSubtasks(remainingSubtasks);
+    setSubtaskActionTarget(null);
+    const newSubtaskRefs = remainingSubtasks.map((s) => ({
+      id: s.id,
+      completed: Boolean(s.completed),
+    }));
     try {
       await deleteTask(sub.id);
-      setSubtasks((prev) => prev.filter((s) => s.id !== sub.id));
-      setSubtaskActionTarget(null);
+      await onSave({ id: task.id, subtasks: newSubtaskRefs }, { silent: true });
       await loadSubtasksAndParent();
-      if (task) {
-        await onSave({ id: task.id }, { silent: true });
-      }
     } catch (err) {
       console.error('Failed to delete subtask:', err);
     }
@@ -397,7 +403,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 
   const handleSubtaskDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
-    if (!over || active.id === over.id) return;
+    if (!over || active.id === over.id || !task) return;
 
     const oldIndex = subtasks.findIndex((s) => s.id === active.id);
     const newIndex = subtasks.findIndex((s) => s.id === over.id);
@@ -406,23 +412,13 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     const reordered = arrayMove(subtasks, oldIndex, newIndex);
     setSubtasks(reordered);
 
-    let prevId = '';
-    let nextId = '';
-    if (newIndex > 0) {
-      prevId = reordered[newIndex - 1].id;
-    }
-    if (newIndex < reordered.length - 1) {
-      nextId = reordered[newIndex + 1].id;
-    }
+    const newSubtaskRefs = reordered.map((s) => ({
+      id: s.id,
+      completed: Boolean(s.completed),
+    }));
 
     try {
-      await updateTask(active.id as string, {
-        prev_id: prevId,
-        next_id: nextId,
-      });
-      if (task) {
-        await onSave({ id: task.id }, { silent: true });
-      }
+      await onSave({ id: task.id, subtasks: newSubtaskRefs }, { silent: true });
     } catch (err) {
       console.error('Failed to reorder subtask:', err);
       await loadSubtasksAndParent();
@@ -2062,9 +2058,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                     {subtasks.length > 0 && (
                       <span className="text-xs text-[var(--text-muted)] font-mono font-medium">
                         {(() => {
-                          const lastColId = columns[columns.length - 1]?.id;
-                          const completedCount = subtasks.filter(
-                            (s) => lastColId && s.column_id === lastColId
+                          const completedCount = subtasks.filter((s) =>
+                            Boolean(s.completed)
                           ).length;
                           return t('taskModal.subtasksProgress', {
                             completed: completedCount,
@@ -2227,24 +2222,26 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                         </div>
 
                         {/* Progress Bar */}
-                        {subtasks.length > 0 && (() => {
-                          const lastColId = columns[columns.length - 1]?.id;
-                          const completedCount = subtasks.filter(
-                            (s) => lastColId && s.column_id === lastColId
-                          ).length;
-                          const isAllDone = completedCount === subtasks.length;
-                          const percent = Math.round((completedCount / (subtasks.length || 1)) * 100);
-                          return (
-                            <div className="w-full bg-[var(--bg-input)] rounded-full h-1.5 overflow-hidden">
-                              <div
-                                className={`h-full transition-all duration-300 ${
-                                  isAllDone ? 'bg-emerald-500' : 'bg-blue-500'
-                                }`}
-                                style={{ width: `${percent}%` }}
-                              />
-                            </div>
-                          );
-                        })()}
+                        {subtasks.length > 0 &&
+                          (() => {
+                            const completedCount = subtasks.filter((s) =>
+                              Boolean(s.completed)
+                            ).length;
+                            const isAllDone = completedCount === subtasks.length;
+                            const percent = Math.round(
+                              (completedCount / (subtasks.length || 1)) * 100
+                            );
+                            return (
+                              <div className="w-full bg-[var(--bg-input)] rounded-full h-1.5 overflow-hidden">
+                                <div
+                                  className={`h-full transition-all duration-300 ${
+                                    isAllDone ? 'bg-emerald-500' : 'bg-blue-500'
+                                  }`}
+                                  style={{ width: `${percent}%` }}
+                                />
+                              </div>
+                            );
+                          })()}
 
                         {/* Subtasks List */}
                         {subtasks.length > 0 && (
