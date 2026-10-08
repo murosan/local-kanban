@@ -498,10 +498,19 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       await updateTask(sub.id, {
         parent_id: task.id,
       });
+
+      const updatedSubtasks = [...subtasks, sub];
+      setSubtasks(updatedSubtasks);
+
+      const newSubtaskRefs = updatedSubtasks.map((s) => ({
+        id: s.id,
+        completed: Boolean(s.completed),
+      }));
+
       setInputSubtaskId('');
       setIsLinkingExistingOpen(false);
+      await onSave({ id: task.id, subtasks: newSubtaskRefs }, { silent: true });
       await loadSubtasksAndParent();
-      await onSave({ id: task.id }, { silent: true });
     } catch (err) {
       console.error('Failed to attach existing card as subtask:', err);
       alert(t('taskModal.taskNotFound') || '指定されたIDのカードが見つかりません');
