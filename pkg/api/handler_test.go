@@ -536,4 +536,47 @@ func TestSubtasksAPI(t *testing.T) {
 	if wSelfParent.Code != http.StatusBadRequest {
 		t.Errorf("expected 400 Bad Request for self-parent update, got %d", wSelfParent.Code)
 	}
+
+	// 9. Test linking existing card as subtask to parent with existing subtasks
+	standalonePayload := map[string]any{
+		"title":     "Standalone Card",
+		"column_id": "col-todo",
+	}
+	stBytes, _ := json.Marshal(standalonePayload)
+	reqSt := httptest.NewRequest("POST", "/api/tasks", bytes.NewReader(stBytes))
+	wSt := httptest.NewRecorder()
+	mux.ServeHTTP(wSt, reqSt)
+	if wSt.Code != http.StatusCreated {
+		t.Fatalf("expected 201 Created for standalone card, got %d", wSt.Code)
+	}
+	var standaloneCard model.Task
+	_ = json.NewDecoder(wSt.Body).Decode(&standaloneCard)
+
+	// Update standalone card to link it as subtask of parentTask (which already has sub1 and sub2)
+	linkPayload := map[string]any{
+		"parent_id": parentTask.ID,
+	}
+	lpBytes, _ := json.Marshal(linkPayload)
+	reqLink := httptest.NewRequest("PUT", "/api/tasks/"+standaloneCard.ID, bytes.NewReader(lpBytes))
+	wLink := httptest.NewRecorder()
+	mux.ServeHTTP(wLink, reqLink)
+	if wLink.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for linking subtask, got %d", wLink.Code)
+	}
+
+	// Verify parent task now has 3 subtasks
+	reqGetParent := httptest.NewRequest("GET", "/api/tasks/"+parentTask.ID, nil)
+	wGetParent := httptest.NewRecorder()
+	mux.ServeHTTP(wGetParent, reqGetParent)
+	if wGetParent.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d", wGetParent.Code)
+	}
+	var loadedParent model.Task
+	_ = json.NewDecoder(wGetParent.Body).Decode(&loadedParent)
+	if loadedParent.SubtasksCount != 3 {
+		t.Errorf(
+			"expected 3 subtasks on parent after linking existing card, got %d",
+			loadedParent.SubtasksCount,
+		)
+	}
 }

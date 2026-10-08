@@ -340,6 +340,7 @@ func (s *Store) GetSubtasksByParentID(parentID string) ([]*model.Task, error) {
 	}
 
 	var subtasks []*model.Task
+	seenIDs := make(map[string]bool)
 
 	// 1. If parent task has Subtasks defined (SSOT), retrieve each subtask directly
 	if len(parentTask.Subtasks) > 0 {
@@ -349,26 +350,33 @@ func (s *Store) GetSubtasksByParentID(parentID string) ([]*model.Task, error) {
 				subCopy := *sub
 				subCopy.Completed = ref.Completed
 				subtasks = append(subtasks, &subCopy)
+				seenIDs[ref.ID] = true
 			}
 		}
-		return subtasks, nil
 	}
 
-	// 2. Legacy fallback: retrieve subtasks that have t.ParentID == parentID
+	// 2. Also retrieve any subtasks that have t.ParentID == parentID but were not in parentTask.Subtasks
 	if s.cache != nil {
 		cached, err := s.cache.GetSubtasksByParentID(parentID)
 		if err == nil {
-			return cached, nil
+			for _, t := range cached {
+				if !seenIDs[t.ID] {
+					subtasks = append(subtasks, t)
+					seenIDs[t.ID] = true
+				}
+			}
 		}
 	}
 
-	allTasks, err := s.getAllTasksUnlocked()
-	if err != nil {
-		return nil, err
-	}
-	for _, t := range allTasks {
-		if t.ParentID == parentID {
-			subtasks = append(subtasks, t)
+	if len(subtasks) == 0 || s.cache == nil {
+		allTasks, err := s.getAllTasksUnlocked()
+		if err == nil {
+			for _, t := range allTasks {
+				if t.ParentID == parentID && !seenIDs[t.ID] {
+					subtasks = append(subtasks, t)
+					seenIDs[t.ID] = true
+				}
+			}
 		}
 	}
 
@@ -537,6 +545,8 @@ func (s *Store) DeleteTask(id string) error {
 		return err
 	}
 
+	deletedChildIDs := make(map[string]bool)
+
 	// 1. If this task has subtasks, delete child subtasks directly
 	for _, ref := range task.Subtasks {
 		if child, err := s.getTaskByIDUnlocked(ref.ID); err == nil && child != nil {
@@ -544,14 +554,18 @@ func (s *Store) DeleteTask(id string) error {
 			if s.cache != nil {
 				_ = s.cache.DeleteTask(child.ID)
 			}
+			deletedChildIDs[child.ID] = true
 		}
 	}
-	// Fallback for legacy child tasks if any
-	if len(task.Subtasks) == 0 && s.cache != nil {
+	// Fallback for any other child tasks with parent_id == id
+	if s.cache != nil {
 		if legacySubs, err := s.cache.GetSubtasksByParentID(id); err == nil {
 			for _, sub := range legacySubs {
-				_ = os.Remove(sub.FilePath)
-				_ = s.cache.DeleteTask(sub.ID)
+				if !deletedChildIDs[sub.ID] {
+					_ = os.Remove(sub.FilePath)
+					_ = s.cache.DeleteTask(sub.ID)
+					deletedChildIDs[sub.ID] = true
+				}
 			}
 		}
 	}

@@ -360,12 +360,21 @@ func (s *Server) handleUpdateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var oldParentID string
+	var newParentID string
+	parentChanged := false
+
 	if payload.ParentID != nil {
 		if err := s.store.ValidateParentID(task.ID, *payload.ParentID); err != nil {
 			respondError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		task.ParentID = *payload.ParentID
+		oldParentID = task.ParentID
+		newParentID = *payload.ParentID
+		if oldParentID != newParentID {
+			parentChanged = true
+			task.ParentID = newParentID
+		}
 	}
 	if payload.Title != nil {
 		task.Title = *payload.Title
@@ -401,6 +410,47 @@ func (s *Server) handleUpdateTask(w http.ResponseWriter, r *http.Request) {
 	if err := s.store.SaveTask(task); err != nil {
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return
+	}
+
+	if parentChanged {
+		// If old parent exists and changed, remove this task from old parent's Subtasks
+		if oldParentID != "" {
+			if oldParent, err := s.store.GetTaskByID(oldParentID); err == nil && oldParent != nil {
+				var newSubs []model.SubtaskRef
+				modified := false
+				for _, ref := range oldParent.Subtasks {
+					if ref.ID == task.ID {
+						modified = true
+					} else {
+						newSubs = append(newSubs, ref)
+					}
+				}
+				if modified {
+					oldParent.Subtasks = newSubs
+					_ = s.store.SaveTask(oldParent)
+				}
+			}
+		}
+
+		// If new parent exists, add this task to new parent's Subtasks
+		if newParentID != "" {
+			if newParent, err := s.store.GetTaskByID(newParentID); err == nil && newParent != nil {
+				alreadyExists := false
+				for _, ref := range newParent.Subtasks {
+					if ref.ID == task.ID {
+						alreadyExists = true
+						break
+					}
+				}
+				if !alreadyExists {
+					newParent.Subtasks = append(newParent.Subtasks, model.SubtaskRef{
+						ID:        task.ID,
+						Completed: task.Completed,
+					})
+					_ = s.store.SaveTask(newParent)
+				}
+			}
+		}
 	}
 
 	respondJSON(w, http.StatusOK, task)

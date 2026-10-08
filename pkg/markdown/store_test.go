@@ -500,3 +500,69 @@ func TestValidateParentID(t *testing.T) {
 		t.Error("expected error when task with subtasks tries to become a subtask, got nil")
 	}
 }
+
+func TestGetSubtasksByParentID_UnlistedSubtasks(t *testing.T) {
+	tmpDir := t.TempDir()
+	store, err := NewStore(tmpDir)
+	if err != nil {
+		t.Fatalf("failed to create store: %v", err)
+	}
+
+	cacheDBPath := filepath.Join(tmpDir, "cache.db")
+	c, err := cache.NewSQLiteCache(cacheDBPath)
+	if err != nil {
+		t.Fatalf("failed to init cache: %v", err)
+	}
+	defer func() { _ = c.Close() }()
+	store.SetCache(c)
+
+	parent := &model.Task{
+		Title:    "Parent Task",
+		ColumnID: "col-todo",
+		Rank:     "0|a",
+		Content:  "Parent content",
+	}
+	if err := store.SaveTask(parent); err != nil {
+		t.Fatalf("failed to save parent: %v", err)
+	}
+
+	sub1 := &model.Task{
+		ParentID: parent.ID,
+		Title:    "Subtask 1",
+		ColumnID: "col-todo",
+		Rank:     "0|a",
+	}
+	if err := store.SaveTask(sub1); err != nil {
+		t.Fatalf("failed to save sub1: %v", err)
+	}
+
+	// Register sub1 in parent.Subtasks
+	parent.Subtasks = []model.SubtaskRef{
+		{ID: sub1.ID, Completed: false},
+	}
+	if err := store.SaveTask(parent); err != nil {
+		t.Fatalf("failed to update parent with sub1: %v", err)
+	}
+
+	// sub2 has parent_id set, but is not yet in parent.Subtasks (e.g. linked via existing card)
+	sub2 := &model.Task{
+		ParentID: parent.ID,
+		Title:    "Subtask 2 (linked existing)",
+		ColumnID: "col-todo",
+		Rank:     "0|b",
+	}
+	if err := store.SaveTask(sub2); err != nil {
+		t.Fatalf("failed to save sub2: %v", err)
+	}
+
+	subtasks, err := store.GetSubtasksByParentID(parent.ID)
+	if err != nil {
+		t.Fatalf("failed to get subtasks: %v", err)
+	}
+	if len(subtasks) != 2 {
+		t.Fatalf(
+			"expected 2 subtasks even when sub2 is not yet listed in parent.Subtasks, got %d",
+			len(subtasks),
+		)
+	}
+}
