@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
+import React, { useState, useCallback, useMemo, ReactNode } from 'react';
 import { Language, translations } from './translations';
 import { I18nContext } from './I18nContext';
 
@@ -13,11 +13,13 @@ export const I18nProvider: React.FC<{ initialLanguage?: string; children: ReactN
     return 'ja';
   });
 
-  useEffect(() => {
+  const [prevInitialLanguage, setPrevInitialLanguage] = useState(initialLanguage);
+  if (initialLanguage !== prevInitialLanguage) {
+    setPrevInitialLanguage(initialLanguage);
     if (initialLanguage === 'ja' || initialLanguage === 'en') {
       setLanguageState(initialLanguage);
     }
-  }, [initialLanguage]);
+  }
 
   const setLanguage = useCallback((lang: Language) => {
     setLanguageState((prev) => {

@@ -179,6 +179,9 @@ interface FormState {
 
 type SaveStatus = 'saved' | 'saving' | 'unsaved' | 'error';
 
+const generateRandomId = (prefix: string): string =>
+  `${prefix}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+
 export const TaskModal: React.FC<TaskModalProps> = ({
   isOpen,
   task,
@@ -261,6 +264,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   // Subtasks & Parent State
   const [subtasks, setSubtasks] = useState<Task[]>([]);
   const [parentTask, setParentTask] = useState<Task | null>(null);
+  const [parentId, setParentId] = useState<string | undefined>(() => task?.parent_id);
+  const currentParentId = parentId !== undefined ? parentId : task?.parent_id;
   const [newSubtaskInput, setNewSubtaskInput] = useState('');
   const [inputParentId, setInputParentId] = useState('');
   const [inputSubtaskId, setInputSubtaskId] = useState('');
@@ -275,40 +280,48 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   );
   const [subtaskActionTarget, setSubtaskActionTarget] = useState<Task | null>(null);
 
-  const loadSubtasksAndParent = useCallback(async () => {
-    if (!task) {
-      setSubtasks([]);
-      setParentTask(null);
-      return;
-    }
-
-    if (task.parent_id) {
-      setIsHierarchyOpen(true);
-      try {
-        const p = await fetchTaskById(task.parent_id);
-        setParentTask(p);
-      } catch (e) {
-        console.error('Failed to load parent task:', e);
+  const loadSubtasksAndParent = useCallback(
+    async (overrideParentId?: string) => {
+      if (!task) {
+        setSubtasks([]);
+        setParentTask(null);
+        return;
       }
-    } else {
-      setParentTask(null);
-    }
 
-    try {
-      const fullTask = await fetchTaskById(task.id);
-      const subtaskItems = fullTask.subtask_details || [];
-      setSubtasks(subtaskItems);
-      if (subtaskItems.length > 0) {
+      const effectiveParentId =
+        overrideParentId !== undefined ? overrideParentId : (parentId ?? task.parent_id);
+
+      if (effectiveParentId) {
         setIsHierarchyOpen(true);
+        try {
+          const p = await fetchTaskById(effectiveParentId);
+          setParentTask(p);
+        } catch (e) {
+          console.error('Failed to load parent task:', e);
+        }
+      } else {
+        setParentTask(null);
       }
-    } catch (e) {
-      console.error('Failed to load subtasks:', e);
-    }
-  }, [task]);
+
+      try {
+        const fullTask = await fetchTaskById(task.id);
+        const subtaskItems = fullTask.subtask_details || [];
+        setSubtasks(subtaskItems);
+        if (subtaskItems.length > 0) {
+          setIsHierarchyOpen(true);
+        }
+      } catch (e) {
+        console.error('Failed to load subtasks:', e);
+      }
+    },
+    [task, parentId]
+  );
 
   useEffect(() => {
     if (isOpen && task) {
-      loadSubtasksAndParent();
+      (async () => {
+        await loadSubtasksAndParent();
+      })();
     }
   }, [isOpen, task, loadSubtasksAndParent]);
 
@@ -441,12 +454,12 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       await updateTask(task.id, {
         parent_id: p.id,
       });
-      task.parent_id = p.id;
+      setParentId(p.id);
       setParentTask(p);
       setInputParentId('');
       setIsSettingParentOpen(false);
       setIsChangingParentOpen(false);
-      await loadSubtasksAndParent();
+      await loadSubtasksAndParent(p.id);
       await onSave({ id: task.id, parent_id: p.id }, { silent: true });
     } catch (err) {
       console.error('Failed to set parent:', err);
@@ -466,11 +479,11 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         await updateTask(task.id, {
           parent_id: emptyParent,
         });
-        task.parent_id = undefined;
+        setParentId(undefined);
         setParentTask(null);
         setInputParentId('');
         setIsChangingParentOpen(false);
-        await loadSubtasksAndParent();
+        await loadSubtasksAndParent('');
         await onSave({ id: task.id, parent_id: '' }, { silent: true });
       } catch (err) {
         console.error('Failed to unlink parent:', err);
@@ -560,7 +573,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         await onSave(
           {
             id: task.id,
-            parent_id: task.parent_id,
+            parent_id: currentParentId,
             title: currentState.title.trim(),
             column_id: currentState.columnId || columns[0]?.id,
             tags: currentState.tags || [],
@@ -577,7 +590,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         setIsSaving(false);
       }
     },
-    [task, columns, onSave]
+    [task, currentParentId, columns, onSave]
   );
 
   const triggerAutoSave = useCallback(
@@ -653,6 +666,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       setContent(initialContent);
       setCustomFieldsState(initialFields);
       setSaveStatus('saved');
+      setParentId(task?.parent_id);
 
       const initial: FormState = {
         title: initialTitle,
@@ -667,9 +681,11 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       setCanRedo(false);
 
       if (task?.id) {
-        setIsLoadingContent(true);
-        fetchTaskById(task.id)
-          .then((fullTask) => {
+        const taskId = task.id;
+        (async () => {
+          setIsLoadingContent(true);
+          try {
+            const fullTask = await fetchTaskById(taskId);
             if (fullTask && fullTask.content !== undefined) {
               const fetchedContent = fullTask.content || '';
               setContent(fetchedContent);
@@ -678,15 +694,12 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 latestStateRef.current.content = fetchedContent;
               }
             }
-          })
-          .catch((err) => {
+          } catch (err) {
             console.error('Error fetching full task content:', err);
-          })
-          .finally(() => {
+          } finally {
             setIsLoadingContent(false);
-          });
-      } else {
-        setIsLoadingContent(false);
+          }
+        })();
       }
     }
     prevIsOpenRef.current = isOpen;
@@ -882,7 +895,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     } else if (preset.type === 'checklist') {
       if (preset.options && preset.options.length > 0) {
         initialValue = preset.options.map((opt) => ({
-          id: `item-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          id: generateRandomId('item'),
           text: opt.value,
           completed: false,
         }));
@@ -892,7 +905,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     }
 
     const newField: CustomFieldValue = {
-      id: `cf-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      id: generateRandomId('cf'),
       field_id: preset.id,
       name: preset.name,
       type: preset.type,
@@ -2046,9 +2059,9 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                     <span className="shrink-0">
                       {t('taskModal.hierarchyLabel') || 'サブタスク・親タスク'}
                     </span>
-                    {task.parent_id && (
+                    {currentParentId && (
                       <span className="text-[10px] font-mono text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded-full border border-purple-500/20 font-semibold normal-case truncate max-w-[150px]">
-                        {t('taskModal.parentTask')}: {parentTask?.title || task.parent_id}
+                        {t('taskModal.parentTask')}: {parentTask?.title || currentParentId}
                       </span>
                     )}
                     {subtasks.length > 0 && (
@@ -2056,7 +2069,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                         {subtasks.length}
                       </span>
                     )}
-                    {!task.parent_id && subtasks.length === 0 && (
+                    {!currentParentId && subtasks.length === 0 && (
                       <span className="text-[10px] text-[var(--text-muted)] font-normal normal-case">
                         ({t('taskModal.notSet') || '未設定'})
                       </span>
@@ -2100,7 +2113,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                         <Link2 className="w-3.5 h-3.5 text-blue-400" /> {t('taskModal.parentTask')}
                       </label>
 
-                      {task.parent_id ? (
+                      {currentParentId ? (
                         <div className="flex flex-col gap-2 p-2.5 bg-[var(--bg-input)] border border-[var(--border-color)] rounded-xl">
                           <div className="flex items-center justify-between gap-2">
                             <button
@@ -2112,7 +2125,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                               }}
                               className="font-medium text-xs text-[var(--text-primary)] hover:text-blue-400 hover:underline transition-colors truncate text-left cursor-pointer flex-1"
                             >
-                              {parentTask?.title || task.parent_id}
+                              {parentTask?.title || currentParentId}
                             </button>
                             <div className="flex items-center space-x-1 shrink-0">
                               <button
@@ -2221,7 +2234,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                     </div>
 
                     {/* Subtasks Area (shown for root tasks) */}
-                    {!task.parent_id && (
+                    {!currentParentId && (
                       <div className="space-y-2 pt-2 border-t border-[var(--border-color)]">
                         <div className="flex items-center justify-between">
                           <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider flex items-center gap-1">
