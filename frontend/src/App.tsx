@@ -123,7 +123,9 @@ export const App: React.FC = () => {
 
   // Initial load & debounced search query change effect
   useEffect(() => {
-    loadData();
+    (async () => {
+      await loadData();
+    })();
   }, [loadData]);
 
   // Window Focus Sync Mechanism (Spec 4.2)

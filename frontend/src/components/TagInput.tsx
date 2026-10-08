@@ -41,13 +41,15 @@ export const TagInput: React.FC<TagInputProps> = ({
   }, [availableTags, draft, tags]);
 
   // Reset selected index when suggestions change
-  useEffect(() => {
-    setSelectedIndex((prev) => {
-      if (suggestions.length === 0) return -1;
-      if (prev >= suggestions.length) return suggestions.length - 1;
-      return prev;
-    });
-  }, [suggestions]);
+  const [prevSuggestions, setPrevSuggestions] = useState(suggestions);
+  if (suggestions !== prevSuggestions) {
+    setPrevSuggestions(suggestions);
+    if (suggestions.length === 0) {
+      setSelectedIndex(-1);
+    } else if (selectedIndex >= suggestions.length) {
+      setSelectedIndex(suggestions.length - 1);
+    }
+  }
 
   // Auto scroll highlighted suggestion into view
   useEffect(() => {

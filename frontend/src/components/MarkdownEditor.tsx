@@ -291,7 +291,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
       }
     }
 
-    let newLine = currentLine;
+    let newLine: string;
     if (existingPrefix && currentLine.startsWith(prefix)) {
       // Toggle off if clicking the same prefix
       newLine = currentLine.substring(prefix.length);
@@ -1019,7 +1019,21 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
                               href={`#${headingId}`}
                               onClick={(e) => {
                                 e.preventDefault();
-                                if (matchedItem) handleJumpToHeading(matchedItem);
+                                if (matchedItem) {
+                                  setActiveHeadingId(matchedItem.id);
+                                  const targetEl = e.currentTarget.closest(
+                                    '[data-heading-id]'
+                                  ) as HTMLElement | null;
+                                  if (targetEl) {
+                                    targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                    targetEl.classList.remove('heading-highlight');
+                                    void targetEl.offsetWidth;
+                                    targetEl.classList.add('heading-highlight');
+                                    setTimeout(() => {
+                                      targetEl.classList.remove('heading-highlight');
+                                    }, 2000);
+                                  }
+                                }
                               }}
                               className="opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity ml-2 text-blue-400 text-xs font-mono select-none inline-block no-underline"
                               title="アンカーリンク"
