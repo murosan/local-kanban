@@ -32,7 +32,7 @@ RUN CGO_ENABLED=0 GOOS=${GOOS} GOARCH=${GOARCH} go build -ldflags="-s -w" -o /ap
 # ==========================================
 # Stage 3: Minimal Production Runtime
 # ==========================================
-FROM alpine:3.20
+FROM alpine:3.24
 WORKDIR /app
 
 RUN apk add --no-cache ca-certificates tzdata
