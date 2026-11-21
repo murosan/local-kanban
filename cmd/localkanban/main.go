@@ -325,7 +325,7 @@ func createSampleTasks(store *markdown.Store) {
 			ColumnID: "col-done",
 			Rank:     "0|o",
 			Tags:     []string{"docker", "infra"},
-			Content:  "Go 1.26 と Node.js 24 による開発環境のコンテナ化",
+			Content:  "Go 1.27 と Node.js 24 による開発環境のコンテナ化",
 		},
 	}
 
