@@ -10,6 +10,7 @@ interface KanbanColumnProps {
   column: Column;
   customFields?: CustomFieldDef[];
   tasks: Task[];
+  isDropTarget?: boolean;
   onCardClick: (task: Task) => void;
   onSubtaskToggle?: (subtask: Task) => void;
   onAddSubtask?: (parentId: string, title: string) => Promise<void> | void;
@@ -21,6 +22,7 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
   column,
   customFields = [],
   tasks,
+  isDropTarget = false,
   onCardClick,
   onSubtaskToggle,
   onAddSubtask,
@@ -35,13 +37,14 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
 
   const taskIds = tasks.map((t) => t.id);
   const columnAccentColor = column.color || '#3b82f6';
+  const isHighlighted = isOver || isDropTarget;
 
   return (
     <div
       ref={setNodeRef}
       style={{ borderTopColor: columnAccentColor }}
       className={`flex flex-col w-80 flex-shrink-0 max-h-full glass-panel rounded-2xl border-t-2 ${
-        isOver ? 'ring-2 ring-blue-500/50 opacity-90' : ''
+        isHighlighted ? 'ring-2 ring-blue-500/50 opacity-90' : ''
       } transition-all duration-200`}
     >
       {/* Column Header */}

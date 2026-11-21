@@ -1,20 +1,34 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  CollisionDetection,
   DndContext,
+  DragEndEvent,
+  DragOverEvent,
   DragOverlay,
   DragStartEvent,
-  DragEndEvent,
+  MeasuringStrategy,
   PointerSensor,
+  UniqueIdentifier,
+  closestCenter,
+  getFirstCollision,
+  pointerWithin,
+  rectIntersection,
   useSensor,
   useSensors,
-  closestCorners,
 } from '@dnd-kit/core';
-import { arrayMove } from '@dnd-kit/sortable';
 import { Column, CustomFieldDef, Task } from '../types/task';
 import { KanbanColumn } from './KanbanColumn';
 import { TaskCard } from './TaskCard';
 import { updateTask } from '../services/api';
 import { useI18n } from '../i18n/useI18n';
+import {
+  TaskPosition,
+  findColumnIdForItem,
+  getTaskPosition,
+  hasTaskPositionChanged,
+  moveTaskInList,
+  resolveCrossColumnInsertIndex,
+} from '../utils/kanbanDnd';
 
 interface KanbanBoardProps {
   columns: Column[];
@@ -28,6 +42,12 @@ interface KanbanBoardProps {
   onChecklistItemToggle?: (task: Task, fieldId: string, itemId: string) => Promise<void> | void;
   onAddCard?: (columnId: string) => void;
 }
+
+const MEASURING_CONFIG = {
+  droppable: {
+    strategy: MeasuringStrategy.Always,
+  },
+};
 
 export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   columns,
@@ -43,6 +63,21 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
 }) => {
   const { t } = useI18n();
   const [activeTask, setActiveTask] = useState<Task | null>(null);
+  const [dragTasks, setDragTasks] = useState<Task[] | null>(null);
+  const dragTasksRef = useRef<Task[] | null>(null);
+  const initialPositionRef = useRef<TaskPosition | null>(null);
+  const recentlyMovedToNewContainerRef = useRef(false);
+
+  const displayTasks = dragTasks ?? tasks;
+  const columnIds = useMemo(() => new Set(columns.map((col) => col.id)), [columns]);
+
+  useEffect(() => {
+    if (!dragTasks) return;
+    const frameId = requestAnimationFrame(() => {
+      recentlyMovedToNewContainerRef.current = false;
+    });
+    return () => cancelAnimationFrame(frameId);
+  }, [dragTasks]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -52,118 +87,188 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
     })
   );
 
-  const findTask = (id: string) => tasks.find((t) => t.id === id);
+  const resetDragState = useCallback(() => {
+    setActiveTask(null);
+    setDragTasks(null);
+    dragTasksRef.current = null;
+    initialPositionRef.current = null;
+    recentlyMovedToNewContainerRef.current = false;
+  }, []);
+
+  const collisionDetectionStrategy: CollisionDetection = useCallback(
+    (args) => {
+      const pointerIntersections = pointerWithin(args);
+      const isPointerHit = pointerIntersections.length > 0;
+      const intersections = isPointerHit ? pointerIntersections : rectIntersection(args);
+
+      if (intersections.length > 0) {
+        let overId: UniqueIdentifier | null = null;
+
+        if (isPointerHit) {
+          const directTaskHit = intersections.find(
+            (collision) => !columnIds.has(String(collision.id))
+          );
+          if (directTaskHit) {
+            overId = directTaskHit.id;
+          }
+        }
+
+        if (overId == null) {
+          overId = getFirstCollision(intersections, 'id');
+        }
+
+        if (overId != null) {
+          const overIdStr = String(overId);
+          if (columnIds.has(overIdStr)) {
+            const currentTasks = dragTasksRef.current ?? tasks;
+            const containerTasks = currentTasks.filter((task) => task.column_id === overIdStr);
+
+            if (containerTasks.length > 0) {
+              const taskIds = new Set(containerTasks.map((task) => task.id));
+              const closestInColumn = closestCenter({
+                ...args,
+                droppableContainers: args.droppableContainers.filter((container) =>
+                  taskIds.has(String(container.id))
+                ),
+              });
+              if (closestInColumn.length > 0) {
+                overId = closestInColumn[0].id;
+              }
+            }
+          }
+
+          return [{ id: overId }];
+        }
+      }
+
+      if (recentlyMovedToNewContainerRef.current) {
+        return [{ id: args.active.id }];
+      }
+
+      return [];
+    },
+    [columnIds, tasks]
+  );
+
+  const moveAcrossColumn = (
+    currentTasks: Task[],
+    active: DragOverEvent['active'],
+    over: NonNullable<DragOverEvent['over']>,
+    overColumnId: string
+  ): Task[] => {
+    const activeId = String(active.id);
+    const overId = String(over.id);
+    const overColumnTasks = currentTasks.filter(
+      (task) => task.column_id === overColumnId && task.id !== activeId
+    );
+    const isOverColumnContainer = columnIds.has(overId);
+    const activeRect = active.rect.current.translated;
+    const isBelowOverItem = Boolean(
+      activeRect && activeRect.top + activeRect.height / 2 > over.rect.top + over.rect.height / 2
+    );
+    const isAboveColumnItems = Boolean(
+      isOverColumnContainer &&
+      activeRect &&
+      activeRect.top + activeRect.height / 2 < over.rect.top + 64
+    );
+
+    const insertIndex = resolveCrossColumnInsertIndex({
+      overId,
+      overColumnTasks,
+      isOverColumnContainer,
+      isBelowOverItem,
+      isAboveColumnItems,
+    });
+
+    return moveTaskInList(currentTasks, activeId, overColumnId, insertIndex);
+  };
 
   const handleDragStart = (event: DragStartEvent) => {
-    const task = findTask(event.active.id as string);
+    const activeId = String(event.active.id);
+    const task = tasks.find((item) => item.id === activeId);
     if (task) {
       setActiveTask(task);
+      const snapshot = [...tasks];
+      dragTasksRef.current = snapshot;
+      setDragTasks(snapshot);
+      initialPositionRef.current = getTaskPosition(tasks, activeId);
+      recentlyMovedToNewContainerRef.current = false;
     }
+  };
+
+  const handleDragOver = (event: DragOverEvent) => {
+    const { active, over } = event;
+    if (!over) return;
+
+    const activeId = String(active.id);
+    const overId = String(over.id);
+    if (activeId === overId) return;
+
+    const currentTasks = dragTasksRef.current ?? tasks;
+    const activeColumnId = findColumnIdForItem(activeId, currentTasks, columns);
+    const overColumnId = findColumnIdForItem(overId, currentTasks, columns);
+
+    if (!activeColumnId || !overColumnId || activeColumnId === overColumnId) {
+      return;
+    }
+
+    const nextTasks = moveAcrossColumn(currentTasks, active, over, overColumnId);
+    if (nextTasks !== currentTasks) {
+      recentlyMovedToNewContainerRef.current = true;
+      dragTasksRef.current = nextTasks;
+      setDragTasks(nextTasks);
+    }
+  };
+
+  const handleDragCancel = () => {
+    resetDragState();
   };
 
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
-    setActiveTask(null);
+    const currentTasks = dragTasksRef.current ?? tasks;
+    const initialPos = initialPositionRef.current;
+
+    resetDragState();
 
     if (!over) return;
 
-    const activeId = active.id as string;
-    const overId = over.id as string;
+    const activeId = String(active.id);
+    const overId = String(over.id);
 
-    if (activeId === overId) return;
+    const activeColumnId = findColumnIdForItem(activeId, currentTasks, columns);
+    const overColumnId = findColumnIdForItem(overId, currentTasks, columns);
+    if (!activeColumnId || !overColumnId) return;
 
-    const activeTaskItem = findTask(activeId);
-    if (!activeTaskItem) return;
+    let finalTasks = currentTasks;
 
-    // Determine target column
-    let targetColumnId: string | undefined;
-
-    const matchingColumn = columns.find((col) => col.id === overId);
-    if (matchingColumn) {
-      targetColumnId = matchingColumn.id;
-    } else {
-      const overTaskItem = findTask(overId);
-      if (overTaskItem) {
-        targetColumnId = overTaskItem.column_id;
+    if (activeColumnId === overColumnId) {
+      if (overId !== activeId && !columnIds.has(overId)) {
+        const colTasks = currentTasks.filter((task) => task.column_id === activeColumnId);
+        const newIndex = colTasks.findIndex((task) => task.id === overId);
+        if (newIndex !== -1) {
+          finalTasks = moveTaskInList(currentTasks, activeId, activeColumnId, newIndex);
+        }
       }
+    } else {
+      finalTasks = moveAcrossColumn(currentTasks, active, over, overColumnId);
     }
 
-    if (!targetColumnId) return;
-
-    const targetTasks = tasks.filter((t) => t.column_id === targetColumnId);
-
-    let prevId = '';
-    let nextId = '';
-
-    if (matchingColumn) {
-      // Dropped onto column container (e.g. empty column or space below tasks)
-      const otherTasks = targetTasks.filter((t) => t.id !== activeId);
-      if (otherTasks.length > 0) {
-        prevId = otherTasks[otherTasks.length - 1].id;
-      }
-    } else {
-      if (activeTaskItem.column_id === targetColumnId) {
-        // Reordering within the SAME column
-        const oldIndex = targetTasks.findIndex((t) => t.id === activeId);
-        const newIndex = targetTasks.findIndex((t) => t.id === overId);
-
-        if (oldIndex !== -1 && newIndex !== -1) {
-          const reordered = arrayMove(targetTasks, oldIndex, newIndex);
-          const activeNewIndex = reordered.findIndex((t) => t.id === activeId);
-          if (activeNewIndex > 0) {
-            prevId = reordered[activeNewIndex - 1].id;
-          }
-          if (activeNewIndex < reordered.length - 1) {
-            nextId = reordered[activeNewIndex + 1].id;
-          }
-        }
-      } else {
-        // Moving to a DIFFERENT column onto a target task
-        const overIndex = targetTasks.findIndex((t) => t.id === overId);
-        if (overIndex !== -1) {
-          if (overIndex > 0) {
-            prevId = targetTasks[overIndex - 1].id;
-          }
-          nextId = targetTasks[overIndex].id;
-        }
-      }
+    const finalPos = getTaskPosition(finalTasks, activeId);
+    if (!finalPos || !hasTaskPositionChanged(initialPos, finalPos)) {
+      return;
     }
 
     // Optimistic UI Update to immediately reflect changes in UI
     if (onTasksChange) {
-      const updatedTasks = [...tasks];
-      const activeIdx = updatedTasks.findIndex((t) => t.id === activeId);
-      if (activeIdx !== -1) {
-        const movedTask = { ...updatedTasks[activeIdx], column_id: targetColumnId };
-        updatedTasks.splice(activeIdx, 1);
-
-        if (nextId) {
-          const nextIdx = updatedTasks.findIndex((t) => t.id === nextId);
-          if (nextIdx !== -1) {
-            updatedTasks.splice(nextIdx, 0, movedTask);
-          } else {
-            updatedTasks.push(movedTask);
-          }
-        } else if (prevId) {
-          const prevIdx = updatedTasks.findIndex((t) => t.id === prevId);
-          if (prevIdx !== -1) {
-            updatedTasks.splice(prevIdx + 1, 0, movedTask);
-          } else {
-            updatedTasks.push(movedTask);
-          }
-        } else {
-          updatedTasks.push(movedTask);
-        }
-
-        onTasksChange(updatedTasks);
-      }
+      onTasksChange(finalTasks);
     }
 
     try {
       await updateTask(activeId, {
-        column_id: targetColumnId,
-        prev_id: prevId,
-        next_id: nextId,
+        column_id: finalPos.columnId,
+        prev_id: finalPos.prevId,
+        next_id: finalPos.nextId,
       });
       onTaskUpdated();
     } catch (err) {
@@ -176,6 +281,10 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
     .filter((col) => col.visible !== false)
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
+  const currentActiveColumnId = activeTask
+    ? displayTasks.find((task) => task.id === activeTask.id)?.column_id
+    : undefined;
+
   if (visibleColumns.length === 0) {
     return (
       <div className="flex items-center justify-center min-h-[50vh] border border-dashed border-slate-700/80 rounded-2xl p-8 text-center text-slate-400">
@@ -187,19 +296,26 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   return (
     <DndContext
       sensors={sensors}
-      collisionDetection={closestCorners}
+      collisionDetection={collisionDetectionStrategy}
+      measuring={MEASURING_CONFIG}
       onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
+      onDragCancel={handleDragCancel}
       onDragEnd={handleDragEnd}
     >
       <div className="flex space-x-4 overflow-x-auto pb-2 pt-1 items-start h-full w-full px-1">
         {visibleColumns.map((column) => {
-          const colTasks = tasks.filter((t) => t.column_id === column.id);
+          const colTasks = displayTasks.filter((task) => task.column_id === column.id);
+          const isDropTarget = Boolean(
+            activeTask && currentActiveColumnId === column.id && activeTask.column_id !== column.id
+          );
           return (
             <KanbanColumn
               key={column.id}
               column={column}
               customFields={customFields}
               tasks={colTasks}
+              isDropTarget={isDropTarget}
               onCardClick={onCardClick}
               onSubtaskToggle={onSubtaskToggle}
               onAddSubtask={onAddSubtask}
