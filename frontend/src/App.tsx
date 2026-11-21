@@ -1,457 +1,490 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import type React from "react";
+import { useCallback, useEffect, useState } from "react";
+import { ColumnManagerModal } from "./components/ColumnManagerModal";
+import { CreateTaskModal } from "./components/CreateTaskModal";
+import { Header } from "./components/Header";
+import { KanbanBoard } from "./components/KanbanBoard";
+import { TaskModal } from "./components/TaskModal";
+import { ThemeModal } from "./components/ThemeModal";
 import {
-  BoardConfig,
-  Column,
-  CustomFieldDef,
-  ChecklistItem,
-  SubtaskRef,
-  Task,
-  ThemeConfig,
-} from './types/task';
+	ToastContainer,
+	type ToastMessage,
+	type ToastType,
+} from "./components/Toast";
+import { useI18n } from "./i18n/useI18n";
 import {
-  fetchBoardConfig,
-  fetchTasks,
-  fetchTags,
-  createTask,
-  updateTask,
-  deleteTask,
-  saveBoardConfig,
-  rebuildCache,
-} from './services/api';
-import { Header } from './components/Header';
-import { KanbanBoard } from './components/KanbanBoard';
-import { TaskModal } from './components/TaskModal';
-import { CreateTaskModal } from './components/CreateTaskModal';
-import { ThemeModal } from './components/ThemeModal';
-import { ColumnManagerModal } from './components/ColumnManagerModal';
-import { ToastContainer, ToastMessage, ToastType } from './components/Toast';
-import { useI18n } from './i18n/useI18n';
+	createTask,
+	deleteTask,
+	fetchBoardConfig,
+	fetchTags,
+	fetchTasks,
+	rebuildCache,
+	saveBoardConfig,
+	updateTask,
+} from "./services/api";
+import type {
+	BoardConfig,
+	ChecklistItem,
+	Column,
+	CustomFieldDef,
+	SubtaskRef,
+	Task,
+	ThemeConfig,
+} from "./types/task";
 
 export const App: React.FC = () => {
-  const { language, t } = useI18n();
-  const [config, setConfig] = useState<BoardConfig | null>(null);
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [availableTags, setAvailableTags] = useState<string[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [debouncedQuery, setDebouncedQuery] = useState('');
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [isRebuilding, setIsRebuilding] = useState(false);
-  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+	const { language, t } = useI18n();
+	const [config, setConfig] = useState<BoardConfig | null>(null);
+	const [tasks, setTasks] = useState<Task[]>([]);
+	const [availableTags, setAvailableTags] = useState<string[]>([]);
+	const [searchQuery, setSearchQuery] = useState("");
+	const [debouncedQuery, setDebouncedQuery] = useState("");
+	const [isSyncing, setIsSyncing] = useState(false);
+	const [isRebuilding, setIsRebuilding] = useState(false);
+	const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
-  // Modal States
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
-  const [isThemeModalOpen, setIsThemeModalOpen] = useState(false);
-  const [isColumnModalOpen, setIsColumnModalOpen] = useState(false);
+	// Modal States
+	const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+	const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
+	const [isThemeModalOpen, setIsThemeModalOpen] = useState(false);
+	const [isColumnModalOpen, setIsColumnModalOpen] = useState(false);
 
-  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
-  const [initialColumnId, setInitialColumnId] = useState<string>('');
+	const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+	const [initialColumnId, setInitialColumnId] = useState<string>("");
 
-  const addToast = useCallback((message: string, type: ToastType = 'info') => {
-    const id = Date.now().toString() + Math.random().toString(36).substr(2, 4);
-    setToasts((prev) => [...prev, { id, message, type }]);
-  }, []);
+	const addToast = useCallback((message: string, type: ToastType = "info") => {
+		const id = Date.now().toString() + Math.random().toString(36).substr(2, 4);
+		setToasts((prev) => [...prev, { id, message, type }]);
+	}, []);
 
-  const dismissToast = useCallback((id: string) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
-  }, []);
+	const dismissToast = useCallback((id: string) => {
+		setToasts((prev) => prev.filter((t) => t.id !== id));
+	}, []);
 
-  const applyTheme = useCallback((theme?: ThemeConfig) => {
-    const root = document.documentElement;
-    if (!theme || theme.name === 'dark') {
-      root.removeAttribute('data-theme');
-      root.style.removeProperty('--bg-primary');
-      root.style.removeProperty('--bg-card');
-      root.style.removeProperty('--accent-color');
-      root.style.removeProperty('--text-primary');
-    } else if (theme.name === 'custom') {
-      root.setAttribute('data-theme', 'custom');
-      if (theme.primaryBg) root.style.setProperty('--bg-primary', theme.primaryBg);
-      if (theme.cardBg) root.style.setProperty('--bg-card', theme.cardBg);
-      if (theme.accentColor) root.style.setProperty('--accent-color', theme.accentColor);
-      if (theme.textColor) root.style.setProperty('--text-primary', theme.textColor);
-    } else {
-      root.setAttribute('data-theme', theme.name);
-      root.style.removeProperty('--bg-primary');
-      root.style.removeProperty('--bg-card');
-      root.style.removeProperty('--accent-color');
-      root.style.removeProperty('--text-primary');
-    }
-  }, []);
+	const applyTheme = useCallback((theme?: ThemeConfig) => {
+		const root = document.documentElement;
+		if (!theme || theme.name === "dark") {
+			root.removeAttribute("data-theme");
+			root.style.removeProperty("--bg-primary");
+			root.style.removeProperty("--bg-card");
+			root.style.removeProperty("--accent-color");
+			root.style.removeProperty("--text-primary");
+		} else if (theme.name === "custom") {
+			root.setAttribute("data-theme", "custom");
+			if (theme.primaryBg)
+				root.style.setProperty("--bg-primary", theme.primaryBg);
+			if (theme.cardBg) root.style.setProperty("--bg-card", theme.cardBg);
+			if (theme.accentColor)
+				root.style.setProperty("--accent-color", theme.accentColor);
+			if (theme.textColor)
+				root.style.setProperty("--text-primary", theme.textColor);
+		} else {
+			root.setAttribute("data-theme", theme.name);
+			root.style.removeProperty("--bg-primary");
+			root.style.removeProperty("--bg-card");
+			root.style.removeProperty("--accent-color");
+			root.style.removeProperty("--text-primary");
+		}
+	}, []);
 
-  const loadData = useCallback(async () => {
-    setIsSyncing(true);
-    try {
-      const [cfg, taskList, tagList] = await Promise.all([
-        fetchBoardConfig(),
-        fetchTasks(debouncedQuery),
-        fetchTags(),
-      ]);
-      setConfig(cfg);
-      setTasks(taskList || []);
-      setAvailableTags(tagList || []);
+	const loadData = useCallback(async () => {
+		setIsSyncing(true);
+		try {
+			const [cfg, taskList, tagList] = await Promise.all([
+				fetchBoardConfig(),
+				fetchTasks(debouncedQuery),
+				fetchTags(),
+			]);
+			setConfig(cfg);
+			setTasks(taskList || []);
+			setAvailableTags(tagList || []);
 
-      if (cfg.theme && cfg.theme.name) {
-        applyTheme(cfg.theme);
-        localStorage.setItem('localkanban_theme', JSON.stringify(cfg.theme));
-      } else {
-        const storedTheme = localStorage.getItem('localkanban_theme');
-        if (storedTheme) {
-          try {
-            const parsedTheme = JSON.parse(storedTheme);
-            applyTheme(parsedTheme);
-          } catch {
-            // ignore
-          }
-        }
-      }
-    } catch (err) {
-      console.error('Error fetching kanban data:', err);
-      addToast(t('common.error') || 'Failed to load data from server', 'error');
-    } finally {
-      setIsSyncing(false);
-    }
-  }, [debouncedQuery, applyTheme, addToast, t]);
+			if (cfg.theme?.name) {
+				applyTheme(cfg.theme);
+				localStorage.setItem("localkanban_theme", JSON.stringify(cfg.theme));
+			} else {
+				const storedTheme = localStorage.getItem("localkanban_theme");
+				if (storedTheme) {
+					try {
+						const parsedTheme = JSON.parse(storedTheme);
+						applyTheme(parsedTheme);
+					} catch {
+						// ignore
+					}
+				}
+			}
+		} catch (err) {
+			console.error("Error fetching kanban data:", err);
+			addToast(t("common.error") || "Failed to load data from server", "error");
+		} finally {
+			setIsSyncing(false);
+		}
+	}, [debouncedQuery, applyTheme, addToast, t]);
 
-  // Debounce searchQuery by 300ms before firing API call
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedQuery(searchQuery);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [searchQuery]);
+	// Debounce searchQuery by 300ms before firing API call
+	useEffect(() => {
+		const timer = setTimeout(() => {
+			setDebouncedQuery(searchQuery);
+		}, 300);
+		return () => clearTimeout(timer);
+	}, [searchQuery]);
 
-  // Initial load & debounced search query change effect
-  useEffect(() => {
-    (async () => {
-      await loadData();
-    })();
-  }, [loadData]);
+	// Initial load & debounced search query change effect
+	useEffect(() => {
+		(async () => {
+			await loadData();
+		})();
+	}, [loadData]);
 
-  // Window Focus Sync Mechanism (Spec 4.2)
-  useEffect(() => {
-    const handleFocus = () => {
-      loadData();
-    };
-    window.addEventListener('focus', handleFocus);
-    return () => {
-      window.removeEventListener('focus', handleFocus);
-    };
-  }, [loadData]);
+	// Window Focus Sync Mechanism (Spec 4.2)
+	useEffect(() => {
+		const handleFocus = () => {
+			loadData();
+		};
+		window.addEventListener("focus", handleFocus);
+		return () => {
+			window.removeEventListener("focus", handleFocus);
+		};
+	}, [loadData]);
 
-  const handleRebuildDb = async () => {
-    setIsRebuilding(true);
-    try {
-      const res = await rebuildCache();
-      addToast(
-        `${t('common.rebuilt') || 'Database rebuilt successfully'} (${res.count} tasks)`,
-        'success'
-      );
-      await loadData();
-    } catch (err) {
-      console.error('Error rebuilding database:', err);
-      addToast('Failed to rebuild database cache', 'error');
-    } finally {
-      setIsRebuilding(false);
-    }
-  };
+	const handleRebuildDb = async () => {
+		setIsRebuilding(true);
+		try {
+			const res = await rebuildCache();
+			addToast(
+				`${t("common.rebuilt") || "Database rebuilt successfully"} (${res.count} tasks)`,
+				"success",
+			);
+			await loadData();
+		} catch (err) {
+			console.error("Error rebuilding database:", err);
+			addToast("Failed to rebuild database cache", "error");
+		} finally {
+			setIsRebuilding(false);
+		}
+	};
 
-  const handleOpenNewCardModal = (columnId?: string) => {
-    const defaultColumnId = columnId || config?.columns[0]?.id || '';
-    setInitialColumnId(defaultColumnId);
-    setIsCreateModalOpen(true);
-  };
+	const handleOpenNewCardModal = (columnId?: string) => {
+		const defaultColumnId = columnId || config?.columns[0]?.id || "";
+		setInitialColumnId(defaultColumnId);
+		setIsCreateModalOpen(true);
+	};
 
-  const handleCreateTask = async (data: { title: string; column_id: string }) => {
-    try {
-      const createdTask = await createTask({
-        title: data.title,
-        column_id: data.column_id,
-      });
-      addToast(t('common.created') || 'Task created successfully', 'success');
-      await loadData();
-      setIsCreateModalOpen(false);
-      setSelectedTask(createdTask);
-      setIsTaskModalOpen(true);
-    } catch (err) {
-      console.error('Error creating task:', err);
-      addToast('Failed to create task', 'error');
-      throw err;
-    }
-  };
+	const handleCreateTask = async (data: {
+		title: string;
+		column_id: string;
+	}) => {
+		try {
+			const createdTask = await createTask({
+				title: data.title,
+				column_id: data.column_id,
+			});
+			addToast(t("common.created") || "Task created successfully", "success");
+			await loadData();
+			setIsCreateModalOpen(false);
+			setSelectedTask(createdTask);
+			setIsTaskModalOpen(true);
+		} catch (err) {
+			console.error("Error creating task:", err);
+			addToast("Failed to create task", "error");
+			throw err;
+		}
+	};
 
-  const handleCardClick = (task: Task) => {
-    setSelectedTask(task);
-    setIsTaskModalOpen(true);
-  };
+	const handleCardClick = (task: Task) => {
+		setSelectedTask(task);
+		setIsTaskModalOpen(true);
+	};
 
-  const handleSaveTask = async (taskData: Partial<Task>, options?: { silent?: boolean }) => {
-    const defaultColumnId = config?.columns[0]?.id;
-    try {
-      if (taskData.id) {
-        await updateTask(taskData.id, taskData);
-        if (!options?.silent) {
-          addToast(t('common.saved') || 'Task updated successfully', 'success');
-        }
-      } else {
-        await createTask({
-          title: taskData.title || 'Untitled',
-          column_id: taskData.column_id || defaultColumnId,
-          tags: taskData.tags,
-          custom_fields: taskData.custom_fields,
-          content: taskData.content,
-        });
-        if (!options?.silent) {
-          addToast(t('common.created') || 'Task created successfully', 'success');
-        }
-      }
-      await loadData();
-    } catch (err) {
-      console.error('Error saving task:', err);
-      if (!options?.silent) {
-        addToast('Failed to save task', 'error');
-      }
-      throw err;
-    }
-  };
+	const handleSaveTask = async (
+		taskData: Partial<Task>,
+		options?: { silent?: boolean },
+	) => {
+		const defaultColumnId = config?.columns[0]?.id;
+		try {
+			if (taskData.id) {
+				await updateTask(taskData.id, taskData);
+				if (!options?.silent) {
+					addToast(t("common.saved") || "Task updated successfully", "success");
+				}
+			} else {
+				await createTask({
+					title: taskData.title || "Untitled",
+					column_id: taskData.column_id || defaultColumnId,
+					tags: taskData.tags,
+					custom_fields: taskData.custom_fields,
+					content: taskData.content,
+				});
+				if (!options?.silent) {
+					addToast(
+						t("common.created") || "Task created successfully",
+						"success",
+					);
+				}
+			}
+			await loadData();
+		} catch (err) {
+			console.error("Error saving task:", err);
+			if (!options?.silent) {
+				addToast("Failed to save task", "error");
+			}
+			throw err;
+		}
+	};
 
-  const handleSubtaskToggle = async (subtask: Task) => {
-    const parentTask = tasks.find(
-      (t) =>
-        t.subtask_details?.some((s) => s.id === subtask.id) ||
-        t.subtasks?.some((s) => s.id === subtask.id) ||
-        (subtask.parent_id && t.id === subtask.parent_id)
-    );
-    if (!parentTask) return;
+	const handleSubtaskToggle = async (subtask: Task) => {
+		const parentTask = tasks.find(
+			(t) =>
+				t.subtask_details?.some((s) => s.id === subtask.id) ||
+				t.subtasks?.some((s) => s.id === subtask.id) ||
+				(subtask.parent_id && t.id === subtask.parent_id),
+		);
+		if (!parentTask) return;
 
-    const existingSubRefs: SubtaskRef[] =
-      parentTask.subtasks && parentTask.subtasks.length > 0
-        ? [...parentTask.subtasks]
-        : (parentTask.subtask_details || []).map((s) => ({
-            id: s.id,
-            completed: Boolean(s.completed),
-          }));
+		const existingSubRefs: SubtaskRef[] =
+			parentTask.subtasks && parentTask.subtasks.length > 0
+				? [...parentTask.subtasks]
+				: (parentTask.subtask_details || []).map((s) => ({
+						id: s.id,
+						completed: Boolean(s.completed),
+					}));
 
-    const targetRef = existingSubRefs.find((s) => s.id === subtask.id);
-    let newSubtasks: SubtaskRef[];
-    if (targetRef) {
-      newSubtasks = existingSubRefs.map((s) =>
-        s.id === subtask.id ? { ...s, completed: !s.completed } : s
-      );
-    } else {
-      newSubtasks = [...existingSubRefs, { id: subtask.id, completed: true }];
-    }
+		const targetRef = existingSubRefs.find((s) => s.id === subtask.id);
+		let newSubtasks: SubtaskRef[];
+		if (targetRef) {
+			newSubtasks = existingSubRefs.map((s) =>
+				s.id === subtask.id ? { ...s, completed: !s.completed } : s,
+			);
+		} else {
+			newSubtasks = [...existingSubRefs, { id: subtask.id, completed: true }];
+		}
 
-    try {
-      await updateTask(parentTask.id, { subtasks: newSubtasks });
-      await loadData();
-    } catch (err) {
-      console.error('Failed to toggle subtask:', err);
-      addToast('Failed to update subtask', 'error');
-    }
-  };
+		try {
+			await updateTask(parentTask.id, { subtasks: newSubtasks });
+			await loadData();
+		} catch (err) {
+			console.error("Failed to toggle subtask:", err);
+			addToast("Failed to update subtask", "error");
+		}
+	};
 
-  const handleAddSubtask = async (parentId: string, title: string) => {
-    if (!config || config.columns.length === 0) return;
-    const parentTask = tasks.find((t) => t.id === parentId);
-    const targetColumn = parentTask?.column_id || config.columns[0].id;
-    try {
-      await createTask({
-        parent_id: parentId,
-        title,
-        column_id: targetColumn,
-      });
-      addToast(t('common.created') || 'Subtask created', 'success');
-      await loadData();
-    } catch (err) {
-      console.error('Failed to create subtask:', err);
-      addToast('Failed to create subtask', 'error');
-    }
-  };
+	const handleAddSubtask = async (parentId: string, title: string) => {
+		if (!config || config.columns.length === 0) return;
+		const parentTask = tasks.find((t) => t.id === parentId);
+		const targetColumn = parentTask?.column_id || config.columns[0].id;
+		try {
+			await createTask({
+				parent_id: parentId,
+				title,
+				column_id: targetColumn,
+			});
+			addToast(t("common.created") || "Subtask created", "success");
+			await loadData();
+		} catch (err) {
+			console.error("Failed to create subtask:", err);
+			addToast("Failed to create subtask", "error");
+		}
+	};
 
-  const handleChecklistItemToggle = async (task: Task, fieldId: string, itemId: string) => {
-    if (!task.custom_fields) return;
-    const newCustomFields = task.custom_fields.map((cf) => {
-      const match = cf.id === fieldId || cf.field_id === fieldId || cf.name === fieldId;
-      if (match && cf.type === 'checklist') {
-        const currentItems = Array.isArray(cf.value) ? (cf.value as ChecklistItem[]) : [];
-        const newItems = currentItems.map((item) =>
-          item.id === itemId ? { ...item, completed: !item.completed } : item
-        );
-        return { ...cf, value: newItems };
-      }
-      return cf;
-    });
+	const handleChecklistItemToggle = async (
+		task: Task,
+		fieldId: string,
+		itemId: string,
+	) => {
+		if (!task.custom_fields) return;
+		const newCustomFields = task.custom_fields.map((cf) => {
+			const match =
+				cf.id === fieldId || cf.field_id === fieldId || cf.name === fieldId;
+			if (match && cf.type === "checklist") {
+				const currentItems = Array.isArray(cf.value)
+					? (cf.value as ChecklistItem[])
+					: [];
+				const newItems = currentItems.map((item) =>
+					item.id === itemId ? { ...item, completed: !item.completed } : item,
+				);
+				return { ...cf, value: newItems };
+			}
+			return cf;
+		});
 
-    // Optimistic UI update
-    setTasks((prev) =>
-      prev.map((t) => (t.id === task.id ? { ...t, custom_fields: newCustomFields } : t))
-    );
+		// Optimistic UI update
+		setTasks((prev) =>
+			prev.map((t) =>
+				t.id === task.id ? { ...t, custom_fields: newCustomFields } : t,
+			),
+		);
 
-    try {
-      await updateTask(task.id, { custom_fields: newCustomFields });
-      await loadData();
-    } catch (err) {
-      console.error('Failed to toggle checklist item:', err);
-      addToast('Failed to update checklist item', 'error');
-      await loadData();
-    }
-  };
+		try {
+			await updateTask(task.id, { custom_fields: newCustomFields });
+			await loadData();
+		} catch (err) {
+			console.error("Failed to toggle checklist item:", err);
+			addToast("Failed to update checklist item", "error");
+			await loadData();
+		}
+	};
 
-  const handleDeleteTask = async (id: string) => {
-    try {
-      await deleteTask(id);
-      addToast(t('common.deleted') || 'Task deleted', 'info');
-      await loadData();
-    } catch (err) {
-      console.error('Error deleting task:', err);
-      addToast('Failed to delete task', 'error');
-    }
-  };
+	const handleDeleteTask = async (id: string) => {
+		try {
+			await deleteTask(id);
+			addToast(t("common.deleted") || "Task deleted", "info");
+			await loadData();
+		} catch (err) {
+			console.error("Error deleting task:", err);
+			addToast("Failed to delete task", "error");
+		}
+	};
 
-  const handleSaveConfig = async (newColumns: Column[], newCustomFields?: CustomFieldDef[]) => {
-    if (!config || newColumns.length === 0) return;
+	const handleSaveConfig = async (
+		newColumns: Column[],
+		newCustomFields?: CustomFieldDef[],
+	) => {
+		if (!config || newColumns.length === 0) return;
 
-    try {
-      const validColumnIds = new Set(newColumns.map((c) => c.id));
-      const fallbackColumn = newColumns[0];
+		try {
+			const validColumnIds = new Set(newColumns.map((c) => c.id));
+			const fallbackColumn = newColumns[0];
 
-      // Reassign orphan tasks whose column was deleted
-      const orphanTasks = tasks.filter((t) => t.column_id && !validColumnIds.has(t.column_id));
-      for (const t of orphanTasks) {
-        try {
-          await updateTask(t.id, {
-            column_id: fallbackColumn.id,
-          });
-        } catch (err) {
-          console.error(`Failed to reassign task ${t.id}:`, err);
-        }
-      }
+			// Reassign orphan tasks whose column was deleted
+			const orphanTasks = tasks.filter(
+				(t) => t.column_id && !validColumnIds.has(t.column_id),
+			);
+			for (const t of orphanTasks) {
+				try {
+					await updateTask(t.id, {
+						column_id: fallbackColumn.id,
+					});
+				} catch (err) {
+					console.error(`Failed to reassign task ${t.id}:`, err);
+				}
+			}
 
-      const updatedConfig: BoardConfig = {
-        ...config,
-        columns: newColumns,
-        custom_fields: newCustomFields,
-        language,
-      };
-      const saved = await saveBoardConfig(updatedConfig);
-      setConfig(saved);
-      addToast('Board configuration saved', 'success');
-      await loadData();
-    } catch (err) {
-      console.error('Failed to save board config:', err);
-      addToast('Failed to save configuration', 'error');
-    }
-  };
+			const updatedConfig: BoardConfig = {
+				...config,
+				columns: newColumns,
+				custom_fields: newCustomFields,
+				language,
+			};
+			const saved = await saveBoardConfig(updatedConfig);
+			setConfig(saved);
+			addToast("Board configuration saved", "success");
+			await loadData();
+		} catch (err) {
+			console.error("Failed to save board config:", err);
+			addToast("Failed to save configuration", "error");
+		}
+	};
 
-  const handleSelectTheme = async (theme: ThemeConfig) => {
-    applyTheme(theme);
-    localStorage.setItem('localkanban_theme', JSON.stringify(theme));
-    if (!config) return;
-    const updatedConfig: BoardConfig = { ...config, theme, language };
-    try {
-      const saved = await saveBoardConfig(updatedConfig);
-      setConfig(saved);
-      addToast('Theme applied', 'success');
-    } catch (err) {
-      console.error('Failed to save theme to config:', err);
-    }
-  };
+	const handleSelectTheme = async (theme: ThemeConfig) => {
+		applyTheme(theme);
+		localStorage.setItem("localkanban_theme", JSON.stringify(theme));
+		if (!config) return;
+		const updatedConfig: BoardConfig = { ...config, theme, language };
+		try {
+			const saved = await saveBoardConfig(updatedConfig);
+			setConfig(saved);
+			addToast("Theme applied", "success");
+		} catch (err) {
+			console.error("Failed to save theme to config:", err);
+		}
+	};
 
-  if (!config) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="flex flex-col items-center space-y-3">
-          <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
-          <p className="text-sm font-medium text-slate-400">Loading LocalKanban...</p>
-        </div>
-      </div>
-    );
-  }
+	if (!config) {
+		return (
+			<div className="flex items-center justify-center min-h-screen">
+				<div className="flex flex-col items-center space-y-3">
+					<div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+					<p className="text-sm font-medium text-slate-400">
+						Loading LocalKanban...
+					</p>
+				</div>
+			</div>
+		);
+	}
 
-  return (
-    <div className="h-screen flex flex-col transition-colors duration-300 overflow-hidden">
-      {/* Toast Notification Container */}
-      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+	return (
+		<div className="h-screen flex flex-col transition-colors duration-300 overflow-hidden">
+			{/* Toast Notification Container */}
+			<ToastContainer toasts={toasts} onDismiss={dismissToast} />
 
-      {/* Header */}
-      <Header
-        searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
-        onReload={loadData}
-        onRebuildDb={handleRebuildDb}
-        onOpenThemeModal={() => setIsThemeModalOpen(true)}
-        onOpenColumnManagerModal={() => setIsColumnModalOpen(true)}
-        isSyncing={isSyncing}
-        isRebuilding={isRebuilding}
-      />
+			{/* Header */}
+			<Header
+				searchQuery={searchQuery}
+				onSearchChange={setSearchQuery}
+				onReload={loadData}
+				onRebuildDb={handleRebuildDb}
+				onOpenThemeModal={() => setIsThemeModalOpen(true)}
+				onOpenColumnManagerModal={() => setIsColumnModalOpen(true)}
+				isSyncing={isSyncing}
+				isRebuilding={isRebuilding}
+			/>
 
-      {/* Main Kanban Board Area */}
-      <main className="flex-1 w-full px-3 sm:px-4 pb-3 flex flex-col min-h-0 overflow-hidden">
-        <KanbanBoard
-          columns={config.columns}
-          customFields={config.custom_fields}
-          tasks={tasks}
-          onTaskUpdated={loadData}
-          onTasksChange={setTasks}
-          onCardClick={handleCardClick}
-          onSubtaskToggle={handleSubtaskToggle}
-          onAddSubtask={handleAddSubtask}
-          onChecklistItemToggle={handleChecklistItemToggle}
-          onAddCard={(columnId) => handleOpenNewCardModal(columnId)}
-        />
-      </main>
+			{/* Main Kanban Board Area */}
+			<main className="flex-1 w-full px-3 sm:px-4 pb-3 flex flex-col min-h-0 overflow-hidden">
+				<KanbanBoard
+					columns={config.columns}
+					customFields={config.custom_fields}
+					tasks={tasks}
+					onTaskUpdated={loadData}
+					onTasksChange={setTasks}
+					onCardClick={handleCardClick}
+					onSubtaskToggle={handleSubtaskToggle}
+					onAddSubtask={handleAddSubtask}
+					onChecklistItemToggle={handleChecklistItemToggle}
+					onAddCard={(columnId) => handleOpenNewCardModal(columnId)}
+				/>
+			</main>
 
-      {/* Simple Create Card Modal */}
-      {isCreateModalOpen && (
-        <CreateTaskModal
-          isOpen={isCreateModalOpen}
-          columns={config.columns}
-          initialColumnId={initialColumnId}
-          onClose={() => setIsCreateModalOpen(false)}
-          onSave={handleCreateTask}
-        />
-      )}
+			{/* Simple Create Card Modal */}
+			{isCreateModalOpen && (
+				<CreateTaskModal
+					isOpen={isCreateModalOpen}
+					columns={config.columns}
+					initialColumnId={initialColumnId}
+					onClose={() => setIsCreateModalOpen(false)}
+					onSave={handleCreateTask}
+				/>
+			)}
 
-      {/* Detail / Edit Modal */}
-      {isTaskModalOpen && (
-        <TaskModal
-          isOpen={isTaskModalOpen}
-          task={selectedTask}
-          columns={config.columns}
-          initialColumnId={initialColumnId}
-          customFields={config.custom_fields}
-          availableTags={availableTags}
-          allTasks={tasks}
-          onClose={() => setIsTaskModalOpen(false)}
-          onSave={handleSaveTask}
-          onDelete={handleDeleteTask}
-          onOpenTask={(task) => setSelectedTask(task)}
-        />
-      )}
+			{/* Detail / Edit Modal */}
+			{isTaskModalOpen && (
+				<TaskModal
+					isOpen={isTaskModalOpen}
+					task={selectedTask}
+					columns={config.columns}
+					initialColumnId={initialColumnId}
+					customFields={config.custom_fields}
+					availableTags={availableTags}
+					allTasks={tasks}
+					onClose={() => setIsTaskModalOpen(false)}
+					onSave={handleSaveTask}
+					onDelete={handleDeleteTask}
+					onOpenTask={(task) => setSelectedTask(task)}
+				/>
+			)}
 
-      {/* Theme Selection Modal */}
-      {isThemeModalOpen && (
-        <ThemeModal
-          isOpen={isThemeModalOpen}
-          onClose={() => setIsThemeModalOpen(false)}
-          currentTheme={config.theme}
-          onSelectTheme={handleSelectTheme}
-        />
-      )}
+			{/* Theme Selection Modal */}
+			{isThemeModalOpen && (
+				<ThemeModal
+					isOpen={isThemeModalOpen}
+					onClose={() => setIsThemeModalOpen(false)}
+					currentTheme={config.theme}
+					onSelectTheme={handleSelectTheme}
+				/>
+			)}
 
-      {/* Board Column Configuration Modal */}
-      {isColumnModalOpen && (
-        <ColumnManagerModal
-          isOpen={isColumnModalOpen}
-          onClose={() => setIsColumnModalOpen(false)}
-          columns={config.columns}
-          customFields={config.custom_fields}
-          onSaveConfig={handleSaveConfig}
-        />
-      )}
-    </div>
-  );
+			{/* Board Column Configuration Modal */}
+			{isColumnModalOpen && (
+				<ColumnManagerModal
+					isOpen={isColumnModalOpen}
+					onClose={() => setIsColumnModalOpen(false)}
+					columns={config.columns}
+					customFields={config.custom_fields}
+					onSaveConfig={handleSaveConfig}
+				/>
+			)}
+		</div>
+	);
 };
 
 export default App;

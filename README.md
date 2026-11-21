@@ -26,15 +26,15 @@ docker compose down
 本プロジェクトのコマンド実行はすべて Docker コンテナ経由で統一されています。
 
 - **Go (バックエンド):** `golangci-lint` (v2) および `gofmt` (`golangci-lint` 経由)
-- **TypeScript / React (フロントエンド):** `ESLint` (Flat Config) および `Prettier`
+- **TypeScript / React (フロントエンド):** `Biome` (リンター・フォーマッター統合)
 
 ### 実行コマンド (`Makefile`)
 
 ```bash
-# フォーマット実行 (Go: golangci-lint run --fix / Frontend: prettier --write)
+# フォーマット＆自動修正 (Go: golangci-lint run --fix / Frontend: biome check --write)
 make fmt
 
-# リンター実行 (Go: golangci-lint run / Frontend: eslint)
+# リンター＆フォーマットチェック (Go: golangci-lint run / Frontend: biome check)
 make lint
 
 # フォーマットチェック・静的解析・テスト・ビルドを一括実行
@@ -50,10 +50,10 @@ docker compose exec backend golangci-lint run         # リンターチェック
 docker compose exec backend go test ./...             # テスト実行
 
 # フロントエンド
-docker compose exec frontend npm run format          # フォーマット実行
-docker compose exec frontend npm run format:check    # フォーマットチェック
-docker compose exec frontend npm run lint            # リンターチェック
-docker compose exec frontend npm run build           # ビルド
+docker compose exec frontend npm run check:fix        # フォーマット＆自動修正
+docker compose exec frontend npm run check            # リンター＆フォーマットチェック
+docker compose exec frontend npm run test             # テスト実行
+docker compose exec frontend npm run build            # ビルド
 ```
 
 ---
