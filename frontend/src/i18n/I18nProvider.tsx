@@ -1,61 +1,69 @@
-import React, { useState, useCallback, useMemo, ReactNode } from 'react';
-import { Language, translations } from './translations';
-import { I18nContext } from './I18nContext';
+import type React from "react";
+import { type ReactNode, useCallback, useMemo, useState } from "react";
+import { I18nContext } from "./I18nContext";
+import { type Language, translations } from "./translations";
 
-export const I18nProvider: React.FC<{ initialLanguage?: string; children: ReactNode }> = ({
-  initialLanguage,
-  children,
-}) => {
-  const [language, setLanguageState] = useState<Language>(() => {
-    const saved = localStorage.getItem('localkanban_lang');
-    if (saved === 'ja' || saved === 'en') return saved;
-    if (initialLanguage === 'ja' || initialLanguage === 'en') return initialLanguage;
-    return 'ja';
-  });
+export const I18nProvider: React.FC<{
+	initialLanguage?: string;
+	children: ReactNode;
+}> = ({ initialLanguage, children }) => {
+	const [language, setLanguageState] = useState<Language>(() => {
+		const saved = localStorage.getItem("localkanban_lang");
+		if (saved === "ja" || saved === "en") return saved;
+		if (initialLanguage === "ja" || initialLanguage === "en")
+			return initialLanguage;
+		return "ja";
+	});
 
-  const [prevInitialLanguage, setPrevInitialLanguage] = useState(initialLanguage);
-  if (initialLanguage !== prevInitialLanguage) {
-    setPrevInitialLanguage(initialLanguage);
-    if (initialLanguage === 'ja' || initialLanguage === 'en') {
-      setLanguageState(initialLanguage);
-    }
-  }
+	const [prevInitialLanguage, setPrevInitialLanguage] =
+		useState(initialLanguage);
+	if (initialLanguage !== prevInitialLanguage) {
+		setPrevInitialLanguage(initialLanguage);
+		if (initialLanguage === "ja" || initialLanguage === "en") {
+			setLanguageState(initialLanguage);
+		}
+	}
 
-  const setLanguage = useCallback((lang: Language) => {
-    setLanguageState((prev) => {
-      if (prev === lang) return prev;
-      localStorage.setItem('localkanban_lang', lang);
-      return lang;
-    });
-  }, []);
+	const setLanguage = useCallback((lang: Language) => {
+		setLanguageState((prev) => {
+			if (prev === lang) return prev;
+			localStorage.setItem("localkanban_lang", lang);
+			return lang;
+		});
+	}, []);
 
-  const t = useCallback(
-    (key: string, params?: Record<string, string | number>): string => {
-      const dict = translations[language] || translations.ja;
-      let text =
-        (dict as Record<string, string>)[key] ||
-        (translations.ja as Record<string, string>)[key] ||
-        key;
+	const t = useCallback(
+		(key: string, params?: Record<string, string | number>): string => {
+			const dict = translations[language] || translations.ja;
+			let text =
+				(dict as Record<string, string>)[key] ||
+				(translations.ja as Record<string, string>)[key] ||
+				key;
 
-      if (params) {
-        Object.entries(params).forEach(([paramKey, paramVal]) => {
-          text = text.replace(new RegExp(`\\{${paramKey}\\}`, 'g'), String(paramVal));
-        });
-      }
+			if (params) {
+				Object.entries(params).forEach(([paramKey, paramVal]) => {
+					text = text.replace(
+						new RegExp(`\\{${paramKey}\\}`, "g"),
+						String(paramVal),
+					);
+				});
+			}
 
-      return text;
-    },
-    [language]
-  );
+			return text;
+		},
+		[language],
+	);
 
-  const contextValue = useMemo(
-    () => ({
-      language,
-      setLanguage,
-      t,
-    }),
-    [language, setLanguage, t]
-  );
+	const contextValue = useMemo(
+		() => ({
+			language,
+			setLanguage,
+			t,
+		}),
+		[language, setLanguage, t],
+	);
 
-  return <I18nContext.Provider value={contextValue}>{children}</I18nContext.Provider>;
+	return (
+		<I18nContext.Provider value={contextValue}>{children}</I18nContext.Provider>
+	);
 };
