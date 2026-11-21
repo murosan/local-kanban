@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/murosan/local-kanban/pkg/lexorank"
@@ -279,7 +280,11 @@ func (s *Server) handleCreateTask(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Calculate LexoRank
-	rank := s.calculateRank(colID, payload.PrevID, payload.NextID)
+	rank, err := s.calculateRank(colID, "", payload.PrevID, payload.NextID)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 	if payload.ParentID != "" && payload.PrevID == "" && payload.NextID == "" {
 		if subtasks, err := s.store.GetSubtasksByParentID(
 			payload.ParentID,
@@ -404,7 +409,12 @@ func (s *Server) handleUpdateTask(w http.ResponseWriter, r *http.Request) {
 	if payload.Rank != nil {
 		task.Rank = *payload.Rank
 	} else if payload.PrevID != "" || payload.NextID != "" || columnChanged {
-		task.Rank = s.calculateRank(targetColumnID, payload.PrevID, payload.NextID)
+		newRank, err := s.calculateRank(targetColumnID, task.ID, payload.PrevID, payload.NextID)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		task.Rank = newRank
 	}
 
 	if err := s.store.SaveTask(task); err != nil {
@@ -472,7 +482,7 @@ func (s *Server) handleDeleteTask(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleRebuildCache(w http.ResponseWriter, r *http.Request) {
-	if err := s.store.SyncCache(); err != nil {
+	if err := s.store.RebalanceAllRanks(); err != nil {
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -499,7 +509,12 @@ func (s *Server) handleGetTags(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, tags)
 }
 
-func (s *Server) calculateRank(columnID string, prevID, nextID string) string {
+func (s *Server) calculateRank(
+	columnID string,
+	movingTaskID string,
+	prevID string,
+	nextID string,
+) (string, error) {
 	var prevRank, nextRank string
 	if prevID != "" {
 		if prevTask, err := s.store.GetTaskByID(prevID); err == nil && prevTask != nil {
@@ -514,12 +529,90 @@ func (s *Server) calculateRank(columnID string, prevID, nextID string) string {
 
 	if prevID == "" && nextID == "" && columnID != "" {
 		tasks, err := s.store.GetTasksByColumnID(columnID)
-		if err == nil && len(tasks) > 0 {
-			prevRank = tasks[len(tasks)-1].Rank
+		if err == nil {
+			for _, task := range slices.Backward(tasks) {
+				if task.ID != movingTaskID {
+					prevRank = task.Rank
+					break
+				}
+			}
 		}
 	}
 
-	return lexorank.Between(prevRank, nextRank)
+	if rank, ok := lexorank.TryBetween(prevRank, nextRank); ok {
+		return rank, nil
+	}
+
+	return s.rebalanceColumnAndResolveRank(
+		columnID,
+		movingTaskID,
+		prevID,
+		nextID,
+		prevRank,
+		nextRank,
+	)
+}
+
+func (s *Server) rebalanceColumnAndResolveRank(
+	columnID string,
+	movingTaskID string,
+	prevID string,
+	nextID string,
+	prevRank string,
+	nextRank string,
+) (string, error) {
+	if columnID == "" {
+		return lexorank.Between(prevRank, nextRank), nil
+	}
+
+	tasks, err := s.store.GetTasksByColumnID(columnID)
+	if err != nil {
+		return lexorank.Between(prevRank, nextRank), nil
+	}
+
+	existing := make([]*model.Task, 0, len(tasks))
+	for _, t := range tasks {
+		if t.ID != movingTaskID {
+			existing = append(existing, t)
+		}
+	}
+
+	prevIdx := -1
+	nextIdx := -1
+	for i, t := range existing {
+		if prevID != "" && t.ID == prevID {
+			prevIdx = i
+		}
+		if nextID != "" && t.ID == nextID {
+			nextIdx = i
+		}
+	}
+
+	insertIdx := len(existing)
+	switch {
+	case prevIdx != -1:
+		insertIdx = prevIdx + 1
+	case nextIdx != -1:
+		insertIdx = nextIdx
+	case prevID == "" && nextID != "":
+		insertIdx = 0
+	}
+
+	newRanks := lexorank.GenerateRanks(len(existing) + 1)
+	updates := make(map[string]string, len(existing))
+	for i, t := range existing {
+		rankIdx := i
+		if i >= insertIdx {
+			rankIdx = i + 1
+		}
+		updates[t.ID] = newRanks[rankIdx]
+	}
+
+	if err := s.store.UpdateTaskRanks(updates); err != nil {
+		return "", err
+	}
+
+	return newRanks[insertIdx], nil
 }
 
 func respondJSON(w http.ResponseWriter, status int, payload any) {

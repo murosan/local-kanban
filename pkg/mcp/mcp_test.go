@@ -111,8 +111,7 @@ func TestMCPClientListTools(t *testing.T) {
 	}
 
 	clientTransport, serverTransport := mcpSDK.NewInMemoryTransports()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	go func() {
 		_ = mcpSrv.MCPServer().Run(ctx, serverTransport)
@@ -172,8 +171,7 @@ func TestMCPGetTasksFiltering(t *testing.T) {
 	}
 
 	clientTransport, serverTransport := mcpSDK.NewInMemoryTransports()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	go func() {
 		_ = mcpSrv.MCPServer().Run(ctx, serverTransport)
@@ -222,8 +220,7 @@ func TestMCPSubtasks(t *testing.T) {
 	}
 
 	clientTransport, serverTransport := mcpSDK.NewInMemoryTransports()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	go func() {
 		_ = mcpSrv.MCPServer().Run(ctx, serverTransport)

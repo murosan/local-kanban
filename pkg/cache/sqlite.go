@@ -426,7 +426,7 @@ func (c *SQLiteCache) GetFilePathsByColumnIDs(columnIDs []string) ([]string, err
 	}
 
 	query := fmt.Sprintf(
-		"SELECT file_path FROM tasks WHERE column_id IN (%s) ORDER BY rank ASC",
+		"SELECT file_path FROM tasks WHERE column_id IN (%s) ORDER BY rank ASC, id ASC",
 		strings.Join(placeholders, ","),
 	) // #nosec G201 -- placeholders construction uses sanitized '?' placeholders
 
@@ -472,7 +472,7 @@ func (c *SQLiteCache) GetTasksByColumnIDs(columnIDs []string) ([]*model.Task, er
 	}
 
 	query := fmt.Sprintf(
-		"SELECT id, parent_id, title, column_id, rank, tags, created_at, updated_at, file_path, custom_fields, summary, subtasks FROM tasks WHERE column_id IN (%s) ORDER BY rank ASC",
+		"SELECT id, parent_id, title, column_id, rank, tags, created_at, updated_at, file_path, custom_fields, summary, subtasks FROM tasks WHERE column_id IN (%s) ORDER BY rank ASC, id ASC",
 		strings.Join(placeholders, ","),
 	) // #nosec G201 -- placeholders construction uses sanitized '?' placeholders
 
@@ -531,7 +531,7 @@ func (c *SQLiteCache) GetSubtasksByParentID(parentID string) ([]*model.Task, err
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	query := "SELECT id, parent_id, title, column_id, rank, tags, created_at, updated_at, file_path, custom_fields, summary, subtasks FROM tasks WHERE parent_id = ? ORDER BY rank ASC"
+	query := "SELECT id, parent_id, title, column_id, rank, tags, created_at, updated_at, file_path, custom_fields, summary, subtasks FROM tasks WHERE parent_id = ? ORDER BY rank ASC, id ASC"
 	rows, err := c.db.Query(query, parentID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query subtasks by parent_id: %w", err)

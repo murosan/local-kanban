@@ -18,6 +18,7 @@ linters:
   enable:
     - bodyclose
     - gosec
+    - modernize
   settings:
     gosec:
       excludes:

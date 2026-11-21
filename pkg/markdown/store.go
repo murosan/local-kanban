@@ -13,6 +13,7 @@ import (
 	"uuid"
 
 	"github.com/murosan/local-kanban/pkg/cache"
+	"github.com/murosan/local-kanban/pkg/lexorank"
 	"github.com/murosan/local-kanban/pkg/model"
 
 	"gopkg.in/yaml.v3"
@@ -235,6 +236,9 @@ func (s *Store) getTasksByColumnIDsUnlocked(columnIDs []string) ([]*model.Task, 
 				}
 			}
 			sort.Slice(tasks, func(i, j int) bool {
+				if tasks[i].Rank == tasks[j].Rank {
+					return tasks[i].ID < tasks[j].ID
+				}
 				return tasks[i].Rank < tasks[j].Rank
 			})
 			return tasks, nil
@@ -263,6 +267,9 @@ func (s *Store) getTasksByColumnIDsUnlocked(columnIDs []string) ([]*model.Task, 
 	}
 
 	sort.Slice(tasks, func(i, j int) bool {
+		if tasks[i].Rank == tasks[j].Rank {
+			return tasks[i].ID < tasks[j].ID
+		}
 		return tasks[i].Rank < tasks[j].Rank
 	})
 
@@ -322,6 +329,9 @@ func (s *Store) getAllTasksUnlocked() ([]*model.Task, error) {
 
 	// Sort tasks by Rank ascending
 	sort.Slice(tasks, func(i, j int) bool {
+		if tasks[i].Rank == tasks[j].Rank {
+			return tasks[i].ID < tasks[j].ID
+		}
 		return tasks[i].Rank < tasks[j].Rank
 	})
 
@@ -482,6 +492,97 @@ func (s *Store) SaveTask(task *model.Task) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.saveTaskUnlocked(task)
+}
+
+// UpdateTaskRanks updates only the Rank field of the specified tasks on disk and in cache,
+// preserving each task's Markdown body content and UpdatedAt timestamp.
+func (s *Store) UpdateTaskRanks(ranks map[string]string) error {
+	if len(ranks) == 0 {
+		return nil
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for taskID, newRank := range ranks {
+		task, err := s.getTaskByIDUnlocked(taskID)
+		if err != nil || task == nil {
+			continue
+		}
+
+		// Always reload from the Markdown file so body content is preserved even when cache is enabled.
+		if task.FilePath != "" {
+			if diskTask, readErr := s.readTaskFile(
+				task.FilePath,
+			); readErr == nil &&
+				diskTask != nil {
+				task = diskTask
+			}
+		}
+
+		if task.Rank == newRank {
+			continue
+		}
+		task.Rank = newRank
+
+		content, err := serializeTask(task)
+		if err != nil {
+			return fmt.Errorf("failed to serialize task %s: %w", taskID, err)
+		}
+		if err := os.WriteFile(task.FilePath, []byte(content), 0o644); err != nil {
+			return fmt.Errorf("failed to write task file %s: %w", task.FilePath, err)
+		}
+		if s.cache != nil {
+			_ = s.cache.UpsertTask(task)
+		}
+	}
+
+	return nil
+}
+
+// RebalanceAllRanks reassigns clean, evenly spaced LexoRanks to all tasks per column
+// while preserving each column's current order, Markdown body content, and UpdatedAt.
+func (s *Store) RebalanceAllRanks() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	tasks, err := s.getAllTasksUnlocked()
+	if err != nil {
+		return err
+	}
+
+	byColumn := make(map[string][]*model.Task)
+	columnOrder := make([]string, 0)
+	for _, task := range tasks {
+		if _, exists := byColumn[task.ColumnID]; !exists {
+			columnOrder = append(columnOrder, task.ColumnID)
+		}
+		byColumn[task.ColumnID] = append(byColumn[task.ColumnID], task)
+	}
+
+	for _, colID := range columnOrder {
+		colTasks := byColumn[colID]
+		newRanks := lexorank.GenerateRanks(len(colTasks))
+		for i, task := range colTasks {
+			if task.Rank == newRanks[i] {
+				continue
+			}
+			task.Rank = newRanks[i]
+
+			content, err := serializeTask(task)
+			if err != nil {
+				return fmt.Errorf("failed to serialize task %s: %w", task.ID, err)
+			}
+			if err := os.WriteFile(task.FilePath, []byte(content), 0o644); err != nil {
+				return fmt.Errorf("failed to write task file %s: %w", task.FilePath, err)
+			}
+		}
+	}
+
+	if s.cache != nil {
+		return s.cache.SyncAll(tasks)
+	}
+	return nil
 }
 
 func (s *Store) saveTaskUnlocked(task *model.Task) error {
