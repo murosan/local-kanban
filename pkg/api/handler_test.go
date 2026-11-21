@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/murosan/local-kanban/pkg/cache"
 	"github.com/murosan/local-kanban/pkg/markdown"
 	"github.com/murosan/local-kanban/pkg/model"
 )
@@ -578,5 +580,362 @@ func TestSubtasksAPI(t *testing.T) {
 			"expected 3 subtasks on parent after linking existing card, got %d",
 			loadedParent.SubtasksCount,
 		)
+	}
+}
+
+func TestMoveTaskToTopOfAnotherColumnAndRebalance(t *testing.T) {
+	tempDir := t.TempDir()
+	store, err := markdown.NewStore(tempDir)
+	if err != nil {
+		t.Fatalf("failed to create store: %v", err)
+	}
+
+	sqliteCache, err := cache.NewSQLiteCache(filepath.Join(tempDir, ".local_cache.db"))
+	if err != nil {
+		t.Fatalf("failed to create sqlite cache: %v", err)
+	}
+	defer func() { _ = sqliteCache.Close() }()
+	store.SetCache(sqliteCache)
+
+	// Reproduce legacy Done column ranks that previously broke head insertion:
+	// 0|a, 0|aa, 0|aam, 0|aam, 0|b
+	done1 := &model.Task{Title: "Done 1", ColumnID: "col-done", Rank: "0|a", Content: "Body Done 1"}
+	done2 := &model.Task{
+		Title:    "Done 2",
+		ColumnID: "col-done",
+		Rank:     "0|aa",
+		Content:  "Body Done 2",
+	}
+	done3 := &model.Task{
+		Title:    "Done 3",
+		ColumnID: "col-done",
+		Rank:     "0|aam",
+		Content:  "Body Done 3",
+	}
+	done4 := &model.Task{
+		Title:    "Done 4",
+		ColumnID: "col-done",
+		Rank:     "0|aam",
+		Content:  "Body Done 4",
+	}
+	done5 := &model.Task{Title: "Done 5", ColumnID: "col-done", Rank: "0|b", Content: "Body Done 5"}
+	moving1 := &model.Task{
+		Title:    "Moving 1",
+		ColumnID: "col-in-progress",
+		Rank:     "0|m",
+		Content:  "Body Moving 1",
+	}
+	moving2 := &model.Task{
+		Title:    "Moving 2",
+		ColumnID: "col-in-progress",
+		Rank:     "0|n",
+		Content:  "Body Moving 2",
+	}
+	moving3 := &model.Task{
+		Title:    "Moving 3",
+		ColumnID: "col-todo",
+		Rank:     "0|m",
+		Content:  "Body Moving 3",
+	}
+
+	for _, task := range []*model.Task{done1, done2, done3, done4, done5, moving1, moving2, moving3} {
+		if err := store.SaveTask(task); err != nil {
+			t.Fatalf("failed to save task %s: %v", task.Title, err)
+		}
+	}
+
+	server := NewServer(store, nil)
+	mux := http.NewServeMux()
+	server.RegisterRoutes(mux)
+
+	getDoneIDs := func() []string {
+		req := httptest.NewRequest("GET", "/api/tasks", nil)
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("GET /api/tasks failed with %d", w.Code)
+		}
+		var all []*model.Task
+		if err := json.NewDecoder(w.Body).Decode(&all); err != nil {
+			t.Fatalf("failed to decode tasks: %v", err)
+		}
+		var ids []string
+		for _, task := range all {
+			if task.ColumnID == "col-done" {
+				ids = append(ids, task.ID)
+			}
+		}
+		return ids
+	}
+
+	moveTask := func(taskID, columnID, prevID, nextID string) {
+		payload := map[string]any{
+			"column_id": columnID,
+			"prev_id":   prevID,
+			"next_id":   nextID,
+		}
+		body, _ := json.Marshal(payload)
+		req := httptest.NewRequest("PUT", "/api/tasks/"+taskID, bytes.NewReader(body))
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("PUT /api/tasks/%s failed with %d: %s", taskID, w.Code, w.Body.String())
+		}
+	}
+
+	// 1. Move moving1 from another column to the top of col-done (before 0|a)
+	moveTask(moving1.ID, "col-done", "", done1.ID)
+	ids := getDoneIDs()
+	if len(ids) != 6 || ids[0] != moving1.ID || ids[1] != done1.ID {
+		t.Fatalf("expected moving1 at index 0 before done1, got %v", ids)
+	}
+
+	// 2. Move moving2 between done1 (0|a) and done2 (0|aa)
+	moveTask(moving2.ID, "col-done", done1.ID, done2.ID)
+	ids = getDoneIDs()
+	if len(ids) != 7 || ids[0] != moving1.ID || ids[1] != done1.ID || ids[2] != moving2.ID ||
+		ids[3] != done2.ID {
+		t.Fatalf("expected moving2 between done1 and done2, got %v", ids)
+	}
+
+	// 3. Move moving3 between duplicate ranks done3 (0|aam) and done4 (0|aam) -> triggers rebalance
+	// Identify current order of done3 & done4 first (tie-broken by ID)
+	idsBeforeDupInsert := getDoneIDs()
+	var dupFirstID, dupSecondID string
+	for i := 0; i < len(idsBeforeDupInsert)-1; i++ {
+		a, b := idsBeforeDupInsert[i], idsBeforeDupInsert[i+1]
+		if (a == done3.ID && b == done4.ID) || (a == done4.ID && b == done3.ID) {
+			dupFirstID, dupSecondID = a, b
+			break
+		}
+	}
+	if dupFirstID == "" || dupSecondID == "" {
+		t.Fatalf("could not find duplicate rank neighbors in %v", idsBeforeDupInsert)
+	}
+
+	done2UpdatedBefore := done2.UpdatedAt
+	moveTask(moving3.ID, "col-done", dupFirstID, dupSecondID)
+	ids = getDoneIDs()
+	expectedOrder := []string{
+		moving1.ID,
+		done1.ID,
+		moving2.ID,
+		done2.ID,
+		dupFirstID,
+		moving3.ID,
+		dupSecondID,
+		done5.ID,
+	}
+	if len(ids) != len(expectedOrder) {
+		t.Fatalf("expected %d done tasks, got %d (%v)", len(expectedOrder), len(ids), ids)
+	}
+	for i := range expectedOrder {
+		if ids[i] != expectedOrder[i] {
+			t.Fatalf(
+				"at index %d: expected %s, got %s (full order: %v)",
+				i,
+				expectedOrder[i],
+				ids[i],
+				ids,
+			)
+		}
+	}
+
+	// Verify rebalance preserved Markdown body content and UpdatedAt of untouched tasks
+	allFromDisk, err := store.GetAllTasks()
+	if err != nil {
+		t.Fatalf("GetAllTasks failed: %v", err)
+	}
+	var diskDone2 *model.Task
+	for _, task := range allFromDisk {
+		if task.ID == done2.ID {
+			diskDone2 = task
+			break
+		}
+	}
+	if diskDone2 == nil {
+		t.Fatalf("done2 not found on disk")
+	}
+	if diskDone2.Content != "Body Done 2" {
+		t.Errorf("expected done2 content preserved after rebalance, got %q", diskDone2.Content)
+	}
+	if !diskDone2.UpdatedAt.Equal(done2UpdatedBefore) {
+		t.Errorf(
+			"expected done2 UpdatedAt preserved after rebalance (%v vs %v)",
+			diskDone2.UpdatedAt,
+			done2UpdatedBefore,
+		)
+	}
+}
+
+func TestMoveTaskBeforeMinRankRebalances(t *testing.T) {
+	tempDir := t.TempDir()
+	store, err := markdown.NewStore(tempDir)
+	if err != nil {
+		t.Fatalf("failed to create store: %v", err)
+	}
+
+	minTask := &model.Task{
+		Title:    "At Min",
+		ColumnID: "col-done",
+		Rank:     "0|0",
+		Content:  "Min content",
+	}
+	secondTask := &model.Task{
+		Title:    "Second",
+		ColumnID: "col-done",
+		Rank:     "0|a",
+		Content:  "Second content",
+	}
+	incoming := &model.Task{
+		Title:    "Incoming",
+		ColumnID: "col-todo",
+		Rank:     "0|m",
+		Content:  "Incoming content",
+	}
+	for _, task := range []*model.Task{minTask, secondTask, incoming} {
+		if err := store.SaveTask(task); err != nil {
+			t.Fatalf("failed to save task: %v", err)
+		}
+	}
+
+	server := NewServer(store, nil)
+	mux := http.NewServeMux()
+	server.RegisterRoutes(mux)
+
+	body, _ := json.Marshal(map[string]any{
+		"column_id": "col-done",
+		"prev_id":   "",
+		"next_id":   minTask.ID,
+	})
+	req := httptest.NewRequest("PUT", "/api/tasks/"+incoming.ID, bytes.NewReader(body))
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("PUT failed with %d: %s", w.Code, w.Body.String())
+	}
+
+	doneTasks, err := store.GetTasksByColumnID("col-done")
+	if err != nil {
+		t.Fatalf("GetTasksByColumnID failed: %v", err)
+	}
+	if len(doneTasks) != 3 {
+		t.Fatalf("expected 3 tasks in col-done, got %d", len(doneTasks))
+	}
+	if doneTasks[0].ID != incoming.ID || doneTasks[1].ID != minTask.ID ||
+		doneTasks[2].ID != secondTask.ID {
+		t.Fatalf(
+			"unexpected order after rebalance before 0|0: %v, %v, %v",
+			doneTasks[0].ID,
+			doneTasks[1].ID,
+			doneTasks[2].ID,
+		)
+	}
+}
+
+func TestRebuildCacheRebalancesAllRanks(t *testing.T) {
+	tempDir := t.TempDir()
+	store, err := markdown.NewStore(tempDir)
+	if err != nil {
+		t.Fatalf("failed to create store: %v", err)
+	}
+
+	sqliteCache, err := cache.NewSQLiteCache(filepath.Join(tempDir, ".local_cache.db"))
+	if err != nil {
+		t.Fatalf("failed to create sqlite cache: %v", err)
+	}
+	defer func() { _ = sqliteCache.Close() }()
+	store.SetCache(sqliteCache)
+
+	t1 := &model.Task{Title: "D1", ColumnID: "col-done", Rank: "0|a", Content: "Content D1"}
+	t2 := &model.Task{Title: "D2", ColumnID: "col-done", Rank: "0|aa", Content: "Content D2"}
+	t3 := &model.Task{Title: "D3", ColumnID: "col-done", Rank: "0|aam", Content: "Content D3"}
+	t4 := &model.Task{Title: "D4", ColumnID: "col-done", Rank: "0|aam", Content: "Content D4"}
+	t5 := &model.Task{Title: "T1", ColumnID: "col-todo", Rank: "0|lum", Content: "Content T1"}
+
+	for _, task := range []*model.Task{t1, t2, t3, t4, t5} {
+		if err := store.SaveTask(task); err != nil {
+			t.Fatalf("failed to save task %s: %v", task.Title, err)
+		}
+	}
+	t1UpdatedBefore := t1.UpdatedAt
+
+	server := NewServer(store, nil)
+	mux := http.NewServeMux()
+	server.RegisterRoutes(mux)
+
+	req := httptest.NewRequest("POST", "/api/rebuild", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("POST /api/rebuild failed with %d: %s", w.Code, w.Body.String())
+	}
+
+	doneTasks, err := store.GetTasksByColumnID("col-done")
+	if err != nil {
+		t.Fatalf("GetTasksByColumnID failed: %v", err)
+	}
+	if len(doneTasks) != 4 {
+		t.Fatalf("expected 4 tasks in col-done, got %d", len(doneTasks))
+	}
+
+	// Verify all ranks are strictly increasing, unique, and 6-char fixed-width Base36 ("0|xxxxxx")
+	for i, task := range doneTasks {
+		if len(task.Rank) != 8 || !strings.HasPrefix(task.Rank, "0|") {
+			t.Errorf("task[%d] expected 6-char base36 rank with 0| prefix, got %q", i, task.Rank)
+		}
+		if i > 0 && doneTasks[i-1].Rank >= task.Rank {
+			t.Errorf(
+				"expected strictly ascending ranks, got %q >= %q",
+				doneTasks[i-1].Rank,
+				task.Rank,
+			)
+		}
+	}
+
+	// Verify original order for distinct ranks (t1, t2 before t3/t4)
+	if doneTasks[0].ID != t1.ID || doneTasks[1].ID != t2.ID {
+		t.Fatalf("expected t1, t2 at head, got %s, %s", doneTasks[0].ID, doneTasks[1].ID)
+	}
+
+	// Verify Markdown body and UpdatedAt were preserved on disk
+	allDisk, err := store.GetAllTasks()
+	if err != nil {
+		t.Fatalf("GetAllTasks failed: %v", err)
+	}
+	for _, task := range allDisk {
+		if task.ID == t1.ID {
+			if task.Content != "Content D1" {
+				t.Errorf("expected Content D1 preserved, got %q", task.Content)
+			}
+			if !task.UpdatedAt.Equal(t1UpdatedBefore) {
+				t.Errorf(
+					"expected UpdatedAt preserved (%v vs %v)",
+					task.UpdatedAt,
+					t1UpdatedBefore,
+				)
+			}
+		}
+	}
+
+	// Verify moving t5 from col-todo to top of col-done puts it at index 0
+	moveBody, _ := json.Marshal(map[string]any{
+		"column_id": "col-done",
+		"prev_id":   "",
+		"next_id":   doneTasks[0].ID,
+	})
+	moveReq := httptest.NewRequest("PUT", "/api/tasks/"+t5.ID, bytes.NewReader(moveBody))
+	moveW := httptest.NewRecorder()
+	mux.ServeHTTP(moveW, moveReq)
+	if moveW.Code != http.StatusOK {
+		t.Fatalf("PUT move failed with %d: %s", moveW.Code, moveW.Body.String())
+	}
+
+	afterMove, err := store.GetTasksByColumnID("col-done")
+	if err != nil {
+		t.Fatalf("GetTasksByColumnID after move failed: %v", err)
+	}
+	if len(afterMove) != 5 || afterMove[0].ID != t5.ID || afterMove[1].ID != t1.ID {
+		t.Fatalf("expected t5 at index 0 before t1, got %v", afterMove)
 	}
 }

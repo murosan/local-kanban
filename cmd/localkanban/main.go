@@ -196,7 +196,7 @@ func runAdd(args []string) {
 	var titleParts []string
 	var flagArgs []string
 
-	for i := 0; i < len(args); i++ {
+	for i := range args {
 		if strings.HasPrefix(args[i], "-") {
 			flagArgs = args[i:]
 			break
@@ -243,7 +243,7 @@ func runAdd(args []string) {
 
 	var tags []string
 	if *tagsStr != "" {
-		for _, tag := range strings.Split(*tagsStr, ",") {
+		for tag := range strings.SplitSeq(*tagsStr, ",") {
 			trimmed := strings.TrimSpace(tag)
 			if trimmed != "" {
 				tags = append(tags, trimmed)
@@ -309,21 +309,21 @@ func createSampleTasks(store *markdown.Store) {
 		{
 			Title:    "LocalKanban Phase 1プロトタイプ動作確認",
 			ColumnID: "col-todo",
-			Rank:     "0|m",
+			Rank:     lexorank.InitialRank,
 			Tags:     []string{"frontend", "backend"},
 			Content:  "## 実装確認リスト\n- [x] Go Webサーバー\n- [ ] React UI dnd-kit\n- [ ] Focus / Reload 同期",
 		},
 		{
 			Title:    "dnd-kit によるカンバンカード並び替え実装",
 			ColumnID: "col-in-progress",
-			Rank:     "0|n",
+			Rank:     lexorank.InitialRank,
 			Tags:     []string{"dnd-kit", "react"},
 			Content:  "LexoRankアルゴリズムと連携した並び替えドラッグ＆ドロップ",
 		},
 		{
 			Title:    "Docker Compose 構成の定義",
 			ColumnID: "col-done",
-			Rank:     "0|o",
+			Rank:     lexorank.InitialRank,
 			Tags:     []string{"docker", "infra"},
 			Content:  "Go 1.27 と Node.js 24 による開発環境のコンテナ化",
 		},
