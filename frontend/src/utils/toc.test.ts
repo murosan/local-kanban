@@ -20,6 +20,18 @@ describe("toc utilities", () => {
 				"Image Alt",
 			);
 		});
+
+		it("removes simple and nested HTML tags completely", () => {
+			expect(stripMarkdown("Hello <b>World</b>")).toBe("Hello World");
+			expect(stripMarkdown('<span class="title">Section</span>')).toBe(
+				"Section",
+			);
+			expect(stripMarkdown("<scr<script>ipt>alert(1)</script>")).toBe(
+				"alert(1)",
+			);
+			expect(stripMarkdown("<<script>alert(1)</script>>")).toBe("");
+			expect(stripMarkdown("Complexity < O(n)")).toBe("Complexity < O(n)");
+		});
 	});
 
 	describe("slugify", () => {

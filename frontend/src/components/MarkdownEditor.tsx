@@ -45,6 +45,7 @@ import {
 } from "lucide-react";
 import { useI18n } from "../i18n/useI18n";
 import { applyTabIndent } from "../utils/markdownIndent";
+import { toggleTaskCheckboxAtLine } from "../utils/markdownTask";
 import { extractHeadings, type TocItem } from "../utils/toc";
 
 export interface ChangeOptions {
@@ -628,36 +629,9 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 	};
 
 	const handleToggleTaskByLineNumber = (lineNum?: number) => {
-		if (!lineNum || lineNum <= 0) return;
-		const lines = value.split("\n");
-		let targetIdx = lineNum - 1;
-
-		if (targetIdx >= 0 && targetIdx < lines.length) {
-			let match = lines[targetIdx].match(
-				/^(\s*(?:[-*+]|\d+|>)*\s*[-*+]?\s*\[)([ xX])(\]\s*.*)$/,
-			);
-
-			if (!match) {
-				for (const offset of [-1, 1, -2, 2, -3, 3]) {
-					const idx = targetIdx + offset;
-					if (idx >= 0 && idx < lines.length) {
-						const nearMatch = lines[idx].match(
-							/^(\s*(?:[-*+]|\d+|>)*\s*[-*+]?\s*\[)([ xX])(\]\s*.*)$/,
-						);
-						if (nearMatch) {
-							targetIdx = idx;
-							match = nearMatch;
-							break;
-						}
-					}
-				}
-			}
-
-			if (match) {
-				const nextMark = match[2] === " " ? "x" : " ";
-				lines[targetIdx] = `${match[1]}${nextMark}${match[3]}`;
-				onChange(lines.join("\n"), { immediate: true });
-			}
+		const updated = toggleTaskCheckboxAtLine(value, lineNum);
+		if (updated !== null) {
+			onChange(updated, { immediate: true });
 		}
 	};
 

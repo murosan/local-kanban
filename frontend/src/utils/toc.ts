@@ -6,19 +6,28 @@ export interface TocItem {
 	rawText: string;
 }
 
+const stripHtmlTags = (text: string): string => {
+	let result = text;
+	let previous: string;
+	do {
+		previous = result;
+		result = result.replace(/<[^<>]*>/g, "");
+	} while (result !== previous);
+	return result;
+};
+
 /**
  * Strips markdown inline syntax (bold, italic, links, code, strikethrough, images) from a string
  */
 export const stripMarkdown = (text: string): string => {
-	return text
+	const stripped = text
 		.replace(/!\[(.*?)\]\(.*?\)/g, "$1") // Images: ![alt](url) -> alt
 		.replace(/\[(.*?)\]\(.*?\)/g, "$1") // Links: [text](url) -> text
 		.replace(/(`{1,3})(.*?)\1/g, "$2") // Inline code: `code` -> code
 		.replace(/(\*\*|__)(.*?)\1/g, "$2") // Bold: **text** -> text
 		.replace(/(\*|_)(.*?)\1/g, "$2") // Italic: *text* -> text
-		.replace(/~~(.*?)~~/g, "$1") // Strikethrough: ~~text~~ -> text
-		.replace(/<[^>]*>/g, "") // HTML tags: <tag> -> ''
-		.trim();
+		.replace(/~~(.*?)~~/g, "$1"); // Strikethrough: ~~text~~ -> text
+	return stripHtmlTags(stripped).trim();
 };
 
 /**
