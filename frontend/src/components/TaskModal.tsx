@@ -1594,9 +1594,10 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                               type="button"
                               onClick={handleCreateCustomField}
                               disabled={!newCustomName.trim()}
-                              className="px-4 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-500 rounded-xl shadow-md disabled:opacity-50"
+                              className="inline-flex items-center space-x-1 px-4 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-500 rounded-xl shadow-md disabled:opacity-50"
                             >
-                              {t('configModal.add')}
+                              <Plus className="w-3.5 h-3.5" />
+                              <span>{t('configModal.add')}</span>
                             </button>
                           </div>
                         </div>
@@ -2373,7 +2374,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                                 className="inline-flex items-center space-x-1.5 px-3 py-1.5 text-xs font-medium bg-[var(--bg-input)] hover:bg-[var(--bg-card)] border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] rounded-xl transition-all cursor-pointer"
                               >
                                 <Plus className="w-3.5 h-3.5" />
-                                <span>{t('taskModal.addSubtask') || '＋ サブタスクを追加'}</span>
+                                <span>{t('taskModal.addSubtask') || 'サブタスクを追加'}</span>
                               </button>
 
                               <button
@@ -2383,7 +2384,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                               >
                                 <Link2 className="w-3.5 h-3.5" />
                                 <span>
-                                  {t('taskModal.addExistingSubtask') || '＋ 既存カードを紐付け'}
+                                  {t('taskModal.addExistingSubtask') || '既存カードを紐付け'}
                                 </span>
                               </button>
                             </div>

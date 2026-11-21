@@ -430,9 +430,10 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
                   />
                   <button
                     onClick={handleAddColumn}
-                    className="px-4 py-2 bg-[var(--bg-card)] hover:opacity-80 border border-[var(--border-color)] text-[var(--text-primary)] rounded-lg text-sm font-medium transition-colors"
+                    className="inline-flex items-center space-x-1 shrink-0 px-4 py-2 bg-[var(--bg-card)] hover:opacity-80 border border-[var(--border-color)] text-[var(--text-primary)] rounded-lg text-sm font-medium transition-colors"
                   >
-                    {t('configModal.add')}
+                    <Plus className="w-4 h-4" />
+                    <span>{t('configModal.add')}</span>
                   </button>
                 </div>
               </div>
@@ -640,9 +641,10 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
                     type="button"
                     onClick={handleAddCustomField}
                     disabled={!newFieldName.trim()}
-                    className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white rounded-lg text-xs font-semibold transition-colors"
+                    className="inline-flex items-center space-x-1 px-4 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white rounded-lg text-xs font-semibold transition-colors"
                   >
-                    {t('configModal.add')}
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>{t('configModal.add')}</span>
                   </button>
                 </div>
               </div>
