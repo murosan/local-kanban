@@ -44,6 +44,7 @@ import {
 	X,
 } from "lucide-react";
 import { useI18n } from "../i18n/useI18n";
+import { applyTabIndent } from "../utils/markdownIndent";
 import { extractHeadings, type TocItem } from "../utils/toc";
 
 export interface ChangeOptions {
@@ -404,32 +405,16 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 			const start = textarea.selectionStart;
 			const end = textarea.selectionEnd;
 
-			if (e.shiftKey) {
-				const lineStart = value.lastIndexOf("\n", start - 1) + 1;
-				const lineText = value.substring(lineStart, end);
-				if (lineText.startsWith("  ")) {
-					const newValue =
-						value.substring(0, lineStart) +
-						lineText.substring(2) +
-						value.substring(end);
-					const newStart = Math.max(lineStart, start - 2);
-					const newEnd = Math.max(lineStart, end - 2);
-					pendingSelectionRef.current = { start: newStart, end: newEnd };
-					onChange(newValue, {
-						immediate: true,
-						selectionStart: newStart,
-						selectionEnd: newEnd,
-					});
-				}
-			} else {
-				const newValue = `${value.substring(0, start)}  ${value.substring(end)}`;
-				const newStart = start + 2;
-				const newEnd = end + 2;
-				pendingSelectionRef.current = { start: newStart, end: newEnd };
-				onChange(newValue, {
+			const result = applyTabIndent(value, start, end, e.shiftKey);
+			if (result) {
+				pendingSelectionRef.current = {
+					start: result.selectionStart,
+					end: result.selectionEnd,
+				};
+				onChange(result.value, {
 					immediate: true,
-					selectionStart: newStart,
-					selectionEnd: newEnd,
+					selectionStart: result.selectionStart,
+					selectionEnd: result.selectionEnd,
 				});
 			}
 			return;
