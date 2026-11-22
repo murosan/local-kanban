@@ -1,361 +1,37 @@
 import {
-	closestCenter,
-	DndContext,
-	type DragEndEvent,
-	KeyboardSensor,
-	PointerSensor,
-	useSensor,
-	useSensors,
-} from "@dnd-kit/core";
-import {
-	arrayMove,
-	SortableContext,
-	sortableKeyboardCoordinates,
-	useSortable,
-	verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-import {
 	AlertCircle,
 	AlignLeft,
 	Check,
-	CheckSquare,
 	ChevronDown,
-	ChevronRight,
-	ChevronUp,
 	Clock,
 	Columns,
 	Copy,
-	ExternalLink,
 	FileText,
-	GripVertical,
-	Link2,
-	ListTree,
 	Loader2,
 	Maximize2,
 	Minimize2,
 	MoreVertical,
-	Pencil,
-	Plus,
 	Save,
-	Settings,
-	Sliders,
-	Square,
 	Tag,
 	Trash2,
-	Unlink,
 	X,
 } from "lucide-react";
 import type React from "react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { COLOR_PRESETS } from "../constants/colors";
 import { useI18n } from "../i18n/useI18n";
-import {
-	createTask,
-	deleteTask,
-	fetchTaskById,
-	updateTask,
-} from "../services/api";
+import { fetchTaskById } from "../services/api";
 import type {
-	ChecklistItem,
 	Column,
 	CustomFieldDef,
-	CustomFieldOption,
-	CustomFieldType,
 	CustomFieldValue,
-	LinkItem,
 	Task,
 } from "../types/task";
-import {
-	createLinkItem,
-	getLinkDisplayText,
-	normalizeLinkItems,
-} from "../utils/linkField";
-import {
-	ensureUniqueIds,
-	moveItemByOffset,
-	prefersReducedMotion,
-	reorderItemsById,
-} from "../utils/reorder";
-import { getSafeUrl, isValidUrl } from "../utils/url";
-import { CopyButton } from "./CopyButton";
+import { copyTextToClipboard } from "../utils/copyCommand";
 import { type ChangeOptions, MarkdownEditor } from "./MarkdownEditor";
 import { TagInput } from "./TagInput";
-
-interface SortableSubtaskItemProps {
-	sub: Task;
-	columns: Column[];
-	onToggle: (sub: Task) => void;
-	onOpen: (sub: Task) => void;
-	onDelete: (sub: Task) => void;
-}
-
-const SortableSubtaskItem: React.FC<SortableSubtaskItemProps> = ({
-	sub,
-	columns,
-	onToggle,
-	onOpen,
-	onDelete,
-}) => {
-	const {
-		attributes,
-		listeners,
-		setNodeRef,
-		transform,
-		transition,
-		isDragging,
-	} = useSortable({
-		id: sub.id,
-	});
-
-	const style = {
-		transform: CSS.Transform.toString(transform),
-		transition,
-	};
-
-	const isDone = Boolean(sub.completed);
-	const matchedCol = columns.find((c) => c.id === sub.column_id);
-
-	return (
-		<div
-			ref={setNodeRef}
-			style={style}
-			className={`flex items-center justify-between px-3 py-2 rounded-xl bg-[var(--bg-input)] border border-[var(--border-color)] group/subtask hover:border-blue-500/40 transition-all ${
-				isDragging ? "opacity-50 ring-2 ring-blue-500 z-50 shadow-lg" : ""
-			}`}
-		>
-			<div className="flex items-center space-x-2.5 flex-1 min-w-0">
-				<button
-					type="button"
-					{...attributes}
-					{...listeners}
-					className="cursor-grab active:cursor-grabbing text-[var(--text-muted)] hover:text-[var(--text-primary)] p-0.5 rounded transition-colors shrink-0"
-					title="ドラッグして並び替え"
-				>
-					<GripVertical className="w-3.5 h-3.5" />
-				</button>
-
-				<button
-					type="button"
-					onClick={() => onToggle(sub)}
-					className="shrink-0 text-[var(--text-muted)] hover:text-blue-500 transition-colors cursor-pointer"
-				>
-					{isDone ? (
-						<CheckSquare className="w-4 h-4 text-emerald-500" />
-					) : (
-						<Square className="w-4 h-4" />
-					)}
-				</button>
-				<span
-					onClick={() => onOpen(sub)}
-					className={`text-sm cursor-pointer truncate hover:text-blue-400 transition-colors ${
-						isDone
-							? "line-through text-[var(--text-muted)]"
-							: "text-[var(--text-primary)]"
-					}`}
-				>
-					{sub.title}
-				</span>
-			</div>
-			<div className="flex items-center space-x-2 shrink-0">
-				{matchedCol && (
-					<span
-						className="text-[10px] font-semibold px-2 py-0.5 rounded-md border"
-						style={{
-							backgroundColor: `${matchedCol.color || "#3b82f6"}15`,
-							color: matchedCol.color || "#3b82f6",
-							borderColor: `${matchedCol.color || "#3b82f6"}30`,
-						}}
-					>
-						{matchedCol.name}
-					</span>
-				)}
-				<button
-					type="button"
-					onClick={() => onDelete(sub)}
-					className="p-1 rounded-lg text-[var(--text-muted)] hover:text-rose-500 hover:bg-rose-500/10 opacity-0 group-hover/subtask:opacity-100 transition-all cursor-pointer"
-					title="サブタスクの削除・解除"
-				>
-					<Trash2 className="w-3.5 h-3.5" />
-				</button>
-			</div>
-		</div>
-	);
-};
-
-interface SortableCustomFieldRowProps {
-	field: CustomFieldValue;
-	index: number;
-	total: number;
-	isEditingOptions: boolean;
-	onMove: (index: number, direction: "up" | "down") => void;
-	onUpdateName: (id: string, name: string) => void;
-	onToggleEditOptions: (id: string) => void;
-	onRemove: (id: string, name?: string) => void;
-	registerItemRef: (fieldId: string, el: HTMLDivElement | null) => void;
-	registerMoveButtonRef: (
-		fieldId: string,
-		dir: "up" | "down",
-		el: HTMLButtonElement | null,
-	) => void;
-	children: React.ReactNode;
-}
-
-const SortableCustomFieldRow: React.FC<SortableCustomFieldRowProps> = ({
-	field,
-	index,
-	total,
-	isEditingOptions,
-	onMove,
-	onUpdateName,
-	onToggleEditOptions,
-	onRemove,
-	registerItemRef,
-	registerMoveButtonRef,
-	children,
-}) => {
-	const { t } = useI18n();
-	const {
-		attributes,
-		listeners,
-		setNodeRef,
-		transform,
-		transition,
-		isDragging,
-	} = useSortable({ id: field.id });
-
-	const style: React.CSSProperties = {
-		transform: CSS.Transform.toString(transform),
-		transition: prefersReducedMotion() ? undefined : transition,
-	};
-
-	const setCombinedRef = useCallback(
-		(node: HTMLDivElement | null) => {
-			setNodeRef(node);
-			registerItemRef(field.id, node);
-		},
-		[field.id, registerItemRef, setNodeRef],
-	);
-
-	const fieldDisplayName = field.name || field.id;
-
-	return (
-		<div
-			ref={setCombinedRef}
-			style={style}
-			onFocusCapture={(e) => {
-				if (
-					e.target instanceof HTMLElement &&
-					e.target.matches(":focus-visible")
-				) {
-					e.currentTarget.scrollIntoView({
-						block: "nearest",
-						inline: "nearest",
-					});
-				}
-			}}
-			className={`sortable-field-item flex flex-col space-y-2 border-b border-[var(--border-color)] pb-3.5 last:border-b-0 last:pb-0 rounded-lg transition-shadow ${
-				isDragging
-					? "relative z-50 bg-[var(--bg-card)] px-2.5 py-2 -mx-2.5 ring-2 ring-blue-500 shadow-xl border-transparent"
-					: ""
-			}`}
-		>
-			<div className="flex items-center justify-between gap-2">
-				<div className="flex items-center space-x-1.5 flex-1 min-w-0">
-					<button
-						type="button"
-						{...attributes}
-						{...listeners}
-						className="drag-handle cursor-grab active:cursor-grabbing text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-input)] focus-visible:bg-[var(--bg-input)] p-1 rounded transition-colors shrink-0"
-						aria-label={t("taskModal.dragToReorderField", {
-							name: fieldDisplayName,
-						})}
-						title={t("taskModal.dragToReorderField", {
-							name: fieldDisplayName,
-						})}
-					>
-						<GripVertical className="w-3.5 h-3.5" />
-					</button>
-					{/* Field Name Input (Editable on card) */}
-					<input
-						type="text"
-						value={field.name}
-						onChange={(e) => onUpdateName(field.id, e.target.value)}
-						className="text-xs font-bold text-[var(--text-primary)] bg-transparent border-b border-transparent hover:border-[var(--border-color)] focus:border-blue-500 focus:bg-[var(--bg-input)] px-1.5 py-0.5 rounded-md transition-all outline-none truncate flex-1 max-w-[220px]"
-						placeholder="フィールド名"
-					/>
-					<span className="text-[10px] uppercase font-mono text-[var(--text-muted)] bg-[var(--bg-input)] px-1.5 py-0.5 rounded border border-[var(--border-color)] shrink-0">
-						{field.type}
-					</span>
-				</div>
-
-				{/* Action Buttons */}
-				<div className="flex items-center space-x-1 shrink-0">
-					{total > 1 && (
-						<>
-							<button
-								ref={(el) => registerMoveButtonRef(field.id, "up", el)}
-								type="button"
-								disabled={index === 0}
-								onClick={() => onMove(index, "up")}
-								className="p-1 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-input)] disabled:opacity-30 transition-colors cursor-pointer disabled:cursor-not-allowed"
-								aria-label={t("taskModal.moveFieldUp", {
-									name: fieldDisplayName,
-								})}
-								title={t("taskModal.moveFieldUp", {
-									name: fieldDisplayName,
-								})}
-							>
-								<ChevronUp className="w-3.5 h-3.5" />
-							</button>
-							<button
-								ref={(el) => registerMoveButtonRef(field.id, "down", el)}
-								type="button"
-								disabled={index === total - 1}
-								onClick={() => onMove(index, "down")}
-								className="p-1 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-input)] disabled:opacity-30 transition-colors cursor-pointer disabled:cursor-not-allowed"
-								aria-label={t("taskModal.moveFieldDown", {
-									name: fieldDisplayName,
-								})}
-								title={t("taskModal.moveFieldDown", {
-									name: fieldDisplayName,
-								})}
-							>
-								<ChevronDown className="w-3.5 h-3.5" />
-							</button>
-						</>
-					)}
-					{field.type === "dropdown" && (
-						<button
-							type="button"
-							onClick={() => onToggleEditOptions(field.id)}
-							className={`flex items-center space-x-1 text-xs px-2 py-1 rounded-lg transition-all font-medium ${
-								isEditingOptions
-									? "bg-blue-600/10 text-blue-500 border border-blue-500/30 font-bold"
-									: "text-[var(--text-secondary)] hover:text-blue-500 hover:bg-[var(--bg-input)]"
-							}`}
-							title="選択肢・色を編集"
-						>
-							<Settings className="w-3.5 h-3.5" />
-							<span>選択肢編集</span>
-						</button>
-					)}
-					<button
-						type="button"
-						onClick={() => onRemove(field.id, field.name)}
-						className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-rose-500 hover:bg-rose-500/10 transition-colors"
-						title={t("taskModal.removeField")}
-					>
-						<Trash2 className="w-4 h-4" />
-					</button>
-				</div>
-			</div>
-
-			{/* Field Control */}
-			<div>{children}</div>
-		</div>
-	);
-};
+import { CustomFieldsSection } from "./taskModal/CustomFieldsSection";
+import { TaskHierarchySection } from "./taskModal/TaskHierarchySection";
+import { parseInitialCustomFields } from "./taskModal/utils";
 
 interface TaskModalProps {
 	isOpen: boolean;
@@ -370,6 +46,7 @@ interface TaskModalProps {
 		taskData: Partial<Task>,
 		options?: { silent?: boolean },
 	) => Promise<void>;
+	onRefresh?: () => Promise<void> | void;
 	onDelete?: (id: string) => Promise<void>;
 	onOpenTask?: (task: Task) => void;
 }
@@ -386,9 +63,6 @@ interface FormState {
 
 type SaveStatus = "saved" | "saving" | "unsaved" | "error";
 
-const generateRandomId = (prefix: string): string =>
-	`${prefix}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-
 export const TaskModal: React.FC<TaskModalProps> = ({
 	isOpen,
 	task,
@@ -398,16 +72,16 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 	availableTags = [],
 	onClose,
 	onSave,
+	onRefresh,
 	onDelete,
 	onOpenTask,
 }) => {
 	const { t } = useI18n();
 	const modalInstanceId = useId();
+
 	const [title, setTitle] = useState(() => (task ? task.title : ""));
 	const [columnId, setColumnId] = useState<string>(() =>
-		task
-			? task.column_id || initialColumnId
-			: initialColumnId || columns[0]?.id || "",
+		task ? task.column_id || "" : initialColumnId || columns[0]?.id || "",
 	);
 	const [tags, setTags] = useState<string[]>(() =>
 		task?.tags ? [...task.tags] : [],
@@ -415,172 +89,17 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 	const [content, setContent] = useState(() =>
 		task ? task.content || "" : "",
 	);
-
-	const parseInitialCustomFields = useCallback(
-		(taskData: Task | null): CustomFieldValue[] => {
-			if (!taskData?.custom_fields) return [];
-			if (Array.isArray(taskData.custom_fields)) {
-				return ensureUniqueIds(
-					taskData.custom_fields.map((cf) => {
-						const fieldId =
-							cf.id ||
-							cf.field_id ||
-							`cf-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-						const fieldType = cf.type || "text";
-						return {
-							id: fieldId,
-							field_id: cf.field_id,
-							name: cf.name || cf.field_id || "Field",
-							type: fieldType,
-							value:
-								fieldType === "link"
-									? normalizeLinkItems(cf.value, `link-${fieldId}`)
-									: cf.value,
-							options: cf.options,
-							enabled: cf.enabled ?? true,
-						};
-					}),
-					"cf",
-				);
-			}
-			// Legacy Record<string, CustomFieldValue> fallback
-			const legacyMap = taskData.custom_fields as unknown as Record<
-				string,
-				Partial<CustomFieldValue> | undefined
-			>;
-			return ensureUniqueIds(
-				Object.entries(legacyMap).map(([key, cf]) => {
-					const fieldDef = customFields.find((f) => f.id === key);
-					const fieldType = fieldDef ? fieldDef.type : "text";
-					return {
-						id: key,
-						field_id: key,
-						name: fieldDef ? fieldDef.name : key.replace("cf-", ""),
-						type: fieldType,
-						options: fieldDef?.options,
-						value:
-							fieldType === "link"
-								? normalizeLinkItems(cf?.value, `link-${key}`)
-								: (cf?.value ?? ""),
-						enabled: cf?.enabled ?? true,
-					};
-				}),
-				"cf",
-			);
-		},
-		[customFields],
-	);
-
 	const [customFieldsState, setCustomFieldsState] = useState<
 		CustomFieldValue[]
-	>(() => parseInitialCustomFields(task));
-	const [customFieldLiveAnnouncement, setCustomFieldLiveAnnouncement] =
-		useState("");
-	const isDraggingCustomFieldRef = useRef(false);
-	const customFieldAnnounceTimerRef = useRef<ReturnType<
-		typeof setTimeout
-	> | null>(null);
-	const customFieldItemRefs = useRef<Map<string, HTMLDivElement>>(new Map());
-	const customFieldMoveButtonRefs = useRef<
-		Map<
-			string,
-			{ up?: HTMLButtonElement | null; down?: HTMLButtonElement | null }
-		>
-	>(new Map());
-
-	const registerCustomFieldItemRef = useCallback(
-		(fieldId: string, el: HTMLDivElement | null) => {
-			if (el) {
-				customFieldItemRefs.current.set(fieldId, el);
-			} else {
-				customFieldItemRefs.current.delete(fieldId);
-			}
-		},
-		[],
-	);
-
-	const registerCustomFieldMoveButtonRef = useCallback(
-		(fieldId: string, dir: "up" | "down", el: HTMLButtonElement | null) => {
-			const entry = customFieldMoveButtonRefs.current.get(fieldId) || {};
-			entry[dir] = el;
-			if (!entry.up && !entry.down) {
-				customFieldMoveButtonRefs.current.delete(fieldId);
-			} else {
-				customFieldMoveButtonRefs.current.set(fieldId, entry);
-			}
-		},
-		[],
-	);
-
-	const announceCustomFieldMove = useCallback(
-		(fieldName: string, newIndex: number, total: number) => {
-			if (customFieldAnnounceTimerRef.current) {
-				clearTimeout(customFieldAnnounceTimerRef.current);
-			}
-			setCustomFieldLiveAnnouncement("");
-			customFieldAnnounceTimerRef.current = setTimeout(() => {
-				setCustomFieldLiveAnnouncement(
-					t("taskModal.fieldMovedAnnouncement", {
-						name: fieldName,
-						position: newIndex + 1,
-						total,
-					}),
-				);
-			}, 150);
-		},
-		[t],
-	);
-
-	const [isAddFieldOpen, setIsAddFieldOpen] = useState(false);
-	const [addFieldMode, setAddFieldMode] = useState<"preset" | "custom">(
-		"preset",
-	);
-	const [newCustomName, setNewCustomName] = useState("");
-	const [newCustomType, setNewCustomType] = useState<CustomFieldType>("text");
-	const [newOptionsInput, setNewOptionsInput] = useState(""); // Comma-separated or option list for dropdown
-	const [editingOptionFieldId, setEditingOptionFieldId] = useState<
-		string | null
-	>(null);
-	const [addOptionInput, setAddOptionInput] = useState("");
-	const [newChecklistItemInputs, setNewChecklistItemInputs] = useState<
-		Record<string, string>
-	>({});
-	const [newLinkInputs, setNewLinkInputs] = useState<
-		Record<string, { url: string; label: string; touched?: boolean }>
-	>({});
-	const [editingLinkItem, setEditingLinkItem] = useState<{
-		fieldId: string;
-		itemId: string;
-		url: string;
-		label: string;
-		touched?: boolean;
-	} | null>(null);
-	const [linkValidationAnnouncement, setLinkValidationAnnouncement] =
-		useState("");
-	const linkAnnounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
-		null,
-	);
-	const newLinkUrlInputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
-	const editLinkUrlInputRef = useRef<HTMLInputElement | null>(null);
-
-	const announceLinkValidationError = useCallback((message: string) => {
-		if (linkAnnounceTimerRef.current) {
-			clearTimeout(linkAnnounceTimerRef.current);
-		}
-		setLinkValidationAnnouncement("");
-		if (!message) return;
-		linkAnnounceTimerRef.current = setTimeout(() => {
-			setLinkValidationAnnouncement(message);
-		}, 500);
-	}, []);
+	>(() => parseInitialCustomFields(task, customFields));
 
 	const [saveStatus, setSaveStatus] = useState<SaveStatus>("saved");
 	const [isSaving, setIsSaving] = useState(false);
 	const [isLoadingContent, setIsLoadingContent] = useState(false);
 	const [isMaximized, setIsMaximized] = useState(false);
 	const [isMenuOpen, setIsMenuOpen] = useState(false);
-	const menuRef = useRef<HTMLDivElement>(null);
-	const addFieldRef = useRef<HTMLDivElement>(null);
+	const [isAddFieldOpen, setIsAddFieldOpen] = useState(false);
+	const [isIdCopied, setIsIdCopied] = useState(false);
 
 	// Subtasks & Parent State
 	const [subtasks, setSubtasks] = useState<Task[]>([]);
@@ -588,302 +107,32 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 	const [parentId, setParentId] = useState<string | undefined>(
 		() => task?.parent_id,
 	);
-	const currentParentId = parentId !== undefined ? parentId : task?.parent_id;
-	const [newSubtaskInput, setNewSubtaskInput] = useState("");
-	const [inputParentId, setInputParentId] = useState("");
-	const [inputSubtaskId, setInputSubtaskId] = useState("");
-	const [isIdCopied, setIsIdCopied] = useState(false);
-	const [isCreatingSubtask, setIsCreatingSubtask] = useState(false);
-	const [isSettingParentOpen, setIsSettingParentOpen] = useState(false);
-	const [isAddingNewSubtask, setIsAddingNewSubtask] = useState(false);
-	const [isLinkingExistingOpen, setIsLinkingExistingOpen] = useState(false);
-	const [isChangingParentOpen, setIsChangingParentOpen] = useState(false);
-	const [isHierarchyOpen, setIsHierarchyOpen] = useState(() =>
-		Boolean(task?.parent_id || (task?.subtasks && task.subtasks.length > 0)),
-	);
 	const [subtaskActionTarget, setSubtaskActionTarget] = useState<Task | null>(
 		null,
 	);
-
-	const loadSubtasksAndParent = useCallback(
-		async (overrideParentId?: string) => {
-			if (!task) {
-				setSubtasks([]);
-				setParentTask(null);
-				return;
-			}
-
-			const effectiveParentId =
-				overrideParentId !== undefined
-					? overrideParentId
-					: (parentId ?? task.parent_id);
-
-			if (effectiveParentId) {
-				setIsHierarchyOpen(true);
-				try {
-					const p = await fetchTaskById(effectiveParentId);
-					setParentTask(p);
-				} catch (e) {
-					console.error("Failed to load parent task:", e);
-				}
-			} else {
-				setParentTask(null);
-			}
-
-			try {
-				const fullTask = await fetchTaskById(task.id);
-				const subtaskItems = fullTask.subtask_details || [];
-				setSubtasks(subtaskItems);
-				if (subtaskItems.length > 0) {
-					setIsHierarchyOpen(true);
-				}
-			} catch (e) {
-				console.error("Failed to load subtasks:", e);
-			}
-		},
-		[task, parentId],
-	);
-
-	useEffect(() => {
-		if (isOpen && task) {
-			(async () => {
-				await loadSubtasksAndParent();
-			})();
-		}
-	}, [isOpen, task, loadSubtasksAndParent]);
-
-	const handleAddSubtask = async (e?: React.FormEvent) => {
-		if (e) e.preventDefault();
-		if (!task || !newSubtaskInput.trim() || isCreatingSubtask) return;
-
-		const titleToAdd = newSubtaskInput.trim();
-		setIsCreatingSubtask(true);
-		try {
-			await createTask({
-				parent_id: task.id,
-				title: titleToAdd,
-				column_id: task.column_id || columns[0]?.id || "col-todo",
-			});
-			setNewSubtaskInput("");
-			await loadSubtasksAndParent();
-			await onSave({ id: task.id }, { silent: true });
-		} catch (err) {
-			console.error("Failed to create subtask:", err);
-		} finally {
-			setIsCreatingSubtask(false);
-		}
-	};
-
-	const handleToggleSubtask = async (sub: Task) => {
-		if (!task) return;
-		const newCompleted = !sub.completed;
-		const currentSubtaskRefs = subtasks.map((s) => ({
-			id: s.id,
-			completed: s.id === sub.id ? newCompleted : Boolean(s.completed),
-		}));
-		setSubtasks((prev) =>
-			prev.map((s) =>
-				s.id === sub.id ? { ...s, completed: newCompleted } : s,
-			),
-		);
-		try {
-			await onSave(
-				{ id: task.id, subtasks: currentSubtaskRefs },
-				{ silent: true },
-			);
-		} catch (err) {
-			console.error("Failed to toggle subtask:", err);
-			await loadSubtasksAndParent();
-		}
-	};
-
-	const handleUnlinkSubtask = async (sub: Task) => {
-		if (!task) return;
-		const remainingSubtasks = subtasks.filter((s) => s.id !== sub.id);
-		setSubtasks(remainingSubtasks);
-		setSubtaskActionTarget(null);
-		const newSubtaskRefs = remainingSubtasks.map((s) => ({
-			id: s.id,
-			completed: Boolean(s.completed),
-		}));
-		try {
-			await updateTask(sub.id, {
-				parent_id: "",
-			});
-			await onSave({ id: task.id, subtasks: newSubtaskRefs }, { silent: true });
-			await loadSubtasksAndParent();
-		} catch (err) {
-			console.error("Failed to unlink subtask:", err);
-		}
-	};
-
-	const handleConfirmDeleteSubtask = async (sub: Task) => {
-		if (!task) return;
-		const remainingSubtasks = subtasks.filter((s) => s.id !== sub.id);
-		setSubtasks(remainingSubtasks);
-		setSubtaskActionTarget(null);
-		const newSubtaskRefs = remainingSubtasks.map((s) => ({
-			id: s.id,
-			completed: Boolean(s.completed),
-		}));
-		try {
-			await deleteTask(sub.id);
-			await onSave({ id: task.id, subtasks: newSubtaskRefs }, { silent: true });
-			await loadSubtasksAndParent();
-		} catch (err) {
-			console.error("Failed to delete subtask:", err);
-		}
-	};
-
-	const subtaskSensors = useSensors(
-		useSensor(PointerSensor, {
-			activationConstraint: {
-				distance: 5,
-			},
-		}),
-		useSensor(KeyboardSensor, {
-			coordinateGetter: sortableKeyboardCoordinates,
-		}),
-	);
-
-	const handleSubtaskDragEnd = async (event: DragEndEvent) => {
-		const { active, over } = event;
-		if (!over || active.id === over.id || !task) return;
-
-		const oldIndex = subtasks.findIndex((s) => s.id === active.id);
-		const newIndex = subtasks.findIndex((s) => s.id === over.id);
-		if (oldIndex === -1 || newIndex === -1) return;
-
-		const reordered = arrayMove(subtasks, oldIndex, newIndex);
-		setSubtasks(reordered);
-
-		const newSubtaskRefs = reordered.map((s) => ({
-			id: s.id,
-			completed: Boolean(s.completed),
-		}));
-
-		try {
-			await onSave({ id: task.id, subtasks: newSubtaskRefs }, { silent: true });
-		} catch (err) {
-			console.error("Failed to reorder subtask:", err);
-			await loadSubtasksAndParent();
-		}
-	};
-
-	const handleSetParent = async (newParentId: string) => {
-		const pId = newParentId.trim();
-		if (!task || !pId) return;
-		if (pId === task.id) {
-			alert(
-				t("taskModal.cannotSelfParent") ||
-					"自分自身を親タスクに設定することはできません",
-			);
-			return;
-		}
-		try {
-			const p = await fetchTaskById(pId);
-			if (!p?.id) {
-				alert(
-					t("taskModal.taskNotFound") || "指定されたIDのカードが見つかりません",
-				);
-				return;
-			}
-			await updateTask(task.id, {
-				parent_id: p.id,
-			});
-			setParentId(p.id);
-			setParentTask(p);
-			setInputParentId("");
-			setIsSettingParentOpen(false);
-			setIsChangingParentOpen(false);
-			await loadSubtasksAndParent(p.id);
-			await onSave({ id: task.id, parent_id: p.id }, { silent: true });
-		} catch (err) {
-			console.error("Failed to set parent:", err);
-			alert(
-				t("taskModal.taskNotFound") || "指定されたIDのカードが見つかりません",
-			);
-		}
-	};
-
-	const handleUnlinkParent = async () => {
-		if (!task) return;
-		if (
-			window.confirm(
-				t("taskModal.unlinkParentConfirm") ||
-					"親タスクとの紐付けを解除して単独カードに戻しますか？",
-			)
-		) {
-			try {
-				const emptyParent = "";
-				await updateTask(task.id, {
-					parent_id: emptyParent,
-				});
-				setParentId(undefined);
-				setParentTask(null);
-				setInputParentId("");
-				setIsChangingParentOpen(false);
-				await loadSubtasksAndParent("");
-				await onSave({ id: task.id, parent_id: "" }, { silent: true });
-			} catch (err) {
-				console.error("Failed to unlink parent:", err);
-			}
-		}
-	};
-
-	const handleAttachExistingTask = async (targetSubtaskId: string) => {
-		const sId = targetSubtaskId.trim();
-		if (!task || !sId) return;
-		if (sId === task.id) {
-			alert(
-				t("taskModal.cannotSelfSubtask") ||
-					"自分自身をサブタスクに設定することはできません",
-			);
-			return;
-		}
-		if (subtasks.some((s) => s.id === sId)) {
-			alert(t("taskModal.alreadySubtask") || "既にこのタスクのサブタスクです");
-			return;
-		}
-		try {
-			const sub = await fetchTaskById(sId);
-			if (!sub?.id) {
-				alert(
-					t("taskModal.taskNotFound") || "指定されたIDのカードが見つかりません",
-				);
-				return;
-			}
-			await updateTask(sub.id, {
-				parent_id: task.id,
-			});
-
-			const updatedSubtasks = [...subtasks, sub];
-			setSubtasks(updatedSubtasks);
-
-			const newSubtaskRefs = updatedSubtasks.map((s) => ({
-				id: s.id,
-				completed: Boolean(s.completed),
-			}));
-
-			setInputSubtaskId("");
-			setIsLinkingExistingOpen(false);
-			await onSave({ id: task.id, subtasks: newSubtaskRefs }, { silent: true });
-			await loadSubtasksAndParent();
-		} catch (err) {
-			console.error("Failed to attach existing card as subtask:", err);
-			alert(
-				t("taskModal.taskNotFound") || "指定されたIDのカードが見つかりません",
-			);
-		}
-	};
+	const [isUnlinkParentModalOpen, setIsUnlinkParentModalOpen] = useState(false);
+	const currentParentId = parentId !== undefined ? parentId : task?.parent_id;
 
 	const [canUndo, setCanUndo] = useState(false);
 	const [canRedo, setCanRedo] = useState(false);
 
+	const menuRef = useRef<HTMLDivElement>(null);
+	const isDraggingCustomFieldRef = useRef(false);
 	const historyRef = useRef<FormState[]>([]);
 	const historyIndexRef = useRef<number>(-1);
 	const lastPushTimeRef = useRef<number>(0);
 	const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const copyIdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const contentDirtyRef = useRef(false);
+	const saveStatusRef = useRef<SaveStatus>("saved");
+	const loadedKeyRef = useRef<string | null>(null);
+	const latestPropsRef = useRef({
+		task,
+		initialColumnId,
+		columns,
+		customFields,
+	});
+	latestPropsRef.current = { task, initialColumnId, columns, customFields };
 
 	const latestStateRef = useRef<FormState>({
 		title,
@@ -902,6 +151,44 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 			customFieldsState,
 		};
 	}, [title, columnId, tags, content, customFieldsState]);
+
+	useEffect(() => {
+		saveStatusRef.current = saveStatus;
+	}, [saveStatus]);
+
+	const reloadHierarchy = useCallback(
+		async (overrideParentId?: string) => {
+			if (!task) {
+				setSubtasks([]);
+				setParentTask(null);
+				return;
+			}
+
+			const effectiveParentId =
+				overrideParentId !== undefined
+					? overrideParentId
+					: (parentId ?? task.parent_id);
+
+			if (effectiveParentId) {
+				try {
+					const p = await fetchTaskById(effectiveParentId);
+					setParentTask(p);
+				} catch (e) {
+					console.error("Failed to load parent task:", e);
+				}
+			} else {
+				setParentTask(null);
+			}
+
+			try {
+				const fullTask = await fetchTaskById(task.id);
+				setSubtasks(fullTask.subtask_details || []);
+			} catch (e) {
+				console.error("Failed to load subtasks:", e);
+			}
+		},
+		[task, parentId],
+	);
 
 	const executeSave = useCallback(
 		async (formStateToSave?: FormState) => {
@@ -922,10 +209,12 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 						id: task.id,
 						parent_id: currentParentId,
 						title: currentState.title.trim(),
-						column_id: currentState.columnId || columns[0]?.id,
+						column_id: currentParentId
+							? currentState.columnId
+							: currentState.columnId || columns[0]?.id,
 						tags: currentState.tags || [],
 						custom_fields: currentState.customFieldsState,
-						content: currentState.content.trim(),
+						content: currentState.content.trimEnd(),
 					},
 					{ silent: true },
 				);
@@ -951,122 +240,194 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 			}
 
 			if (immediate) {
-				executeSave(newState);
+				void executeSave(newState);
 			} else {
 				autoSaveTimerRef.current = setTimeout(() => {
-					executeSave(newState);
+					void executeSave(newState);
 				}, 500);
 			}
 		},
 		[task, executeSave],
 	);
 
-	const handleCloseWithSave = useCallback(async () => {
+	const flushPendingSave = useCallback(async () => {
 		if (autoSaveTimerRef.current) {
 			clearTimeout(autoSaveTimerRef.current);
 			autoSaveTimerRef.current = null;
 		}
-		if (task && (saveStatus === "unsaved" || saveStatus === "error")) {
+		if (
+			task &&
+			(saveStatusRef.current === "unsaved" || saveStatusRef.current === "error")
+		) {
 			await executeSave();
 		}
-		onClose();
-	}, [task, saveStatus, executeSave, onClose]);
+	}, [task, executeSave]);
 
+	const handleCloseWithSave = useCallback(async () => {
+		await flushPendingSave();
+		onClose();
+	}, [flushPendingSave, onClose]);
+
+	const handleNavigateTask = useCallback(
+		async (targetTask: Task) => {
+			await flushPendingSave();
+			onOpenTask?.(targetTask);
+		},
+		[flushPendingSave, onOpenTask],
+	);
+
+	// Close kebab menu on click outside
 	useEffect(() => {
+		if (!isMenuOpen) return;
 		const handleClickOutside = (event: MouseEvent) => {
 			if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
 				setIsMenuOpen(false);
 			}
 		};
-		if (isMenuOpen) {
-			document.addEventListener("mousedown", handleClickOutside);
-		}
+		document.addEventListener("mousedown", handleClickOutside);
 		return () => {
 			document.removeEventListener("mousedown", handleClickOutside);
 		};
 	}, [isMenuOpen]);
 
-	const prevIsOpenRef = useRef(false);
-	const prevTaskIdRef = useRef<string | undefined>(undefined);
+	const currentTaskId = task?.id;
 
+	// Reset local form state when modal opens or switches to a different task
 	useEffect(() => {
-		const isNewOpen = isOpen && !prevIsOpenRef.current;
-		const isTaskChanged = isOpen && task?.id !== prevTaskIdRef.current;
-
-		if (isNewOpen || isTaskChanged) {
-			if (autoSaveTimerRef.current) {
-				clearTimeout(autoSaveTimerRef.current);
-				autoSaveTimerRef.current = null;
-			}
-			setIsMenuOpen(false);
-			setEditingLinkItem(null);
-			setNewLinkInputs({});
-			const initialTitle = task ? task.title : "";
-			const initialCol = task
-				? task.column_id || initialColumnId
-				: initialColumnId || columns[0]?.id || "";
-			const initialTags = task?.tags ? [...task.tags] : [];
-			const initialContent = task ? task.content || "" : "";
-			const initialFields = parseInitialCustomFields(task);
-
-			setTitle(initialTitle);
-			setColumnId(initialCol);
-			setTags(initialTags);
-			setContent(initialContent);
-			setCustomFieldsState(initialFields);
-			setSaveStatus("saved");
-			setParentId(task?.parent_id);
-
-			const initial: FormState = {
-				title: initialTitle,
-				columnId: initialCol,
-				tags: initialTags,
-				content: initialContent,
-				customFieldsState: initialFields,
-			};
-			historyRef.current = [initial];
-			historyIndexRef.current = 0;
-			setCanUndo(false);
-			setCanRedo(false);
-
-			if (task?.id) {
-				const taskId = task.id;
-				(async () => {
-					setIsLoadingContent(true);
-					try {
-						const fullTask = await fetchTaskById(taskId);
-						if (fullTask && fullTask.content !== undefined) {
-							const fetchedContent = fullTask.content || "";
-							setContent(fetchedContent);
-							if (historyRef.current.length > 0) {
-								historyRef.current[0].content = fetchedContent;
-								latestStateRef.current.content = fetchedContent;
-							}
-						}
-					} catch (err) {
-						console.error("Error fetching full task content:", err);
-					} finally {
-						setIsLoadingContent(false);
-					}
-				})();
-			}
+		if (!isOpen) {
+			loadedKeyRef.current = null;
+			return;
 		}
-		prevIsOpenRef.current = isOpen;
-		prevTaskIdRef.current = task?.id;
-	}, [isOpen, task, initialColumnId, columns, parseInitialCustomFields]);
+
+		const nextKey = currentTaskId ?? "__create__";
+		if (loadedKeyRef.current === nextKey) {
+			return;
+		}
+		loadedKeyRef.current = nextKey;
+
+		if (autoSaveTimerRef.current) {
+			clearTimeout(autoSaveTimerRef.current);
+			autoSaveTimerRef.current = null;
+		}
+
+		const {
+			task: currentTask,
+			initialColumnId: initColId,
+			columns: currentColumns,
+			customFields: currentPresetFields,
+		} = latestPropsRef.current;
+
+		setIsMenuOpen(false);
+		setIsAddFieldOpen(false);
+		setSubtaskActionTarget(null);
+		setIsUnlinkParentModalOpen(false);
+		contentDirtyRef.current = false;
+
+		const initialTitle = currentTask ? currentTask.title : "";
+		const initialCol = currentTask
+			? currentTask.column_id || ""
+			: initColId || currentColumns[0]?.id || "";
+		const initialTags = currentTask?.tags ? [...currentTask.tags] : [];
+		const initialContent = currentTask ? currentTask.content || "" : "";
+		const initialFields = parseInitialCustomFields(
+			currentTask,
+			currentPresetFields,
+		);
+
+		setTitle(initialTitle);
+		setColumnId(initialCol);
+		setTags(initialTags);
+		setContent(initialContent);
+		setCustomFieldsState(initialFields);
+		setSaveStatus("saved");
+		setParentId(currentTask?.parent_id);
+		setSubtasks(currentTask?.subtask_details || []);
+		setParentTask(null);
+
+		const initial: FormState = {
+			title: initialTitle,
+			columnId: initialCol,
+			tags: initialTags,
+			content: initialContent,
+			customFieldsState: initialFields,
+		};
+		latestStateRef.current = initial;
+		historyRef.current = [initial];
+		historyIndexRef.current = 0;
+		setCanUndo(false);
+		setCanRedo(false);
+	}, [isOpen, currentTaskId]);
+
+	// Fetch full task content + parent/subtasks (StrictMode-safe with cancellation)
+	useEffect(() => {
+		if (!isOpen || !currentTaskId) {
+			return;
+		}
+
+		let cancelled = false;
+		const initialParentId = latestPropsRef.current.task?.parent_id;
+
+		(async () => {
+			setIsLoadingContent(true);
+			try {
+				const [fullTask, fetchedParent] = await Promise.all([
+					fetchTaskById(currentTaskId),
+					initialParentId
+						? fetchTaskById(initialParentId).catch(() => null)
+						: Promise.resolve(null),
+				]);
+
+				if (cancelled) return;
+
+				if (fullTask) {
+					setSubtasks(fullTask.subtask_details || []);
+					if (fullTask.parent_id && fullTask.parent_id !== initialParentId) {
+						setParentId(fullTask.parent_id);
+						fetchTaskById(fullTask.parent_id)
+							.then((p) => {
+								if (!cancelled) setParentTask(p);
+							})
+							.catch(() => {});
+					} else if (fetchedParent) {
+						setParentTask(fetchedParent);
+					}
+
+					if (fullTask.content !== undefined && !contentDirtyRef.current) {
+						const fetchedContent = fullTask.content || "";
+						setContent(fetchedContent);
+						if (historyRef.current.length > 0) {
+							historyRef.current[0].content = fetchedContent;
+						}
+						latestStateRef.current = {
+							...latestStateRef.current,
+							content: fetchedContent,
+						};
+					}
+				}
+			} catch (err) {
+				if (!cancelled) {
+					console.error("Error fetching full task detail:", err);
+				}
+			} finally {
+				if (!cancelled) {
+					setIsLoadingContent(false);
+				}
+			}
+		})();
+
+		return () => {
+			cancelled = true;
+		};
+	}, [isOpen, currentTaskId]);
 
 	useEffect(() => {
 		return () => {
 			if (autoSaveTimerRef.current) {
 				clearTimeout(autoSaveTimerRef.current);
 			}
-			if (customFieldAnnounceTimerRef.current) {
-				clearTimeout(customFieldAnnounceTimerRef.current);
+			if (copyIdTimerRef.current) {
+				clearTimeout(copyIdTimerRef.current);
 			}
-			if (linkAnnounceTimerRef.current) {
-				clearTimeout(linkAnnounceTimerRef.current);
-			}
-			document.documentElement.classList.remove("is-dragging-item");
 		};
 	}, []);
 
@@ -1098,52 +459,67 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 		[],
 	);
 
+	const applyFormState = useCallback(
+		(targetState: FormState) => {
+			setTitle(targetState.title);
+			setColumnId(targetState.columnId);
+			setTags(targetState.tags);
+			setContent(targetState.content);
+			setCustomFieldsState(targetState.customFieldsState);
+			latestStateRef.current = targetState;
+			triggerAutoSave(targetState, true);
+		},
+		[triggerAutoSave],
+	);
+
 	const handleUndo = useCallback(() => {
 		const history = historyRef.current;
 		const index = historyIndexRef.current;
 		if (index > 0) {
 			const prevIndex = index - 1;
-			const prevState = history[prevIndex];
-
-			setTitle(prevState.title);
-			setColumnId(prevState.columnId);
-			setTags(prevState.tags);
-			setContent(prevState.content);
-			setCustomFieldsState(prevState.customFieldsState);
-
 			historyIndexRef.current = prevIndex;
 			setCanUndo(prevIndex > 0);
 			setCanRedo(prevIndex < history.length - 1);
-			triggerAutoSave(prevState, true);
+			applyFormState(history[prevIndex]);
 		}
-	}, [triggerAutoSave]);
+	}, [applyFormState]);
 
 	const handleRedo = useCallback(() => {
 		const history = historyRef.current;
 		const index = historyIndexRef.current;
 		if (index < history.length - 1) {
 			const nextIndex = index + 1;
-			const nextState = history[nextIndex];
-
-			setTitle(nextState.title);
-			setColumnId(nextState.columnId);
-			setTags(nextState.tags);
-			setContent(nextState.content);
-			setCustomFieldsState(nextState.customFieldsState);
-
 			historyIndexRef.current = nextIndex;
 			setCanUndo(nextIndex > 0);
 			setCanRedo(nextIndex < history.length - 1);
-			triggerAutoSave(nextState, true);
+			applyFormState(history[nextIndex]);
 		}
-	}, [triggerAutoSave]);
+	}, [applyFormState]);
 
 	useEffect(() => {
+		if (!isOpen) return;
+
 		const handleKeyDown = (e: KeyboardEvent) => {
 			if (e.key === "Escape") {
 				if (isDraggingCustomFieldRef.current) return;
 				e.preventDefault();
-				handleCloseWithSave();
+				if (isUnlinkParentModalOpen) {
+					setIsUnlinkParentModalOpen(false);
+					return;
+				}
+				if (subtaskActionTarget) {
+					setSubtaskActionTarget(null);
+					return;
+				}
+				if (isAddFieldOpen) {
+					setIsAddFieldOpen(false);
+					return;
+				}
+				if (isMenuOpen) {
+					setIsMenuOpen(false);
+					return;
+				}
+				void handleCloseWithSave();
 				return;
 			}
 
@@ -1165,691 +541,78 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 			}
 		};
 
-		if (isOpen) {
-			window.addEventListener("keydown", handleKeyDown);
-		}
-
+		window.addEventListener("keydown", handleKeyDown);
 		return () => {
 			window.removeEventListener("keydown", handleKeyDown);
 		};
-	}, [isOpen, handleCloseWithSave, handleUndo, handleRedo]);
+	}, [
+		isOpen,
+		isUnlinkParentModalOpen,
+		subtaskActionTarget,
+		isAddFieldOpen,
+		isMenuOpen,
+		handleCloseWithSave,
+		handleUndo,
+		handleRedo,
+	]);
 
 	if (!isOpen) return null;
 
+	const commitChange = (patch: Partial<FormState>, options?: ChangeOptions) => {
+		const newState: FormState = {
+			...latestStateRef.current,
+			...patch,
+		};
+		latestStateRef.current = newState;
+		recordHistory(newState, options);
+		triggerAutoSave(newState, options?.immediate ?? false);
+	};
+
 	const handleTitleChange = (newTitle: string) => {
 		setTitle(newTitle);
-		const newState = {
-			title: newTitle,
-			columnId,
-			tags,
-			content,
-			customFieldsState,
-		};
-		recordHistory(newState);
-		triggerAutoSave(newState, false);
+		commitChange({ title: newTitle }, { immediate: false });
 	};
 
 	const handleColumnIdChange = (newColumnId: string) => {
 		setColumnId(newColumnId);
-		const newState = {
-			title,
-			columnId: newColumnId,
-			tags,
-			content,
-			customFieldsState,
-		};
-		recordHistory(newState, { immediate: true });
-		triggerAutoSave(newState, true);
+		commitChange({ columnId: newColumnId }, { immediate: true });
 	};
 
 	const handleTagsChange = (newTags: string[]) => {
 		setTags(newTags);
-		const newState = {
-			title,
-			columnId,
-			tags: newTags,
-			content,
-			customFieldsState,
-		};
-		recordHistory(newState, { immediate: true });
-		triggerAutoSave(newState, true);
+		commitChange({ tags: newTags }, { immediate: true });
 	};
 
-	const handleUpdateCustomField = (
-		id: string,
-		updates: Partial<CustomFieldValue>,
+	const handleCustomFieldsChange = (
+		nextFields: CustomFieldValue[],
+		immediate: boolean,
 	) => {
-		setCustomFieldsState((prev) => {
-			const nextCustomFields = prev.map((cf) =>
-				cf.id === id ? { ...cf, ...updates } : cf,
-			);
-			const isImmediate =
-				typeof updates.value === "boolean" || updates.enabled !== undefined;
-			const newState = {
-				title,
-				columnId,
-				tags,
-				content,
-				customFieldsState: nextCustomFields,
-			};
-			recordHistory(newState, { immediate: isImmediate });
-			triggerAutoSave(newState, isImmediate);
-			return nextCustomFields;
-		});
-	};
-
-	const commitReorderedCustomFields = (reordered: CustomFieldValue[]) => {
-		setCustomFieldsState(reordered);
-		const newState = {
-			title: latestStateRef.current.title,
-			columnId: latestStateRef.current.columnId,
-			tags: latestStateRef.current.tags,
-			content: latestStateRef.current.content,
-			customFieldsState: reordered,
-		};
-		recordHistory(newState, { immediate: true });
-		triggerAutoSave(newState, true);
-	};
-
-	const handleMoveCustomField = (index: number, direction: "up" | "down") => {
-		const delta = direction === "up" ? -1 : 1;
-		const reordered = moveItemByOffset(customFieldsState, index, delta);
-		if (reordered === customFieldsState) return;
-
-		const targetIndex = index + delta;
-		const movedField = reordered[targetIndex];
-		commitReorderedCustomFields(reordered);
-		announceCustomFieldMove(
-			movedField.name || movedField.id,
-			targetIndex,
-			reordered.length,
-		);
-
-		requestAnimationFrame(() => {
-			const itemEl = customFieldItemRefs.current.get(movedField.id);
-			itemEl?.scrollIntoView({ block: "nearest", inline: "nearest" });
-			const buttons = customFieldMoveButtonRefs.current.get(movedField.id);
-			const hitStart = direction === "up" && targetIndex === 0;
-			const hitEnd =
-				direction === "down" && targetIndex === reordered.length - 1;
-			const targetBtn =
-				hitStart && buttons?.down
-					? buttons.down
-					: hitEnd && buttons?.up
-						? buttons.up
-						: buttons?.[direction];
-			targetBtn?.focus({ preventScroll: true });
-		});
-	};
-
-	const handleCustomFieldDragStart = () => {
-		isDraggingCustomFieldRef.current = true;
-		document.documentElement.classList.add("is-dragging-item");
-	};
-
-	const handleCustomFieldDragEnd = (event: DragEndEvent) => {
-		isDraggingCustomFieldRef.current = false;
-		document.documentElement.classList.remove("is-dragging-item");
-
-		const { active, over } = event;
-		if (!over || active.id === over.id) return;
-
-		const reordered = reorderItemsById(
-			customFieldsState,
-			String(active.id),
-			String(over.id),
-		);
-		if (reordered === customFieldsState) return;
-
-		const newIndex = reordered.findIndex((f) => f.id === String(active.id));
-		commitReorderedCustomFields(reordered);
-		if (newIndex !== -1) {
-			const movedField = reordered[newIndex];
-			announceCustomFieldMove(
-				movedField.name || movedField.id,
-				newIndex,
-				reordered.length,
-			);
-			requestAnimationFrame(() => {
-				customFieldItemRefs.current
-					.get(movedField.id)
-					?.scrollIntoView({ block: "nearest", inline: "nearest" });
-			});
-		}
-	};
-
-	const handleCustomFieldDragCancel = () => {
-		isDraggingCustomFieldRef.current = false;
-		document.documentElement.classList.remove("is-dragging-item");
-	};
-
-	const handleRemoveCustomField = (id: string, name?: string) => {
-		const fieldName =
-			name || customFieldsState.find((cf) => cf.id === id)?.name || "Field";
-		if (!confirm(t("taskModal.removeFieldConfirm", { name: fieldName }))) {
-			return;
-		}
-		setCustomFieldsState((prev) => {
-			const nextCustomFields = prev.filter((cf) => cf.id !== id);
-			const newState = {
-				title,
-				columnId,
-				tags,
-				content,
-				customFieldsState: nextCustomFields,
-			};
-			recordHistory(newState, { immediate: true });
-			triggerAutoSave(newState, true);
-			return nextCustomFields;
-		});
-	};
-
-	const handleAddPresetField = (preset: CustomFieldDef) => {
-		let initialValue: CustomFieldValue["value"] = "";
-		if (preset.type === "checkbox") {
-			initialValue = false;
-		} else if (preset.type === "link") {
-			initialValue = [];
-		} else if (preset.type === "checklist") {
-			if (preset.options && preset.options.length > 0) {
-				initialValue = preset.options.map((opt) => ({
-					id: generateRandomId("item"),
-					text: opt.value,
-					completed: false,
-				}));
-			} else {
-				initialValue = [];
-			}
-		}
-
-		const newField: CustomFieldValue = {
-			id: generateRandomId("cf"),
-			field_id: preset.id,
-			name: preset.name,
-			type: preset.type,
-			options: preset.options ? [...preset.options] : undefined,
-			value: initialValue,
-			enabled: true,
-		};
-		setCustomFieldsState((prev) => {
-			const nextCustomFields = [...prev, newField];
-			const newState = {
-				title,
-				columnId,
-				tags,
-				content,
-				customFieldsState: nextCustomFields,
-			};
-			recordHistory(newState, { immediate: true });
-			triggerAutoSave(newState, true);
-			return nextCustomFields;
-		});
-		setIsAddFieldOpen(false);
-	};
-
-	const handleCreateCustomField = () => {
-		if (!newCustomName.trim()) return;
-
-		let options: CustomFieldOption[] | undefined;
-		let initialValue: CustomFieldValue["value"] = "";
-
-		if (
-			(newCustomType === "dropdown" || newCustomType === "checklist") &&
-			newOptionsInput.trim()
-		) {
-			const optionValues = newOptionsInput
-				.split(",")
-				.map((s) => s.trim())
-				.filter(Boolean);
-			options = optionValues.map((val, idx) => ({
-				id: `opt-${Date.now()}-${idx}`,
-				value: val,
-				color: COLOR_PRESETS[idx % COLOR_PRESETS.length],
-			}));
-		}
-
-		if (newCustomType === "checkbox") {
-			initialValue = false;
-		} else if (newCustomType === "link") {
-			initialValue = [];
-		} else if (newCustomType === "checklist") {
-			if (options && options.length > 0) {
-				initialValue = options.map((opt) => ({
-					id: `item-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-					text: opt.value,
-					completed: false,
-				}));
-			} else {
-				initialValue = [];
-			}
-		}
-
-		const newField: CustomFieldValue = {
-			id: `cf-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-			name: newCustomName.trim(),
-			type: newCustomType,
-			options,
-			value: initialValue,
-			enabled: true,
-		};
-		setCustomFieldsState((prev) => {
-			const nextCustomFields = [...prev, newField];
-			const newState = {
-				title,
-				columnId,
-				tags,
-				content,
-				customFieldsState: nextCustomFields,
-			};
-			recordHistory(newState, { immediate: true });
-			triggerAutoSave(newState, true);
-			return nextCustomFields;
-		});
-		setNewCustomName("");
-		setNewOptionsInput("");
-		setIsAddFieldOpen(false);
-	};
-
-	const handleToggleChecklistItem = (fieldId: string, itemId: string) => {
-		setCustomFieldsState((prev) => {
-			const nextCustomFields = prev.map((cf) => {
-				if (cf.id === fieldId) {
-					const currentItems = Array.isArray(cf.value)
-						? (cf.value as ChecklistItem[])
-						: [];
-					const nextItems = currentItems.map((item) =>
-						item.id === itemId ? { ...item, completed: !item.completed } : item,
-					);
-					return { ...cf, value: nextItems };
-				}
-				return cf;
-			});
-			const newState = {
-				title,
-				columnId,
-				tags,
-				content,
-				customFieldsState: nextCustomFields,
-			};
-			recordHistory(newState, { immediate: true });
-			triggerAutoSave(newState, true);
-			return nextCustomFields;
-		});
-	};
-
-	const handleUpdateChecklistItemText = (
-		fieldId: string,
-		itemId: string,
-		newText: string,
-	) => {
-		setCustomFieldsState((prev) => {
-			const nextCustomFields = prev.map((cf) => {
-				if (cf.id === fieldId) {
-					const currentItems = Array.isArray(cf.value)
-						? (cf.value as ChecklistItem[])
-						: [];
-					const nextItems = currentItems.map((item) =>
-						item.id === itemId ? { ...item, text: newText } : item,
-					);
-					return { ...cf, value: nextItems };
-				}
-				return cf;
-			});
-			const newState = {
-				title,
-				columnId,
-				tags,
-				content,
-				customFieldsState: nextCustomFields,
-			};
-			recordHistory(newState, { immediate: false });
-			triggerAutoSave(newState, false);
-			return nextCustomFields;
-		});
-	};
-
-	const handleRemoveChecklistItem = (fieldId: string, itemId: string) => {
-		setCustomFieldsState((prev) => {
-			const nextCustomFields = prev.map((cf) => {
-				if (cf.id === fieldId) {
-					const currentItems = Array.isArray(cf.value)
-						? (cf.value as ChecklistItem[])
-						: [];
-					const nextItems = currentItems.filter((item) => item.id !== itemId);
-					return { ...cf, value: nextItems };
-				}
-				return cf;
-			});
-			const newState = {
-				title,
-				columnId,
-				tags,
-				content,
-				customFieldsState: nextCustomFields,
-			};
-			recordHistory(newState, { immediate: true });
-			triggerAutoSave(newState, true);
-			return nextCustomFields;
-		});
-	};
-
-	const handleAddChecklistItem = (fieldId: string, itemText: string) => {
-		const trimmed = itemText.trim();
-		if (!trimmed) return;
-		setCustomFieldsState((prev) => {
-			const nextCustomFields = prev.map((cf) => {
-				if (cf.id === fieldId) {
-					const currentItems = Array.isArray(cf.value)
-						? (cf.value as ChecklistItem[])
-						: [];
-					const newItem: ChecklistItem = {
-						id: `item-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-						text: trimmed,
-						completed: false,
-					};
-					return { ...cf, value: [...currentItems, newItem] };
-				}
-				return cf;
-			});
-			const newState = {
-				title,
-				columnId,
-				tags,
-				content,
-				customFieldsState: nextCustomFields,
-			};
-			recordHistory(newState, { immediate: true });
-			triggerAutoSave(newState, true);
-			return nextCustomFields;
-		});
-		setNewChecklistItemInputs((prev) => ({ ...prev, [fieldId]: "" }));
-	};
-
-	const handleAddLinkItem = (fieldId: string) => {
-		const input = newLinkInputs[fieldId];
-		if (!input?.url.trim()) return;
-		const newItem = createLinkItem(input.url, input.label);
-		if (!newItem) {
-			setNewLinkInputs((prev) => ({
-				...prev,
-				[fieldId]: {
-					url: input.url,
-					label: input.label,
-					touched: true,
-				},
-			}));
-			newLinkUrlInputRefs.current.get(fieldId)?.focus();
-			return;
-		}
-
-		announceLinkValidationError("");
-		setCustomFieldsState((prev) => {
-			const nextCustomFields = prev.map((cf) => {
-				if (cf.id === fieldId) {
-					const currentItems = normalizeLinkItems(cf.value, `link-${cf.id}`);
-					return { ...cf, value: [...currentItems, newItem] };
-				}
-				return cf;
-			});
-			const newState = {
-				title,
-				columnId,
-				tags,
-				content,
-				customFieldsState: nextCustomFields,
-			};
-			recordHistory(newState, { immediate: true });
-			triggerAutoSave(newState, true);
-			return nextCustomFields;
-		});
-		setNewLinkInputs((prev) => ({
-			...prev,
-			[fieldId]: { url: "", label: "", touched: false },
-		}));
-	};
-
-	const handleFinishEditLinkItem = () => {
-		if (!editingLinkItem) return;
-		const { fieldId, itemId, url, label } = editingLinkItem;
-		const safeUrl = getSafeUrl(url);
-		if (!safeUrl) {
-			setEditingLinkItem((prev) => (prev ? { ...prev, touched: true } : null));
-			editLinkUrlInputRef.current?.focus();
-			return;
-		}
-
-		announceLinkValidationError("");
-		const trimmedLabel = label.trim();
-		setCustomFieldsState((prev) => {
-			const nextCustomFields = prev.map((cf) => {
-				if (cf.id === fieldId) {
-					const currentItems = Array.isArray(cf.value)
-						? (cf.value as LinkItem[])
-						: normalizeLinkItems(cf.value, `link-${cf.id}`);
-					const nextItems = currentItems.map((item) => {
-						if (item.id !== itemId) return item;
-						const cleaned: LinkItem = {
-							id: item.id,
-							url: safeUrl,
-						};
-						if (trimmedLabel) {
-							cleaned.label = trimmedLabel;
-						}
-						return cleaned;
-					});
-					return { ...cf, value: nextItems };
-				}
-				return cf;
-			});
-			const newState = {
-				title,
-				columnId,
-				tags,
-				content,
-				customFieldsState: nextCustomFields,
-			};
-			recordHistory(newState, { immediate: true });
-			triggerAutoSave(newState, true);
-			return nextCustomFields;
-		});
-		setEditingLinkItem(null);
-	};
-
-	const handleRemoveLinkItem = (fieldId: string, itemId: string) => {
-		const targetField = customFieldsState.find((cf) => cf.id === fieldId);
-		const currentItems = targetField
-			? Array.isArray(targetField.value)
-				? (targetField.value as LinkItem[])
-				: normalizeLinkItems(targetField.value, `link-${targetField.id}`)
-			: [];
-		const targetItem = currentItems.find((item) => item.id === itemId);
-		const linkName = targetItem
-			? getLinkDisplayText(targetItem) || targetItem.url
-			: "";
-		const confirmMessage = linkName
-			? t("taskModal.removeLinkConfirm", { name: linkName })
-			: t("taskModal.removeLinkConfirmGeneric");
-		if (!confirm(confirmMessage)) {
-			return;
-		}
-		if (
-			editingLinkItem?.fieldId === fieldId &&
-			editingLinkItem?.itemId === itemId
-		) {
-			setEditingLinkItem(null);
-		}
-		setCustomFieldsState((prev) => {
-			const nextCustomFields = prev.map((cf) => {
-				if (cf.id === fieldId) {
-					const currentItems = Array.isArray(cf.value)
-						? (cf.value as LinkItem[])
-						: normalizeLinkItems(cf.value, `link-${cf.id}`);
-					const nextItems = currentItems.filter((item) => item.id !== itemId);
-					return { ...cf, value: nextItems };
-				}
-				return cf;
-			});
-			const newState = {
-				title,
-				columnId,
-				tags,
-				content,
-				customFieldsState: nextCustomFields,
-			};
-			recordHistory(newState, { immediate: true });
-			triggerAutoSave(newState, true);
-			return nextCustomFields;
-		});
-	};
-
-	const handleAddOptionToField = (fieldId: string, optionValue: string) => {
-		const val = optionValue.trim();
-		if (!val) return;
-		setCustomFieldsState((prev) => {
-			const nextCustomFields = prev.map((cf) => {
-				if (cf.id === fieldId) {
-					const currentOptions =
-						cf.options ||
-						(cf.field_id
-							? customFields.find((f) => f.id === cf.field_id)?.options || []
-							: []);
-					if (currentOptions.some((opt) => opt.value === val)) return cf;
-					const color =
-						COLOR_PRESETS[currentOptions.length % COLOR_PRESETS.length];
-					const newOpt: CustomFieldOption = {
-						id: `opt-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-						value: val,
-						color,
-					};
-					return { ...cf, options: [...currentOptions, newOpt] };
-				}
-				return cf;
-			});
-			const newState = {
-				title,
-				columnId,
-				tags,
-				content,
-				customFieldsState: nextCustomFields,
-			};
-			recordHistory(newState, { immediate: true });
-			triggerAutoSave(newState, true);
-			return nextCustomFields;
-		});
-	};
-
-	const handleOptionColorChange = (
-		fieldId: string,
-		optionId: string,
-		color: string,
-	) => {
-		setCustomFieldsState((prev) => {
-			const nextCustomFields = prev.map((cf) => {
-				if (cf.id === fieldId) {
-					const currentOptions =
-						cf.options ||
-						(cf.field_id
-							? customFields.find((f) => f.id === cf.field_id)?.options || []
-							: []);
-					const nextOptions = currentOptions.map((opt) =>
-						opt.id === optionId || opt.value === optionId
-							? { ...opt, color }
-							: opt,
-					);
-					return { ...cf, options: nextOptions };
-				}
-				return cf;
-			});
-			const newState = {
-				title,
-				columnId,
-				tags,
-				content,
-				customFieldsState: nextCustomFields,
-			};
-			recordHistory(newState, { immediate: true });
-			triggerAutoSave(newState, true);
-			return nextCustomFields;
-		});
-	};
-
-	const handleOptionValueChange = (
-		fieldId: string,
-		optionId: string,
-		newValue: string,
-	) => {
-		setCustomFieldsState((prev) => {
-			const nextCustomFields = prev.map((cf) => {
-				if (cf.id === fieldId) {
-					const currentOptions =
-						cf.options ||
-						(cf.field_id
-							? customFields.find((f) => f.id === cf.field_id)?.options || []
-							: []);
-					const nextOptions = currentOptions.map((opt) =>
-						opt.id === optionId || opt.value === optionId
-							? { ...opt, value: newValue }
-							: opt,
-					);
-					return { ...cf, options: nextOptions };
-				}
-				return cf;
-			});
-			const newState = {
-				title,
-				columnId,
-				tags,
-				content,
-				customFieldsState: nextCustomFields,
-			};
-			recordHistory(newState, { immediate: true });
-			triggerAutoSave(newState, true);
-			return nextCustomFields;
-		});
-	};
-
-	const handleRemoveOptionFromField = (fieldId: string, optionId: string) => {
-		setCustomFieldsState((prev) => {
-			const nextCustomFields = prev.map((cf) => {
-				if (cf.id === fieldId) {
-					const currentOptions =
-						cf.options ||
-						(cf.field_id
-							? customFields.find((f) => f.id === cf.field_id)?.options || []
-							: []);
-					const nextOptions = currentOptions.filter(
-						(opt) => opt.id !== optionId && opt.value !== optionId,
-					);
-					return { ...cf, options: nextOptions };
-				}
-				return cf;
-			});
-			const newState = {
-				title,
-				columnId,
-				tags,
-				content,
-				customFieldsState: nextCustomFields,
-			};
-			recordHistory(newState, { immediate: true });
-			triggerAutoSave(newState, true);
-			return nextCustomFields;
-		});
+		setCustomFieldsState(nextFields);
+		commitChange({ customFieldsState: nextFields }, { immediate });
 	};
 
 	const handleContentChange = (newContent: string, options?: ChangeOptions) => {
+		contentDirtyRef.current = true;
 		setContent(newContent);
-		const newState = {
-			title,
-			columnId,
-			tags,
-			content: newContent,
-			customFieldsState,
-			selectionStart: options?.selectionStart,
-			selectionEnd: options?.selectionEnd,
-		};
-		recordHistory(newState, options);
-		triggerAutoSave(newState, options?.immediate ?? false);
+		commitChange(
+			{
+				content: newContent,
+				selectionStart: options?.selectionStart,
+				selectionEnd: options?.selectionEnd,
+			},
+			options,
+		);
+	};
+
+	const handleCopyTaskId = async () => {
+		if (!task) return;
+		const ok = await copyTextToClipboard(task.id);
+		if (!ok) return;
+		setIsIdCopied(true);
+		if (copyIdTimerRef.current) {
+			clearTimeout(copyIdTimerRef.current);
+		}
+		copyIdTimerRef.current = setTimeout(() => setIsIdCopied(false), 1500);
 	};
 
 	const handleSubmit = async (e: React.FormEvent) => {
@@ -1866,9 +629,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 					column_id: columnId || columns[0]?.id,
 					tags: tags || [],
 					custom_fields: customFieldsState,
-					content: content.trim(),
+					content: content.trimEnd(),
 				});
-
 				onClose();
 			} finally {
 				setIsSaving(false);
@@ -1887,6 +649,10 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 				setIsSaving(false);
 			}
 		}
+	};
+
+	const handleRefreshBoard = async () => {
+		await onRefresh?.();
 	};
 
 	return (
@@ -1912,11 +678,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 							{task && (
 								<button
 									type="button"
-									onClick={() => {
-										navigator.clipboard.writeText(task.id);
-										setIsIdCopied(true);
-										setTimeout(() => setIsIdCopied(false), 1500);
-									}}
+									onClick={handleCopyTaskId}
 									className="flex items-center space-x-1 text-xs font-mono text-[var(--text-muted)] hover:text-blue-400 bg-[var(--bg-input)] hover:bg-[var(--bg-card)] px-2 py-0.5 rounded-lg border border-[var(--border-color)] transition-all cursor-pointer group/id"
 									title={t("taskModal.copyId")}
 								>
@@ -1937,7 +699,6 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 							)}
 						</div>
 						<div className="flex items-center space-x-2">
-							{/* Header Save Control: Auto-Save status badge for task edit, or Manual Save for task create */}
 							{task ? (
 								<button
 									type="button"
@@ -2008,7 +769,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 												type="button"
 												onClick={() => {
 													setIsMenuOpen(false);
-													handleDelete();
+													void handleDelete();
 												}}
 												disabled={isSaving}
 												className="w-full flex items-center space-x-2 px-3.5 py-2 text-xs font-semibold text-rose-500 hover:bg-rose-500/10 transition-colors text-left"
@@ -2074,6 +835,14 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 										onChange={(e) => handleColumnIdChange(e.target.value)}
 										className="w-full py-2 px-3.5 pr-9 text-sm bg-[var(--bg-input)] border border-[var(--border-color)] rounded-xl text-[var(--text-primary)] focus:outline-none focus:border-blue-500 appearance-none cursor-pointer font-medium"
 									>
+										{(Boolean(currentParentId) || !columnId) && (
+											<option
+												value=""
+												className="bg-[var(--modal-bg)] text-[var(--text-muted)]"
+											>
+												-
+											</option>
+										)}
 										{columns.map((col) => (
 											<option
 												key={col.id}
@@ -2090,1495 +859,59 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 						)}
 
 						{/* Custom Fields Section */}
-						<div className="bg-[var(--bg-surface)] p-4 rounded-xl border border-[var(--border-color)] space-y-4">
-							<div className="flex items-center justify-between">
-								<div className="flex items-center space-x-2 text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider">
-									<Sliders className="w-4 h-4 text-blue-500" />
-									<span>{t("taskModal.customFieldsLabel")}</span>
-									<span className="text-[10px] font-mono text-blue-500 bg-blue-500/10 px-2 py-0.5 rounded-full border border-blue-500/20 font-bold">
-										{customFieldsState.length}
-									</span>
-								</div>
-
-								{/* Add Custom Field Button & Popover */}
-								<div className="relative" ref={addFieldRef}>
-									<button
-										type="button"
-										onClick={() => setIsAddFieldOpen(!isAddFieldOpen)}
-										className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-500 rounded-xl shadow-md shadow-blue-600/30 transition-all cursor-pointer border border-blue-400/30"
-									>
-										<Plus className="w-4 h-4" />
-										<span>{t("taskModal.addField")}</span>
-									</button>
-
-									{isAddFieldOpen && (
-										<div className="absolute right-0 mt-2 w-80 bg-[var(--modal-bg)] border border-[var(--border-color)] rounded-2xl shadow-2xl p-4 z-30 space-y-3 animate-in fade-in duration-150 ring-1 ring-black/10">
-											{/* Mode Selector Tabs */}
-											<div className="flex p-1 bg-[var(--bg-input)] rounded-xl text-xs font-semibold">
-												<button
-													type="button"
-													onClick={() => setAddFieldMode("preset")}
-													className={`flex-1 py-1.5 rounded-lg text-center transition-all ${
-														addFieldMode === "preset"
-															? "bg-blue-600 text-white font-bold shadow-sm"
-															: "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-													}`}
-												>
-													{t("taskModal.addPreset")}
-												</button>
-												<button
-													type="button"
-													onClick={() => setAddFieldMode("custom")}
-													className={`flex-1 py-1.5 rounded-lg text-center transition-all ${
-														addFieldMode === "custom"
-															? "bg-blue-600 text-white font-bold shadow-sm"
-															: "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-													}`}
-												>
-													{t("taskModal.addCustom")}
-												</button>
-											</div>
-
-											{/* Preset Tab Content */}
-											{addFieldMode === "preset" && (
-												<div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
-													{customFields.length > 0 ? (
-														customFields.map((preset) => (
-															<button
-																key={preset.id}
-																type="button"
-																onClick={() => handleAddPresetField(preset)}
-																className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold bg-[var(--bg-input)] hover:bg-blue-500/15 hover:text-blue-500 border border-transparent hover:border-blue-500/30 text-[var(--text-primary)] transition-all text-left"
-															>
-																<span>{preset.name}</span>
-																<span className="text-[10px] uppercase font-mono text-[var(--text-muted)] bg-[var(--bg-surface)] px-1.5 py-0.5 rounded border border-[var(--border-color)]">
-																	{preset.type}
-																</span>
-															</button>
-														))
-													) : (
-														<p className="text-xs text-[var(--text-muted)] py-3 text-center">
-															{t("taskModal.noPresets")}
-														</p>
-													)}
-												</div>
-											)}
-
-											{/* Custom Field Creation Tab Content */}
-											{addFieldMode === "custom" && (
-												<div className="space-y-3">
-													<div>
-														<label className="block text-[11px] font-semibold text-[var(--text-secondary)] mb-1">
-															{t("configModal.fieldTitle")}{" "}
-															<span className="text-rose-500">*</span>
-														</label>
-														<input
-															type="text"
-															value={newCustomName}
-															onChange={(e) => setNewCustomName(e.target.value)}
-															placeholder="例: 優先度, 期日, 担当者"
-															className="w-full px-3 py-2 text-xs bg-[var(--bg-input)] border border-[var(--border-color)] rounded-xl text-[var(--text-primary)] focus:outline-none focus:border-blue-500"
-														/>
-													</div>
-
-													<div>
-														<label className="block text-[11px] font-semibold text-[var(--text-secondary)] mb-1">
-															{t("configModal.fieldType")}
-														</label>
-														<select
-															value={newCustomType}
-															onChange={(e) =>
-																setNewCustomType(
-																	e.target.value as CustomFieldType,
-																)
-															}
-															className="w-full px-3 py-2 text-xs bg-[var(--bg-input)] border border-[var(--border-color)] rounded-xl text-[var(--text-primary)] focus:outline-none focus:border-blue-500"
-														>
-															<option value="text">
-																{t("configModal.typeText")}
-															</option>
-															<option value="number">
-																{t("configModal.typeNumber")}
-															</option>
-															<option value="date">
-																{t("configModal.typeDate")}
-															</option>
-															<option value="dropdown">
-																{t("configModal.typeDropdown")}
-															</option>
-															<option value="checklist">
-																{t("configModal.typeChecklist") ||
-																	"チェックリスト"}
-															</option>
-															<option value="checkbox">
-																{t("configModal.typeCheckbox")}
-															</option>
-															<option value="link">
-																{t("configModal.typeLink")}
-															</option>
-														</select>
-													</div>
-
-													{(newCustomType === "dropdown" ||
-														newCustomType === "checklist") && (
-														<div>
-															<label className="block text-[11px] font-semibold text-[var(--text-secondary)] mb-1">
-																{newCustomType === "checklist"
-																	? t(
-																			"configModal.checklistItemsPlaceholder",
-																		) || "デフォルト項目（カンマ区切り）"
-																	: "選択肢（カンマ区切り）"}
-															</label>
-															<input
-																type="text"
-																value={newOptionsInput}
-																onChange={(e) =>
-																	setNewOptionsInput(e.target.value)
-																}
-																placeholder={
-																	newCustomType === "checklist"
-																		? t(
-																				"configModal.checklistItemsPlaceholder",
-																			) || "例: 要件定義, 実装, テスト"
-																		: "高, 中, 低"
-																}
-																className="w-full px-3 py-2 text-xs bg-[var(--bg-input)] border border-[var(--border-color)] rounded-xl text-[var(--text-primary)] focus:outline-none focus:border-blue-500"
-															/>
-														</div>
-													)}
-
-													<div className="flex justify-end gap-2 pt-1">
-														<button
-															type="button"
-															onClick={() => setIsAddFieldOpen(false)}
-															className="px-3 py-1.5 text-xs text-[var(--text-secondary)] hover:bg-[var(--bg-input)] rounded-xl"
-														>
-															{t("taskModal.cancel")}
-														</button>
-														<button
-															type="button"
-															onClick={handleCreateCustomField}
-															disabled={!newCustomName.trim()}
-															className="inline-flex items-center space-x-1 px-4 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-500 rounded-xl shadow-md disabled:opacity-50"
-														>
-															<Plus className="w-3.5 h-3.5" />
-															<span>{t("configModal.add")}</span>
-														</button>
-													</div>
-												</div>
-											)}
-										</div>
-									)}
-								</div>
-							</div>
-
-							{/* Custom Fields List */}
-							<div className="sr-only" aria-live="polite" aria-atomic="true">
-								{customFieldLiveAnnouncement}
-							</div>
-							<div className="sr-only" aria-live="polite" aria-atomic="true">
-								{linkValidationAnnouncement}
-							</div>
-							{customFieldsState.length > 0 ? (
-								<DndContext
-									sensors={subtaskSensors}
-									collisionDetection={closestCenter}
-									onDragStart={handleCustomFieldDragStart}
-									onDragEnd={handleCustomFieldDragEnd}
-									onDragCancel={handleCustomFieldDragCancel}
-								>
-									<SortableContext
-										items={customFieldsState.map((f) => f.id)}
-										strategy={verticalListSortingStrategy}
-									>
-										<div className="flex flex-col space-y-3 pt-1">
-											{customFieldsState.map((field, fieldIndex) => {
-												const resolvedOptions =
-													field.options ||
-													(field.field_id
-														? customFields.find((f) => f.id === field.field_id)
-																?.options
-														: undefined) ||
-													[];
-
-												return (
-													<SortableCustomFieldRow
-														key={field.id}
-														field={field}
-														index={fieldIndex}
-														total={customFieldsState.length}
-														isEditingOptions={editingOptionFieldId === field.id}
-														onMove={handleMoveCustomField}
-														onUpdateName={(id, name) =>
-															handleUpdateCustomField(id, { name })
-														}
-														onToggleEditOptions={(id) =>
-															setEditingOptionFieldId(
-																editingOptionFieldId === id ? null : id,
-															)
-														}
-														onRemove={handleRemoveCustomField}
-														registerItemRef={registerCustomFieldItemRef}
-														registerMoveButtonRef={
-															registerCustomFieldMoveButtonRef
-														}
-													>
-														{field.type === "dropdown" && (
-															<div className="space-y-2">
-																<div className="relative flex items-center">
-																	{(() => {
-																		const selectedOpt = resolvedOptions.find(
-																			(opt) => opt.value === field.value,
-																		);
-																		const optionColor = selectedOpt?.color;
-																		return (
-																			<>
-																				{optionColor && (
-																					<span
-																						className="absolute left-3.5 w-3 h-3 rounded-full pointer-events-none transition-colors shadow-sm"
-																						style={{
-																							backgroundColor: optionColor,
-																						}}
-																					/>
-																				)}
-																				<select
-																					value={String(field.value ?? "")}
-																					onChange={(e) =>
-																						handleUpdateCustomField(field.id, {
-																							value: e.target.value,
-																						})
-																					}
-																					className={`w-full py-2 text-sm bg-[var(--bg-input)] border border-[var(--border-color)] rounded-xl text-[var(--text-primary)] focus:outline-none focus:border-blue-500 appearance-none cursor-pointer ${
-																						optionColor
-																							? "pl-9 pr-9 font-medium"
-																							: "px-3 pr-9"
-																					}`}
-																				>
-																					<option value="">
-																						-- {t("configModal.typeDropdown")}{" "}
-																						--
-																					</option>
-																					{resolvedOptions.map((opt) => (
-																						<option
-																							key={opt.id}
-																							value={opt.value}
-																							className="bg-[var(--modal-bg)] text-[var(--text-primary)]"
-																						>
-																							{opt.value}
-																						</option>
-																					))}
-																				</select>
-																				<ChevronDown className="absolute right-3 w-4 h-4 text-[var(--text-secondary)] pointer-events-none" />
-																			</>
-																		);
-																	})()}
-																</div>
-
-																{/* Hidden by default: Options Management Panel */}
-																{editingOptionFieldId === field.id && (
-																	<div className="bg-[var(--bg-input)] p-3 rounded-xl border border-[var(--border-color)] space-y-2.5 animate-in fade-in duration-150">
-																		<div className="flex items-center justify-between text-[11px] font-semibold text-[var(--text-secondary)]">
-																			<span>
-																				プルダウン選択肢（色付け設定）:
-																			</span>
-																		</div>
-
-																		{/* Options List with Color Picker and Label Edit */}
-																		<div className="space-y-2">
-																			{resolvedOptions.length > 0 ? (
-																				resolvedOptions.map((opt) => (
-																					<div
-																						key={opt.id}
-																						className="flex items-center justify-between p-2 rounded-lg border border-[var(--border-color)] bg-[var(--bg-surface)] gap-2"
-																					>
-																						<div className="flex items-center space-x-2 flex-1 min-w-0">
-																							<span
-																								className="w-3.5 h-3.5 rounded-full border border-white/20 shrink-0"
-																								style={{
-																									backgroundColor:
-																										opt.color || "#3b82f6",
-																								}}
-																							/>
-																							<input
-																								type="text"
-																								value={opt.value}
-																								onChange={(e) =>
-																									handleOptionValueChange(
-																										field.id,
-																										opt.id,
-																										e.target.value,
-																									)
-																								}
-																								className="bg-[var(--bg-input)] border border-[var(--border-color)] focus:border-blue-500 rounded px-2 py-0.5 text-xs font-medium text-[var(--text-primary)] flex-1 outline-none truncate"
-																								placeholder="選択肢名"
-																							/>
-																						</div>
-
-																						{/* Color Swatch Picker */}
-																						<div className="flex items-center space-x-1 justify-end shrink-0">
-																							{COLOR_PRESETS.map((colorHex) => (
-																								<button
-																									key={colorHex}
-																									type="button"
-																									onClick={() =>
-																										handleOptionColorChange(
-																											field.id,
-																											opt.id,
-																											colorHex,
-																										)
-																									}
-																									className={`w-3.5 h-3.5 rounded-full transition-transform ${
-																										opt.color === colorHex
-																											? "scale-125 ring-2 ring-white/60 shadow-md"
-																											: "hover:scale-110 opacity-70 hover:opacity-100"
-																									}`}
-																									style={{
-																										backgroundColor: colorHex,
-																									}}
-																								/>
-																							))}
-																							<button
-																								type="button"
-																								onClick={() =>
-																									handleRemoveOptionFromField(
-																										field.id,
-																										opt.id,
-																									)
-																								}
-																								className="p-1 text-xs text-rose-500 hover:text-rose-600 font-bold ml-1"
-																								title="選択肢を削除"
-																							>
-																								×
-																							</button>
-																						</div>
-																					</div>
-																				))
-																			) : (
-																				<span className="text-xs text-[var(--text-muted)] italic block">
-																					選択肢が設定されていません
-																				</span>
-																			)}
-																		</div>
-
-																		{/* Add Option Input Form */}
-																		<div className="flex items-center gap-1.5 pt-1">
-																			<input
-																				type="text"
-																				value={addOptionInput}
-																				onChange={(e) =>
-																					setAddOptionInput(e.target.value)
-																				}
-																				placeholder="＋ 選択肢を追加（例: 高, 中, 低）"
-																				className="flex-1 px-2.5 py-1 text-xs bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-lg text-[var(--text-primary)] focus:outline-none focus:border-blue-500"
-																				onKeyDown={(e) => {
-																					if (e.key === "Enter") {
-																						e.preventDefault();
-																						handleAddOptionToField(
-																							field.id,
-																							addOptionInput,
-																						);
-																						setAddOptionInput("");
-																					}
-																				}}
-																			/>
-																			<button
-																				type="button"
-																				onClick={() => {
-																					handleAddOptionToField(
-																						field.id,
-																						addOptionInput,
-																					);
-																					setAddOptionInput("");
-																				}}
-																				disabled={!addOptionInput.trim()}
-																				className="px-3 py-1 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-500 rounded-lg shrink-0 disabled:opacity-50"
-																			>
-																				追加
-																			</button>
-																		</div>
-																	</div>
-																)}
-															</div>
-														)}
-
-														{field.type === "text" && (
-															<input
-																type="text"
-																value={String(field.value ?? "")}
-																onChange={(e) =>
-																	handleUpdateCustomField(field.id, {
-																		value: e.target.value,
-																	})
-																}
-																placeholder={field.name}
-																className="w-full px-3 py-2 text-sm bg-[var(--bg-input)] border border-[var(--border-color)] rounded-xl text-[var(--text-primary)] focus:outline-none focus:border-blue-500"
-															/>
-														)}
-
-														{field.type === "number" && (
-															<input
-																type="number"
-																value={String(field.value ?? "")}
-																onChange={(e) =>
-																	handleUpdateCustomField(field.id, {
-																		value: e.target.value,
-																	})
-																}
-																placeholder="0"
-																className="w-full px-3 py-2 text-sm bg-[var(--bg-input)] border border-[var(--border-color)] rounded-xl text-[var(--text-primary)] focus:outline-none focus:border-blue-500"
-															/>
-														)}
-
-														{field.type === "date" && (
-															<input
-																type="date"
-																value={String(field.value ?? "")}
-																onChange={(e) =>
-																	handleUpdateCustomField(field.id, {
-																		value: e.target.value,
-																	})
-																}
-																className="w-full px-3 py-2 text-sm bg-[var(--bg-input)] border border-[var(--border-color)] rounded-xl text-[var(--text-primary)] focus:outline-none focus:border-blue-500"
-															/>
-														)}
-
-														{field.type === "checkbox" && (
-															<label className="flex items-center space-x-2 p-2 bg-[var(--bg-input)] border border-[var(--border-color)] rounded-xl cursor-pointer">
-																<input
-																	type="checkbox"
-																	checked={!!field.value}
-																	onChange={(e) =>
-																		handleUpdateCustomField(field.id, {
-																			value: e.target.checked,
-																		})
-																	}
-																	className="w-4 h-4 text-blue-600 rounded border border-[var(--border-color)] focus:ring-blue-500"
-																/>
-																<span className="text-xs text-[var(--text-primary)] font-medium">
-																	{field.name}
-																</span>
-															</label>
-														)}
-
-														{field.type === "link" &&
-															(() => {
-																const linkItems = Array.isArray(field.value)
-																	? (field.value as LinkItem[])
-																	: normalizeLinkItems(
-																			field.value,
-																			`link-${field.id}`,
-																		);
-																const currentInput = newLinkInputs[
-																	field.id
-																] || {
-																	url: "",
-																	label: "",
-																	touched: false,
-																};
-																const isNewUrlInvalid = Boolean(
-																	currentInput.touched &&
-																		currentInput.url.trim() &&
-																		!isValidUrl(currentInput.url),
-																);
-																const newLinkErrorId = `${modalInstanceId}-link-error-${field.id}`;
-
-																return (
-																	<div className="space-y-2.5 bg-[var(--bg-input)] p-3 rounded-xl border border-[var(--border-color)]">
-																		{/* Links List */}
-																		{linkItems.length > 0 ? (
-																			<ul className="space-y-1.5">
-																				{linkItems.map((item) => {
-																					const isEditing =
-																						editingLinkItem?.fieldId ===
-																							field.id &&
-																						editingLinkItem?.itemId === item.id;
-																					const safeUrl = getSafeUrl(item.url);
-																					const displayText =
-																						getLinkDisplayText(item);
-																					const linkElementId = `${modalInstanceId}-link-${field.id}-${item.id}`;
-
-																					if (isEditing && editingLinkItem) {
-																						const isEditUrlInvalid = Boolean(
-																							editingLinkItem.touched &&
-																								!isValidUrl(
-																									editingLinkItem.url,
-																								),
-																						);
-																						const editLinkErrorId = `${modalInstanceId}-link-edit-error-${field.id}-${item.id}`;
-
-																						return (
-																							<li
-																								key={item.id}
-																								className="p-2 rounded-lg bg-[var(--bg-surface)] border border-blue-500/40 space-y-2"
-																							>
-																								<div className="flex flex-col sm:flex-row gap-1.5">
-																									<input
-																										type="text"
-																										value={
-																											editingLinkItem.label
-																										}
-																										onChange={(e) =>
-																											setEditingLinkItem(
-																												(prev) =>
-																													prev
-																														? {
-																																...prev,
-																																label:
-																																	e.target
-																																		.value,
-																															}
-																														: null,
-																											)
-																										}
-																										onKeyDown={(e) => {
-																											if (
-																												e.key === "Enter" &&
-																												!e.nativeEvent
-																													.isComposing
-																											) {
-																												e.preventDefault();
-																												handleFinishEditLinkItem();
-																											}
-																										}}
-																										placeholder={t(
-																											"taskModal.linkLabelPlaceholder",
-																										)}
-																										className="sm:w-1/3 px-2.5 py-1.5 text-xs bg-[var(--bg-input)] border border-[var(--border-color)] rounded-lg text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-blue-500"
-																									/>
-																									<input
-																										ref={editLinkUrlInputRef}
-																										type="text"
-																										autoFocus
-																										value={editingLinkItem.url}
-																										aria-invalid={
-																											isEditUrlInvalid
-																												? "true"
-																												: "false"
-																										}
-																										aria-describedby={
-																											isEditUrlInvalid
-																												? editLinkErrorId
-																												: undefined
-																										}
-																										onChange={(e) => {
-																											const nextUrl =
-																												e.target.value;
-																											setEditingLinkItem(
-																												(prev) =>
-																													prev
-																														? {
-																																...prev,
-																																url: nextUrl,
-																															}
-																														: null,
-																											);
-																											if (isValidUrl(nextUrl)) {
-																												announceLinkValidationError(
-																													"",
-																												);
-																											}
-																										}}
-																										onBlur={() => {
-																											const invalid =
-																												!isValidUrl(
-																													editingLinkItem.url,
-																												);
-																											setEditingLinkItem(
-																												(prev) =>
-																													prev
-																														? {
-																																...prev,
-																																touched: true,
-																															}
-																														: null,
-																											);
-																											if (invalid) {
-																												announceLinkValidationError(
-																													t(
-																														"taskModal.invalidUrlError",
-																													),
-																												);
-																											}
-																										}}
-																										onKeyDown={(e) => {
-																											if (
-																												e.key === "Enter" &&
-																												!e.nativeEvent
-																													.isComposing
-																											) {
-																												e.preventDefault();
-																												handleFinishEditLinkItem();
-																											}
-																										}}
-																										placeholder={t(
-																											"taskModal.linkUrlPlaceholder",
-																										)}
-																										className={`flex-1 px-2.5 py-1.5 text-xs bg-[var(--bg-input)] border rounded-lg text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none ${
-																											isEditUrlInvalid
-																												? "border-rose-500 focus:border-rose-500"
-																												: "border-[var(--border-color)] focus:border-blue-500"
-																										}`}
-																									/>
-																								</div>
-																								{isEditUrlInvalid && (
-																									<p
-																										id={editLinkErrorId}
-																										className="flex items-center space-x-1.5 text-[11px] text-rose-500 font-medium"
-																									>
-																										<AlertCircle
-																											className="w-3.5 h-3.5 shrink-0"
-																											aria-hidden="true"
-																										/>
-																										<span>
-																											{t(
-																												"taskModal.invalidUrlError",
-																											)}
-																										</span>
-																									</p>
-																								)}
-																								<div className="flex items-center justify-end gap-1.5">
-																									<button
-																										type="button"
-																										onClick={() => {
-																											setEditingLinkItem(null);
-																											announceLinkValidationError(
-																												"",
-																											);
-																										}}
-																										className="px-2 py-1 text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] rounded-lg transition-colors cursor-pointer"
-																									>
-																										{t("taskModal.cancel")}
-																									</button>
-																									<button
-																										type="button"
-																										onClick={() =>
-																											handleFinishEditLinkItem()
-																										}
-																										className="inline-flex items-center space-x-1 px-2.5 py-1 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-500 rounded-lg transition-colors cursor-pointer"
-																									>
-																										<Check
-																											className="w-3.5 h-3.5"
-																											aria-hidden="true"
-																										/>
-																										<span>
-																											{t(
-																												"taskModal.doneEditLink",
-																											)}
-																										</span>
-																									</button>
-																									<button
-																										type="button"
-																										onClick={() =>
-																											handleRemoveLinkItem(
-																												field.id,
-																												item.id,
-																											)
-																										}
-																										className="p-1 text-[var(--text-muted)] hover:text-rose-500 rounded transition-colors cursor-pointer"
-																										aria-label={t(
-																											"taskModal.removeLink",
-																										)}
-																										title={t(
-																											"taskModal.removeLink",
-																										)}
-																									>
-																										<X
-																											className="w-3.5 h-3.5"
-																											aria-hidden="true"
-																										/>
-																									</button>
-																								</div>
-																							</li>
-																						);
-																					}
-
-																					return (
-																						<li
-																							key={item.id}
-																							className="flex items-center justify-between gap-2 px-2 py-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-color)] hover:border-[var(--border-color)]/80 transition-all"
-																						>
-																							<div className="flex items-center space-x-1.5 flex-1 min-w-0">
-																								{safeUrl ? (
-																									<a
-																										id={linkElementId}
-																										href={safeUrl}
-																										target="_blank"
-																										rel="noopener noreferrer"
-																										data-copy-text={item.url}
-																										className="inline-flex items-center space-x-1.5 text-xs font-medium text-blue-500 hover:underline truncate min-w-0"
-																										title={item.url}
-																									>
-																										<ExternalLink
-																											className="w-3.5 h-3.5 shrink-0"
-																											aria-hidden="true"
-																										/>
-																										<span className="truncate">
-																											{displayText}
-																										</span>
-																									</a>
-																								) : (
-																									<span
-																										id={linkElementId}
-																										data-copy-text={item.url}
-																										className="inline-flex items-center space-x-1.5 text-xs text-[var(--text-muted)] truncate min-w-0"
-																										title={item.url}
-																									>
-																										<Link2
-																											className="w-3.5 h-3.5 shrink-0"
-																											aria-hidden="true"
-																										/>
-																										<span className="truncate">
-																											{displayText ||
-																												t(
-																													"taskModal.emptyLink",
-																												)}
-																										</span>
-																									</span>
-																								)}
-																							</div>
-
-																							<div className="flex items-center space-x-1 shrink-0">
-																								{item.url.trim() && (
-																									<CopyButton
-																										targetId={linkElementId}
-																										ariaLabel={t(
-																											"taskModal.copyLink",
-																											{
-																												name: displayText,
-																											},
-																										)}
-																										size="md"
-																									/>
-																								)}
-																								<button
-																									type="button"
-																									onClick={() =>
-																										setEditingLinkItem({
-																											fieldId: field.id,
-																											itemId: item.id,
-																											url: item.url,
-																											label: item.label ?? "",
-																											touched: false,
-																										})
-																									}
-																									className="min-w-6 min-h-6 inline-flex items-center justify-center rounded-md text-[var(--text-muted)] hover:text-blue-500 hover:bg-[var(--bg-input)] transition-colors cursor-pointer"
-																									aria-label={t(
-																										"taskModal.editLink",
-																									)}
-																									title={t(
-																										"taskModal.editLink",
-																									)}
-																								>
-																									<Pencil
-																										className="w-3.5 h-3.5"
-																										aria-hidden="true"
-																									/>
-																								</button>
-																								<button
-																									type="button"
-																									onClick={() =>
-																										handleRemoveLinkItem(
-																											field.id,
-																											item.id,
-																										)
-																									}
-																									className="min-w-6 min-h-6 inline-flex items-center justify-center rounded-md text-[var(--text-muted)] hover:text-rose-500 hover:bg-rose-500/10 transition-colors cursor-pointer"
-																									aria-label={t(
-																										"taskModal.removeLink",
-																									)}
-																									title={t(
-																										"taskModal.removeLink",
-																									)}
-																								>
-																									<X
-																										className="w-3.5 h-3.5"
-																										aria-hidden="true"
-																									/>
-																								</button>
-																							</div>
-																						</li>
-																					);
-																				})}
-																			</ul>
-																		) : (
-																			<p className="text-xs text-[var(--text-muted)] italic py-1 text-center">
-																				{t("taskModal.noLinks")}
-																			</p>
-																		)}
-
-																		{/* Add Link Input Form */}
-																		<div className="space-y-1.5 pt-1">
-																			<div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5">
-																				<input
-																					type="text"
-																					value={currentInput.label}
-																					onChange={(e) =>
-																						setNewLinkInputs((prev) => ({
-																							...prev,
-																							[field.id]: {
-																								...currentInput,
-																								label: e.target.value,
-																							},
-																						}))
-																					}
-																					onKeyDown={(e) => {
-																						if (
-																							e.key === "Enter" &&
-																							!e.nativeEvent.isComposing
-																						) {
-																							e.preventDefault();
-																							handleAddLinkItem(field.id);
-																						}
-																					}}
-																					placeholder={t(
-																						"taskModal.linkLabelPlaceholder",
-																					)}
-																					className="sm:w-1/3 px-2.5 py-1.5 text-xs bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-lg text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-blue-500"
-																				/>
-																				<input
-																					ref={(el) => {
-																						if (el) {
-																							newLinkUrlInputRefs.current.set(
-																								field.id,
-																								el,
-																							);
-																						} else {
-																							newLinkUrlInputRefs.current.delete(
-																								field.id,
-																							);
-																						}
-																					}}
-																					type="text"
-																					value={currentInput.url}
-																					aria-invalid={
-																						isNewUrlInvalid ? "true" : "false"
-																					}
-																					aria-describedby={
-																						isNewUrlInvalid
-																							? newLinkErrorId
-																							: undefined
-																					}
-																					onChange={(e) => {
-																						const nextUrl = e.target.value;
-																						setNewLinkInputs((prev) => ({
-																							...prev,
-																							[field.id]: {
-																								...currentInput,
-																								url: nextUrl,
-																								touched: nextUrl.trim()
-																									? currentInput.touched
-																									: false,
-																							},
-																						}));
-																						if (
-																							!nextUrl.trim() ||
-																							isValidUrl(nextUrl)
-																						) {
-																							announceLinkValidationError("");
-																						}
-																					}}
-																					onBlur={() => {
-																						if (!currentInput.url.trim())
-																							return;
-																						const invalid = !isValidUrl(
-																							currentInput.url,
-																						);
-																						setNewLinkInputs((prev) => ({
-																							...prev,
-																							[field.id]: {
-																								...currentInput,
-																								touched: true,
-																							},
-																						}));
-																						if (invalid) {
-																							announceLinkValidationError(
-																								t("taskModal.invalidUrlError"),
-																							);
-																						}
-																					}}
-																					onKeyDown={(e) => {
-																						if (
-																							e.key === "Enter" &&
-																							!e.nativeEvent.isComposing
-																						) {
-																							e.preventDefault();
-																							handleAddLinkItem(field.id);
-																						}
-																					}}
-																					placeholder={t(
-																						"taskModal.linkUrlPlaceholder",
-																					)}
-																					className={`flex-1 px-2.5 py-1.5 text-xs bg-[var(--bg-surface)] border rounded-lg text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none ${
-																						isNewUrlInvalid
-																							? "border-rose-500 focus:border-rose-500"
-																							: "border-[var(--border-color)] focus:border-blue-500"
-																					}`}
-																				/>
-																				<button
-																					type="button"
-																					onClick={() =>
-																						handleAddLinkItem(field.id)
-																					}
-																					disabled={!currentInput.url.trim()}
-																					className="px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-500 rounded-lg shrink-0 disabled:opacity-50 transition-colors cursor-pointer disabled:cursor-not-allowed"
-																				>
-																					{t("taskModal.addLinkItem")}
-																				</button>
-																			</div>
-																			{isNewUrlInvalid && (
-																				<p
-																					id={newLinkErrorId}
-																					className="flex items-center space-x-1.5 text-[11px] text-rose-500 font-medium"
-																				>
-																					<AlertCircle
-																						className="w-3.5 h-3.5 shrink-0"
-																						aria-hidden="true"
-																					/>
-																					<span>
-																						{t("taskModal.invalidUrlError")}
-																					</span>
-																				</p>
-																			)}
-																		</div>
-																	</div>
-																);
-															})()}
-
-														{field.type === "checklist" &&
-															(() => {
-																const items = Array.isArray(field.value)
-																	? (field.value as ChecklistItem[])
-																	: [];
-																const completedCount = items.filter(
-																	(i) => i.completed,
-																).length;
-																const totalCount = items.length;
-																const progressPercent =
-																	totalCount > 0
-																		? Math.round(
-																				(completedCount / totalCount) * 100,
-																			)
-																		: 0;
-																const currentInput =
-																	newChecklistItemInputs[field.id] || "";
-
-																return (
-																	<div className="space-y-2.5 bg-[var(--bg-input)] p-3 rounded-xl border border-[var(--border-color)]">
-																		{/* Progress Header */}
-																		<div className="flex items-center justify-between text-xs">
-																			<span className="font-semibold text-[var(--text-secondary)] flex items-center gap-1.5">
-																				<CheckSquare className="w-3.5 h-3.5 text-blue-500" />
-																				<span>進捗状況</span>
-																			</span>
-																			<span className="font-bold text-[11px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-500 border border-blue-500/20">
-																				{t("taskModal.checklistCompleted", {
-																					completed: completedCount,
-																					total: totalCount,
-																				}) ||
-																					`${completedCount}/${totalCount} 完了`}{" "}
-																				({progressPercent}%)
-																			</span>
-																		</div>
-
-																		{/* Progress Bar */}
-																		<div className="w-full h-1.5 bg-[var(--bg-surface)] rounded-full overflow-hidden border border-[var(--border-color)]">
-																			<div
-																				className="h-full bg-emerald-500 transition-all duration-300 rounded-full"
-																				style={{ width: `${progressPercent}%` }}
-																			/>
-																		</div>
-
-																		{/* Items List */}
-																		<div className="space-y-1.5 pt-1">
-																			{items.length > 0 ? (
-																				items.map((item) => (
-																					<div
-																						key={item.id}
-																						className="flex items-center justify-between gap-2 p-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-color)] hover:border-[var(--border-color)]/80 transition-all"
-																					>
-																						<label className="flex items-center space-x-2 flex-1 min-w-0 cursor-pointer">
-																							<input
-																								type="checkbox"
-																								checked={item.completed}
-																								onChange={() =>
-																									handleToggleChecklistItem(
-																										field.id,
-																										item.id,
-																									)
-																								}
-																								className="w-4 h-4 text-blue-600 rounded border border-[var(--border-color)] focus:ring-blue-500 shrink-0 cursor-pointer"
-																							/>
-																							<input
-																								type="text"
-																								value={item.text}
-																								onChange={(e) =>
-																									handleUpdateChecklistItemText(
-																										field.id,
-																										item.id,
-																										e.target.value,
-																									)
-																								}
-																								className={`text-xs bg-transparent border-b border-transparent hover:border-[var(--border-color)] focus:border-blue-500 focus:bg-[var(--bg-input)] px-1 py-0.5 rounded outline-none flex-1 truncate transition-all ${
-																									item.completed
-																										? "line-through text-[var(--text-muted)] opacity-70"
-																										: "text-[var(--text-primary)] font-medium"
-																								}`}
-																							/>
-																						</label>
-																						<button
-																							type="button"
-																							onClick={() =>
-																								handleRemoveChecklistItem(
-																									field.id,
-																									item.id,
-																								)
-																							}
-																							className="p-1 text-[var(--text-muted)] hover:text-rose-500 rounded transition-colors shrink-0 opacity-80 hover:opacity-100"
-																							title="項目を削除"
-																						>
-																							<X className="w-3.5 h-3.5" />
-																						</button>
-																					</div>
-																				))
-																			) : (
-																				<p className="text-xs text-[var(--text-muted)] italic py-1 text-center">
-																					{t("taskModal.noChecklistItems") ||
-																						"チェック項目がありません"}
-																				</p>
-																			)}
-																		</div>
-
-																		{/* Add Item Input Form */}
-																		<div className="flex items-center gap-1.5 pt-1">
-																			<input
-																				type="text"
-																				value={currentInput}
-																				onChange={(e) =>
-																					setNewChecklistItemInputs((prev) => ({
-																						...prev,
-																						[field.id]: e.target.value,
-																					}))
-																				}
-																				onKeyDown={(e) => {
-																					if (e.key === "Enter") {
-																						e.preventDefault();
-																						handleAddChecklistItem(
-																							field.id,
-																							currentInput,
-																						);
-																					}
-																				}}
-																				placeholder={
-																					t("taskModal.itemPlaceholder") ||
-																					"新しい項目を入力..."
-																				}
-																				className="flex-1 px-2.5 py-1 text-xs bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-lg text-[var(--text-primary)] focus:outline-none focus:border-blue-500"
-																			/>
-																			<button
-																				type="button"
-																				onClick={() =>
-																					handleAddChecklistItem(
-																						field.id,
-																						currentInput,
-																					)
-																				}
-																				disabled={!currentInput.trim()}
-																				className="px-3 py-1 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-500 rounded-lg shrink-0 disabled:opacity-50 transition-colors"
-																			>
-																				{t("taskModal.addChecklistItem") ||
-																					"追加"}
-																			</button>
-																		</div>
-																	</div>
-																);
-															})()}
-													</SortableCustomFieldRow>
-												);
-											})}
-										</div>
-									</SortableContext>
-								</DndContext>
-							) : (
-								<p className="text-xs text-[var(--text-muted)] text-center py-2 font-medium">
-									カスタムフィールドがありません。「＋
-									フィールドを追加」から追加できます。
-								</p>
-							)}
-						</div>
+						<CustomFieldsSection
+							fields={customFieldsState}
+							presetFields={customFields}
+							modalInstanceId={modalInstanceId}
+							isAddFieldOpen={isAddFieldOpen}
+							onSetAddFieldOpen={setIsAddFieldOpen}
+							onChangeFields={handleCustomFieldsChange}
+							onDragStateChange={(isDragging) => {
+								isDraggingCustomFieldRef.current = isDragging;
+							}}
+						/>
 
 						{/* Unified Hierarchy (Subtasks & Parent) Section */}
 						{task && (
-							<div className="bg-[var(--bg-surface)] p-4 rounded-xl border border-[var(--border-color)] space-y-3">
-								{/* Header with Accordion Toggle */}
-								<div
-									className="flex items-center justify-between cursor-pointer select-none group/hier"
-									onClick={() => setIsHierarchyOpen((prev) => !prev)}
-								>
-									<div className="flex items-center space-x-2 text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider min-w-0">
-										<ListTree className="w-4 h-4 text-blue-500 shrink-0" />
-										<span className="shrink-0">
-											{t("taskModal.hierarchyLabel") || "サブタスク・親タスク"}
-										</span>
-										{currentParentId && (
-											<span className="text-[10px] font-mono text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded-full border border-purple-500/20 font-semibold normal-case truncate max-w-[150px]">
-												{t("taskModal.parentTask")}:{" "}
-												{parentTask?.title || currentParentId}
-											</span>
-										)}
-										{subtasks.length > 0 && (
-											<span className="text-[10px] font-mono text-blue-500 bg-blue-500/10 px-2 py-0.5 rounded-full border border-blue-500/20 font-bold shrink-0">
-												{subtasks.length}
-											</span>
-										)}
-										{!currentParentId && subtasks.length === 0 && (
-											<span className="text-[10px] text-[var(--text-muted)] font-normal normal-case">
-												({t("taskModal.notSet") || "未設定"})
-											</span>
-										)}
-									</div>
-
-									<div className="flex items-center space-x-2 shrink-0">
-										{subtasks.length > 0 && (
-											<span className="text-xs text-[var(--text-muted)] font-mono font-medium">
-												{(() => {
-													const completedCount = subtasks.filter((s) =>
-														Boolean(s.completed),
-													).length;
-													return t("taskModal.subtasksProgress", {
-														completed: completedCount,
-														total: subtasks.length,
-														percent: Math.round(
-															(completedCount / (subtasks.length || 1)) * 100,
-														),
-													});
-												})()}
-											</span>
-										)}
-										<button
-											type="button"
-											className="p-1 rounded text-[var(--text-muted)] group-hover/hier:text-[var(--text-primary)] transition-colors"
-										>
-											{isHierarchyOpen ? (
-												<ChevronDown className="w-4 h-4" />
-											) : (
-												<ChevronRight className="w-4 h-4" />
-											)}
-										</button>
-									</div>
-								</div>
-
-								{/* Expanded Content */}
-								{isHierarchyOpen && (
-									<div className="space-y-4 pt-2 border-t border-[var(--border-color)]">
-										{/* Parent Task Area */}
-										<div className="space-y-2">
-											<label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider flex items-center gap-1">
-												<Link2 className="w-3.5 h-3.5 text-blue-400" />{" "}
-												{t("taskModal.parentTask")}
-											</label>
-
-											{currentParentId ? (
-												<div className="flex flex-col gap-2 p-2.5 bg-[var(--bg-input)] border border-[var(--border-color)] rounded-xl">
-													<div className="flex items-center justify-between gap-2">
-														<button
-															type="button"
-															onClick={() => {
-																if (parentTask && onOpenTask) {
-																	onOpenTask(parentTask);
-																}
-															}}
-															className="font-medium text-xs text-[var(--text-primary)] hover:text-blue-400 hover:underline transition-colors truncate text-left cursor-pointer flex-1"
-														>
-															{parentTask?.title || currentParentId}
-														</button>
-														<div className="flex items-center space-x-1 shrink-0">
-															<button
-																type="button"
-																onClick={() =>
-																	setIsChangingParentOpen((prev) => !prev)
-																}
-																className="px-2 py-1 text-[11px] font-medium bg-[var(--modal-bg)] hover:bg-[var(--bg-card)] border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] rounded-lg transition-all cursor-pointer"
-															>
-																{t("taskModal.changeParent")}
-															</button>
-															<button
-																type="button"
-																onClick={handleUnlinkParent}
-																className="px-2 py-1 text-[11px] font-medium text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 border border-rose-500/20 rounded-lg transition-all cursor-pointer flex items-center space-x-1"
-																title={t("taskModal.unlinkParent")}
-															>
-																<Unlink className="w-3 h-3" />
-																<span>{t("taskModal.unlinkParent")}</span>
-															</button>
-														</div>
-													</div>
-
-													{isChangingParentOpen && (
-														<div className="pt-2 border-t border-[var(--border-color)] flex items-center space-x-2">
-															<input
-																type="text"
-																autoFocus
-																value={inputParentId}
-																onChange={(e) =>
-																	setInputParentId(e.target.value)
-																}
-																onKeyDown={(e) => {
-																	if (e.key === "Enter") {
-																		e.preventDefault();
-																		handleSetParent(inputParentId);
-																	}
-																}}
-																placeholder={t("taskModal.parentIdPlaceholder")}
-																className="flex-1 text-xs py-1.5 px-2.5 bg-[var(--modal-bg)] border border-[var(--border-color)] rounded-lg text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-blue-500 font-mono"
-															/>
-															<button
-																type="button"
-																onClick={() => handleSetParent(inputParentId)}
-																disabled={!inputParentId.trim()}
-																className="px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-500 rounded-lg disabled:opacity-50 transition-all cursor-pointer shrink-0"
-															>
-																{t("taskModal.changeParent")}
-															</button>
-															<button
-																type="button"
-																onClick={() => {
-																	setIsChangingParentOpen(false);
-																	setInputParentId("");
-																}}
-																className="px-2 py-1 text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
-															>
-																{t("taskModal.cancel")}
-															</button>
-														</div>
-													)}
-												</div>
-											) : isSettingParentOpen ? (
-												<div className="flex items-center space-x-2 p-2 bg-[var(--bg-input)] border border-blue-500/30 rounded-xl">
-													<input
-														type="text"
-														autoFocus
-														value={inputParentId}
-														onChange={(e) => setInputParentId(e.target.value)}
-														onKeyDown={(e) => {
-															if (e.key === "Enter") {
-																e.preventDefault();
-																handleSetParent(inputParentId);
-															}
-														}}
-														placeholder={t("taskModal.parentIdPlaceholder")}
-														className="flex-1 text-xs py-1.5 px-2.5 bg-[var(--modal-bg)] border border-[var(--border-color)] rounded-lg text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-blue-500 font-mono"
-													/>
-													<button
-														type="button"
-														onClick={() => handleSetParent(inputParentId)}
-														disabled={!inputParentId.trim()}
-														className="px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-500 rounded-lg disabled:opacity-50 transition-all cursor-pointer shrink-0"
-													>
-														{t("taskModal.link")}
-													</button>
-													<button
-														type="button"
-														onClick={() => {
-															setIsSettingParentOpen(false);
-															setInputParentId("");
-														}}
-														className="px-2 py-1 text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
-													>
-														{t("taskModal.cancel")}
-													</button>
-												</div>
-											) : (
-												<div>
-													<button
-														type="button"
-														onClick={() => setIsSettingParentOpen(true)}
-														className="inline-flex items-center space-x-1.5 px-3 py-1.5 text-xs font-medium bg-[var(--bg-input)] hover:bg-[var(--bg-card)] border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] rounded-xl transition-all cursor-pointer"
-													>
-														<Plus className="w-3.5 h-3.5" />
-														<span>
-															{t("taskModal.setParent") || "親タスクを設定"}
-														</span>
-													</button>
-												</div>
-											)}
-										</div>
-
-										{/* Subtasks Area (shown for root tasks) */}
-										{!currentParentId && (
-											<div className="space-y-2 pt-2 border-t border-[var(--border-color)]">
-												<div className="flex items-center justify-between">
-													<label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider flex items-center gap-1">
-														<ListTree className="w-3.5 h-3.5 text-blue-500" />{" "}
-														{t("taskModal.subtasksLabel")}
-													</label>
-												</div>
-
-												{/* Progress Bar */}
-												{subtasks.length > 0 &&
-													(() => {
-														const completedCount = subtasks.filter((s) =>
-															Boolean(s.completed),
-														).length;
-														const isAllDone =
-															completedCount === subtasks.length;
-														const percent = Math.round(
-															(completedCount / (subtasks.length || 1)) * 100,
-														);
-														return (
-															<div className="w-full bg-[var(--bg-input)] rounded-full h-1.5 overflow-hidden">
-																<div
-																	className={`h-full transition-all duration-300 ${
-																		isAllDone ? "bg-emerald-500" : "bg-blue-500"
-																	}`}
-																	style={{ width: `${percent}%` }}
-																/>
-															</div>
-														);
-													})()}
-
-												{/* Subtasks List */}
-												{subtasks.length > 0 && (
-													<DndContext
-														sensors={subtaskSensors}
-														collisionDetection={closestCenter}
-														onDragEnd={handleSubtaskDragEnd}
-													>
-														<SortableContext
-															items={subtasks.map((s) => s.id)}
-															strategy={verticalListSortingStrategy}
-														>
-															<div className="space-y-1.5 pt-1">
-																{subtasks.map((sub) => (
-																	<SortableSubtaskItem
-																		key={sub.id}
-																		sub={sub}
-																		columns={columns}
-																		onToggle={handleToggleSubtask}
-																		onOpen={(s) => onOpenTask?.(s)}
-																		onDelete={(s) => setSubtaskActionTarget(s)}
-																	/>
-																))}
-															</div>
-														</SortableContext>
-													</DndContext>
-												)}
-
-												{/* Subtasks Actions & Forms */}
-												<div className="pt-1">
-													{isAddingNewSubtask ? (
-														<div className="flex items-center space-x-2 p-2 bg-[var(--bg-input)] border border-blue-500/30 rounded-xl">
-															<input
-																type="text"
-																autoFocus
-																value={newSubtaskInput}
-																onChange={(e) =>
-																	setNewSubtaskInput(e.target.value)
-																}
-																onKeyDown={(e) => {
-																	if (e.key === "Enter") {
-																		e.preventDefault();
-																		handleAddSubtask();
-																	}
-																}}
-																placeholder={t("taskModal.subtaskPlaceholder")}
-																className="flex-1 px-3 py-1.5 text-xs bg-[var(--modal-bg)] border border-[var(--border-color)] rounded-lg text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-blue-500 font-medium"
-															/>
-															<button
-																type="button"
-																onClick={() => handleAddSubtask()}
-																disabled={
-																	!newSubtaskInput.trim() || isCreatingSubtask
-																}
-																className="px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-500 rounded-lg disabled:opacity-50 transition-all cursor-pointer flex items-center space-x-1 shrink-0"
-															>
-																<Plus className="w-3.5 h-3.5" />
-																<span>{t("configModal.add") || "追加"}</span>
-															</button>
-															<button
-																type="button"
-																onClick={() => {
-																	setIsAddingNewSubtask(false);
-																	setNewSubtaskInput("");
-																}}
-																className="px-2 py-1 text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
-															>
-																{t("taskModal.cancel")}
-															</button>
-														</div>
-													) : isLinkingExistingOpen ? (
-														<div className="flex items-center space-x-2 p-2 bg-[var(--bg-input)] border border-blue-500/30 rounded-xl">
-															<input
-																type="text"
-																autoFocus
-																value={inputSubtaskId}
-																onChange={(e) =>
-																	setInputSubtaskId(e.target.value)
-																}
-																onKeyDown={(e) => {
-																	if (e.key === "Enter") {
-																		e.preventDefault();
-																		handleAttachExistingTask(inputSubtaskId);
-																	}
-																}}
-																placeholder={t(
-																	"taskModal.subtaskIdPlaceholder",
-																)}
-																className="flex-1 text-xs py-1.5 px-2.5 bg-[var(--modal-bg)] border border-[var(--border-color)] rounded-lg text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-blue-500 font-mono"
-															/>
-															<button
-																type="button"
-																onClick={() =>
-																	handleAttachExistingTask(inputSubtaskId)
-																}
-																disabled={!inputSubtaskId.trim()}
-																className="px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-500 rounded-lg disabled:opacity-50 transition-all cursor-pointer shrink-0"
-															>
-																{t("taskModal.link") || "紐付け"}
-															</button>
-															<button
-																type="button"
-																onClick={() => {
-																	setIsLinkingExistingOpen(false);
-																	setInputSubtaskId("");
-																}}
-																className="px-2 py-1 text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
-															>
-																{t("taskModal.cancel")}
-															</button>
-														</div>
-													) : (
-														<div className="flex items-center space-x-2">
-															<button
-																type="button"
-																onClick={() => setIsAddingNewSubtask(true)}
-																className="inline-flex items-center space-x-1.5 px-3 py-1.5 text-xs font-medium bg-[var(--bg-input)] hover:bg-[var(--bg-card)] border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] rounded-xl transition-all cursor-pointer"
-															>
-																<Plus className="w-3.5 h-3.5" />
-																<span>
-																	{t("taskModal.addSubtask") ||
-																		"サブタスクを追加"}
-																</span>
-															</button>
-
-															<button
-																type="button"
-																onClick={() => setIsLinkingExistingOpen(true)}
-																className="inline-flex items-center space-x-1.5 px-3 py-1.5 text-xs font-medium bg-[var(--bg-input)] hover:bg-[var(--bg-card)] border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] rounded-xl transition-all cursor-pointer"
-															>
-																<Link2 className="w-3.5 h-3.5" />
-																<span>
-																	{t("taskModal.addExistingSubtask") ||
-																		"既存カードを紐付け"}
-																</span>
-															</button>
-														</div>
-													)}
-												</div>
-											</div>
-										)}
-									</div>
-								)}
-							</div>
+							<TaskHierarchySection
+								task={task}
+								columns={columns}
+								currentColumnId={columnId}
+								currentParentId={currentParentId}
+								parentTask={parentTask}
+								subtasks={subtasks}
+								subtaskActionTarget={subtaskActionTarget}
+								onSetSubtaskActionTarget={setSubtaskActionTarget}
+								isUnlinkParentModalOpen={isUnlinkParentModalOpen}
+								onSetIsUnlinkParentModalOpen={setIsUnlinkParentModalOpen}
+								onParentChange={(newParentId, newParentTask, newColumnId) => {
+									setParentId(newParentId);
+									setParentTask(newParentTask);
+									if (newColumnId !== undefined) {
+										setColumnId(newColumnId);
+										latestStateRef.current = {
+											...latestStateRef.current,
+											columnId: newColumnId,
+										};
+										if (historyRef.current[historyIndexRef.current]) {
+											historyRef.current[historyIndexRef.current] = {
+												...historyRef.current[historyIndexRef.current],
+												columnId: newColumnId,
+											};
+										}
+									}
+								}}
+								onSubtasksChange={setSubtasks}
+								onReloadHierarchy={reloadHierarchy}
+								onSaveSubtasks={async (taskId, subtaskRefs) => {
+									await onSave(
+										{ id: taskId, subtasks: subtaskRefs },
+										{ silent: true },
+									);
+								}}
+								onRefreshBoard={handleRefreshBoard}
+								onOpenTask={handleNavigateTask}
+							/>
 						)}
 
 						{/* Tags */}
@@ -3622,87 +955,6 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 					</div>
 				</form>
 			</div>
-
-			{/* Subtask Action / Delete Confirmation Dialog */}
-			{subtaskActionTarget && (
-				<div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150">
-					<div className="w-full max-w-md bg-[var(--modal-bg)] text-[var(--text-primary)] rounded-2xl border border-[var(--border-color)] shadow-2xl overflow-hidden p-5 space-y-4 animate-in zoom-in-95 duration-150">
-						<div className="flex items-center justify-between">
-							<div className="flex items-center space-x-2">
-								<div className="p-2 rounded-xl bg-blue-500/10 text-blue-500">
-									<ListTree className="w-5 h-5" />
-								</div>
-								<h3 className="text-base font-bold text-[var(--text-primary)]">
-									{t("taskModal.subtaskActionTitle")}
-								</h3>
-							</div>
-							<button
-								type="button"
-								onClick={() => setSubtaskActionTarget(null)}
-								className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] p-1 rounded-lg transition-colors cursor-pointer"
-							>
-								<X className="w-4 h-4" />
-							</button>
-						</div>
-
-						<p className="text-xs text-[var(--text-secondary)]">
-							{t("taskModal.subtaskActionDesc", {
-								title: subtaskActionTarget.title,
-							})}
-						</p>
-
-						<div className="space-y-2 pt-1">
-							{/* Option 1: Unlink from Parent */}
-							<button
-								type="button"
-								onClick={() => handleUnlinkSubtask(subtaskActionTarget)}
-								className="w-full flex items-start space-x-3 p-3 rounded-xl border border-[var(--border-color)] bg-[var(--bg-input)] hover:bg-[var(--bg-card)] hover:border-blue-500/50 transition-all text-left group/action cursor-pointer"
-							>
-								<div className="p-2 rounded-lg bg-blue-500/10 text-blue-500 group-hover/action:scale-105 transition-transform mt-0.5 shrink-0">
-									<Unlink className="w-4 h-4" />
-								</div>
-								<div className="flex-1 min-w-0">
-									<div className="text-xs font-semibold text-[var(--text-primary)]">
-										{t("taskModal.unlinkSubtask")}
-									</div>
-									<div className="text-[11px] text-[var(--text-secondary)] mt-0.5">
-										{t("taskModal.unlinkSubtaskDesc")}
-									</div>
-								</div>
-							</button>
-
-							{/* Option 2: Delete Card Permanently */}
-							<button
-								type="button"
-								onClick={() => handleConfirmDeleteSubtask(subtaskActionTarget)}
-								className="w-full flex items-start space-x-3 p-3 rounded-xl border border-rose-500/20 bg-rose-500/5 hover:bg-rose-500/10 hover:border-rose-500/40 transition-all text-left group/action cursor-pointer"
-							>
-								<div className="p-2 rounded-lg bg-rose-500/10 text-rose-500 group-hover/action:scale-105 transition-transform mt-0.5 shrink-0">
-									<Trash2 className="w-4 h-4" />
-								</div>
-								<div className="flex-1 min-w-0">
-									<div className="text-xs font-semibold text-rose-500">
-										{t("taskModal.deleteSubtaskCompletely")}
-									</div>
-									<div className="text-[11px] text-[var(--text-secondary)] mt-0.5">
-										{t("taskModal.deleteSubtaskCompletelyDesc")}
-									</div>
-								</div>
-							</button>
-						</div>
-
-						<div className="pt-2 flex justify-end">
-							<button
-								type="button"
-								onClick={() => setSubtaskActionTarget(null)}
-								className="px-4 py-1.5 text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] bg-[var(--bg-input)] hover:bg-[var(--bg-card)] border border-[var(--border-color)] rounded-xl transition-all cursor-pointer"
-							>
-								{t("taskModal.cancel")}
-							</button>
-						</div>
-					</div>
-				</div>
-			)}
 		</div>
 	);
 };

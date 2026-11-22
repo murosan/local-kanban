@@ -1290,3 +1290,190 @@ func TestGetTasksSearchCustomFields(t *testing.T) {
 		runSearchCases(t, "unavailable")
 	})
 }
+
+func TestPartialUpdateWithCachePreservesContentAndWhitespaceSearch(t *testing.T) {
+	tempDir := t.TempDir()
+	store, err := markdown.NewStore(tempDir)
+	if err != nil {
+		t.Fatalf("failed to create store: %v", err)
+	}
+
+	sqliteCache, err := cache.NewSQLiteCache(filepath.Join(tempDir, ".local_cache.db"))
+	if err != nil {
+		t.Fatalf("failed to create sqlite cache: %v", err)
+	}
+	defer func() { _ = sqliteCache.Close() }()
+	store.SetCache(sqliteCache)
+
+	task := &model.Task{
+		Title:    "Keep Body Card",
+		ColumnID: "col-todo",
+		Rank:     "0|i0000i",
+		Content:  "## Body\nDo not erase this content on drag-and-drop!",
+	}
+	if err := store.SaveTask(task); err != nil {
+		t.Fatalf("failed to save task: %v", err)
+	}
+
+	server := NewServer(store, search.NewEngine(sqliteCache))
+	mux := http.NewServeMux()
+	server.RegisterRoutes(mux)
+
+	// 1. GET /api/tasks/{id} must return full Content even with SQLite cache enabled
+	reqDetail := httptest.NewRequest("GET", "/api/tasks/"+task.ID, nil)
+	wDetail := httptest.NewRecorder()
+	mux.ServeHTTP(wDetail, reqDetail)
+	if wDetail.Code != http.StatusOK {
+		t.Fatalf("GET /api/tasks/{id} failed with %d", wDetail.Code)
+	}
+	var detail model.Task
+	if err := json.NewDecoder(wDetail.Body).Decode(&detail); err != nil {
+		t.Fatalf("failed to decode detail: %v", err)
+	}
+	if detail.Content != task.Content {
+		t.Fatalf(
+			"expected full content %q from GET /api/tasks/{id}, got %q",
+			task.Content,
+			detail.Content,
+		)
+	}
+
+	// 2. PUT /api/tasks/{id} with only column_id (like card drag) must preserve Content on disk
+	moveBody, _ := json.Marshal(map[string]any{"column_id": "col-done"})
+	reqMove := httptest.NewRequest("PUT", "/api/tasks/"+task.ID, bytes.NewReader(moveBody))
+	wMove := httptest.NewRecorder()
+	mux.ServeHTTP(wMove, reqMove)
+	if wMove.Code != http.StatusOK {
+		t.Fatalf("PUT /api/tasks/{id} failed with %d: %s", wMove.Code, wMove.Body.String())
+	}
+
+	reloaded, err := store.GetTaskByID(task.ID)
+	if err != nil {
+		t.Fatalf("GetTaskByID failed: %v", err)
+	}
+	if reloaded.Content != task.Content {
+		t.Fatalf(
+			"expected content preserved after column move: want %q, got %q",
+			task.Content,
+			reloaded.Content,
+		)
+	}
+
+	// 3. GET /api/tasks?q=%20%20%20 (whitespace only) must return all tasks
+	reqSpace := httptest.NewRequest("GET", "/api/tasks?q=%20%20%20", nil)
+	wSpace := httptest.NewRecorder()
+	mux.ServeHTTP(wSpace, reqSpace)
+	if wSpace.Code != http.StatusOK {
+		t.Fatalf("GET /api/tasks?q=spaces failed with %d", wSpace.Code)
+	}
+	var spaceResults []*model.Task
+	if err := json.NewDecoder(wSpace.Body).Decode(&spaceResults); err != nil {
+		t.Fatalf("failed to decode tasks: %v", err)
+	}
+	if len(spaceResults) != 1 || spaceResults[0].ID != task.ID {
+		t.Fatalf("expected whitespace-only query to return all tasks, got %+v", spaceResults)
+	}
+}
+
+func TestSubtaskEmptyColumnBehavior(t *testing.T) {
+	tmpDir := t.TempDir()
+	store, err := markdown.NewStore(tmpDir)
+	if err != nil {
+		t.Fatalf("failed to create store: %v", err)
+	}
+
+	server := NewServer(store, nil)
+	mux := http.NewServeMux()
+	server.RegisterRoutes(mux)
+
+	// 1. Root task without column_id returns 400 Bad Request
+	rootNoColBody, _ := json.Marshal(map[string]any{"title": "No Column Root"})
+	reqRootNoCol := httptest.NewRequest("POST", "/api/tasks", bytes.NewReader(rootNoColBody))
+	wRootNoCol := httptest.NewRecorder()
+	mux.ServeHTTP(wRootNoCol, reqRootNoCol)
+	if wRootNoCol.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for root task without column_id, got %d", wRootNoCol.Code)
+	}
+
+	// 2. Create parent task with explicit column_id
+	parentBody, _ := json.Marshal(map[string]any{
+		"title":     "Parent Card",
+		"column_id": "col-todo",
+	})
+	reqParent := httptest.NewRequest("POST", "/api/tasks", bytes.NewReader(parentBody))
+	wParent := httptest.NewRecorder()
+	mux.ServeHTTP(wParent, reqParent)
+	if wParent.Code != http.StatusCreated {
+		t.Fatalf("expected 201 for parent, got %d", wParent.Code)
+	}
+	var parent model.Task
+	_ = json.NewDecoder(wParent.Body).Decode(&parent)
+
+	// 3. Create subtask without column_id -> succeeds with empty column_id
+	subBody, _ := json.Marshal(map[string]any{
+		"parent_id": parent.ID,
+		"title":     "UniqueEmptyColSubtask",
+	})
+	reqSub := httptest.NewRequest("POST", "/api/tasks", bytes.NewReader(subBody))
+	wSub := httptest.NewRecorder()
+	mux.ServeHTTP(wSub, reqSub)
+	if wSub.Code != http.StatusCreated {
+		t.Fatalf(
+			"expected 201 for subtask without column_id, got %d: %s",
+			wSub.Code,
+			wSub.Body.String(),
+		)
+	}
+	var sub model.Task
+	_ = json.NewDecoder(wSub.Body).Decode(&sub)
+	if sub.ColumnID != "" {
+		t.Fatalf("expected empty column_id for subtask, got %q", sub.ColumnID)
+	}
+
+	// 4. GET /api/tasks returns parent with subtask attached (and subtask not as root)
+	reqList := httptest.NewRequest("GET", "/api/tasks", nil)
+	wList := httptest.NewRecorder()
+	mux.ServeHTTP(wList, reqList)
+	if wList.Code != http.StatusOK {
+		t.Fatalf("expected 200 GET /api/tasks, got %d", wList.Code)
+	}
+	var list []*model.Task
+	_ = json.NewDecoder(wList.Body).Decode(&list)
+	if len(list) != 1 || list[0].ID != parent.ID || list[0].SubtasksCount != 1 {
+		t.Fatalf("unexpected task list: %+v", list)
+	}
+
+	// 5. Fallback search (no FTS) still finds parent via empty-column subtask title
+	reqSearch := httptest.NewRequest("GET", "/api/tasks?q=UniqueEmptyColSubtask", nil)
+	wSearch := httptest.NewRecorder()
+	mux.ServeHTTP(wSearch, reqSearch)
+	if wSearch.Code != http.StatusOK {
+		t.Fatalf("expected 200 GET /api/tasks?q=..., got %d", wSearch.Code)
+	}
+	var searchList []*model.Task
+	_ = json.NewDecoder(wSearch.Body).Decode(&searchList)
+	if len(searchList) != 1 || searchList[0].ID != parent.ID {
+		t.Fatalf("expected search to match parent via empty-column subtask, got %+v", searchList)
+	}
+
+	// 6. Unlink subtask with explicit column_id -> appears on board as standalone card
+	unlinkBody, _ := json.Marshal(map[string]any{
+		"parent_id": "",
+		"column_id": "col-in-progress",
+	})
+	reqUnlink := httptest.NewRequest("PUT", "/api/tasks/"+sub.ID, bytes.NewReader(unlinkBody))
+	wUnlink := httptest.NewRecorder()
+	mux.ServeHTTP(wUnlink, reqUnlink)
+	if wUnlink.Code != http.StatusOK {
+		t.Fatalf("expected 200 PUT unlink, got %d", wUnlink.Code)
+	}
+
+	reqListAfter := httptest.NewRequest("GET", "/api/tasks", nil)
+	wListAfter := httptest.NewRecorder()
+	mux.ServeHTTP(wListAfter, reqListAfter)
+	var listAfter []*model.Task
+	_ = json.NewDecoder(wListAfter.Body).Decode(&listAfter)
+	if len(listAfter) != 2 {
+		t.Fatalf("expected 2 root tasks after unlink with column_id, got %d", len(listAfter))
+	}
+}

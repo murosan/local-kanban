@@ -44,6 +44,7 @@ import {
 	X,
 } from "lucide-react";
 import { useI18n } from "../i18n/useI18n";
+import { copyTextToClipboard } from "../utils/copyCommand";
 import { applyTabIndent } from "../utils/markdownIndent";
 import { toggleTaskCheckboxAtLine } from "../utils/markdownTask";
 import { extractHeadings, type TocItem } from "../utils/toc";
@@ -125,13 +126,29 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 	useEffect(() => {
 		if (activeHeadingId && tocListRef.current) {
 			const activeEl = tocListRef.current.querySelector<HTMLElement>(
-				`[data-toc-id="${activeHeadingId}"]`,
+				`[data-toc-id="${CSS.escape(activeHeadingId)}"]`,
 			);
 			if (activeEl) {
 				activeEl.scrollIntoView({ behavior: "smooth", block: "nearest" });
 			}
 		}
 	}, [activeHeadingId]);
+
+	// Exit focus mode on Escape without closing the parent modal
+	useEffect(() => {
+		if (!isFocusMode) return;
+		const handleFocusEscape = (e: KeyboardEvent) => {
+			if (e.key === "Escape") {
+				e.preventDefault();
+				e.stopPropagation();
+				setIsFocusMode(false);
+			}
+		};
+		window.addEventListener("keydown", handleFocusEscape, true);
+		return () => {
+			window.removeEventListener("keydown", handleFocusEscape, true);
+		};
+	}, [isFocusMode]);
 
 	// Active section tracking (Scrollspy) on preview pane
 	// biome-ignore lint/correctness/useExhaustiveDependencies: re-evaluate heading positions when markdown content changes
@@ -153,9 +170,11 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 			let currentActive: string | null = headings[0]?.id || null;
 
 			for (const h of headings) {
+				const escapedId = CSS.escape(h.id);
 				const el =
-					container.querySelector<HTMLElement>(`[data-heading-id="${h.id}"]`) ||
-					container.querySelector<HTMLElement>(`#${CSS.escape(h.id)}`);
+					container.querySelector<HTMLElement>(
+						`[data-heading-id="${escapedId}"]`,
+					) || container.querySelector<HTMLElement>(`#${escapedId}`);
 				if (el) {
 					const rect = el.getBoundingClientRect();
 					if (rect.top - containerTop <= 100) {
@@ -201,14 +220,11 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 		}
 
 		if (previewRef.current) {
+			const escapedId = CSS.escape(item.id);
 			const targetEl =
 				previewRef.current.querySelector<HTMLElement>(
-					`[data-heading-id="${item.id}"]`,
-				) ||
-				previewRef.current.querySelector<HTMLElement>(
-					`#${CSS.escape(item.id)}`,
-				) ||
-				previewRef.current.querySelector<HTMLElement>(`[id="${item.id}"]`);
+					`[data-heading-id="${escapedId}"]`,
+				) || previewRef.current.querySelector<HTMLElement>(`#${escapedId}`);
 
 			if (targetEl) {
 				targetEl.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -241,10 +257,19 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 	};
 
 	const [copied, setCopied] = useState(false);
+	const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
 	const pendingSelectionRef = useRef<{ start: number; end: number } | null>(
 		null,
 	);
+
+	useEffect(() => {
+		return () => {
+			if (copiedTimerRef.current) {
+				clearTimeout(copiedTimerRef.current);
+			}
+		};
+	}, []);
 
 	// biome-ignore lint/correctness/useExhaustiveDependencies: restore cursor selection after value update re-renders textarea
 	useLayoutEffect(() => {
@@ -255,10 +280,30 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 		}
 	}, [value]);
 
-	const handleCopy = () => {
-		navigator.clipboard.writeText(value);
+	const handleCopy = async () => {
+		const ok = await copyTextToClipboard(value);
+		if (!ok) return;
 		setCopied(true);
-		setTimeout(() => setCopied(false), 2000);
+		if (copiedTimerRef.current) {
+			clearTimeout(copiedTimerRef.current);
+		}
+		copiedTimerRef.current = setTimeout(() => setCopied(false), 2000);
+	};
+
+	const syncActiveHeadingFromCursor = () => {
+		if (!textareaRef.current || headings.length === 0) return;
+		const cursorPos = textareaRef.current.selectionStart;
+		const textBeforeCursor = value.substring(0, cursorPos);
+		const currentLine = textBeforeCursor.split("\n").length;
+		let active = headings[0]?.id || null;
+		for (const h of headings) {
+			if (h.lineNumber <= currentLine) {
+				active = h.id;
+			} else {
+				break;
+			}
+		}
+		setActiveHeadingId(active);
 	};
 
 	const insertFormat = (
@@ -362,6 +407,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 				if (e.key === "z" || e.key === "Z") {
 					if (onUndo && onRedo) {
 						e.preventDefault();
+						e.stopPropagation();
 						if (e.shiftKey) {
 							onRedo();
 						} else {
@@ -373,6 +419,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 				if (e.key === "y" || e.key === "Y") {
 					if (onRedo) {
 						e.preventDefault();
+						e.stopPropagation();
 						onRedo();
 						return;
 					}
@@ -964,38 +1011,8 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 								})
 							}
 							onKeyDown={handleKeyDown}
-							onSelect={() => {
-								if (textareaRef.current && headings.length > 0) {
-									const cursorPos = textareaRef.current.selectionStart;
-									const textBeforeCursor = value.substring(0, cursorPos);
-									const currentLine = textBeforeCursor.split("\n").length;
-									let active = headings[0]?.id || null;
-									for (const h of headings) {
-										if (h.lineNumber <= currentLine) {
-											active = h.id;
-										} else {
-											break;
-										}
-									}
-									setActiveHeadingId(active);
-								}
-							}}
-							onClick={() => {
-								if (textareaRef.current && headings.length > 0) {
-									const cursorPos = textareaRef.current.selectionStart;
-									const textBeforeCursor = value.substring(0, cursorPos);
-									const currentLine = textBeforeCursor.split("\n").length;
-									let active = headings[0]?.id || null;
-									for (const h of headings) {
-										if (h.lineNumber <= currentLine) {
-											active = h.id;
-										} else {
-											break;
-										}
-									}
-									setActiveHeadingId(active);
-								}
-							}}
+							onSelect={syncActiveHeadingFromCursor}
+							onClick={syncActiveHeadingFromCursor}
 							placeholder={placeholder || "Markdown形式で入力..."}
 							className="w-full flex-1 h-full p-4 pb-48 sm:pb-64 bg-[var(--bg-input)] text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none font-mono text-sm leading-relaxed resize-none overflow-y-auto"
 						/>
@@ -1249,9 +1266,9 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 															<button
 																type="button"
 																className="clipboard"
-																onClick={() =>
-																	navigator.clipboard.writeText(codeString)
-																}
+																onClick={() => {
+																	void copyTextToClipboard(codeString);
+																}}
 																title="コードをコピー"
 															>
 																<Copy />

@@ -82,6 +82,19 @@ export const extractCopyText = (target: CopyTargetLike): string => {
 	return target.innerText.trim();
 };
 
+export const copyTextToClipboard = async (text: string): Promise<boolean> => {
+	if (!text) return false;
+	if (!navigator.clipboard?.writeText) {
+		return legacyCopy(text);
+	}
+	try {
+		await navigator.clipboard.writeText(text);
+		return true;
+	} catch {
+		return legacyCopy(text);
+	}
+};
+
 export const copyFromTarget = async (
 	button: HTMLButtonElement,
 	target: HTMLElement,
@@ -89,24 +102,8 @@ export const copyFromTarget = async (
 	const text = extractCopyText(target);
 	if (!text) return;
 
-	try {
-		if (!navigator.clipboard?.writeText) {
-			if (!legacyCopy(text)) {
-				throw new Error("Copy failed");
-			}
-		} else {
-			try {
-				await navigator.clipboard.writeText(text);
-			} catch {
-				if (!legacyCopy(text)) {
-					throw new Error("Copy failed");
-				}
-			}
-		}
-		reportCopyResult(button, true);
-	} catch {
-		reportCopyResult(button, false);
-	}
+	const ok = await copyTextToClipboard(text);
+	reportCopyResult(button, ok);
 };
 
 export const initCopyCommandListener = (): void => {

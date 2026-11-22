@@ -1,5 +1,5 @@
 import type React from "react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ColumnManagerModal } from "./components/ColumnManagerModal";
 import { CreateTaskModal } from "./components/CreateTaskModal";
 import { Header } from "./components/Header";
@@ -51,9 +51,10 @@ export const App: React.FC = () => {
 
 	const [selectedTask, setSelectedTask] = useState<Task | null>(null);
 	const [initialColumnId, setInitialColumnId] = useState<string>("");
+	const loadRequestIdRef = useRef(0);
 
 	const addToast = useCallback((message: string, type: ToastType = "info") => {
-		const id = Date.now().toString() + Math.random().toString(36).substr(2, 4);
+		const id = Date.now().toString() + Math.random().toString(36).slice(2, 6);
 		setToasts((prev) => [...prev, { id, message, type }]);
 	}, []);
 
@@ -88,6 +89,7 @@ export const App: React.FC = () => {
 	}, []);
 
 	const loadData = useCallback(async () => {
+		const requestId = ++loadRequestIdRef.current;
 		setIsSyncing(true);
 		try {
 			const [cfg, taskList, tagList] = await Promise.all([
@@ -95,6 +97,9 @@ export const App: React.FC = () => {
 				fetchTasks(debouncedQuery),
 				fetchTags(),
 			]);
+			if (requestId !== loadRequestIdRef.current) {
+				return;
+			}
 			setConfig(cfg);
 			setTasks(taskList || []);
 			setAvailableTags(tagList || []);
@@ -114,10 +119,15 @@ export const App: React.FC = () => {
 				}
 			}
 		} catch (err) {
+			if (requestId !== loadRequestIdRef.current) {
+				return;
+			}
 			console.error("Error fetching kanban data:", err);
 			addToast(t("common.error") || "Failed to load data from server", "error");
 		} finally {
-			setIsSyncing(false);
+			if (requestId === loadRequestIdRef.current) {
+				setIsSyncing(false);
+			}
 		}
 	}, [debouncedQuery, applyTheme, addToast, t]);
 
@@ -269,14 +279,11 @@ export const App: React.FC = () => {
 	};
 
 	const handleAddSubtask = async (parentId: string, title: string) => {
-		if (!config || config.columns.length === 0) return;
-		const parentTask = tasks.find((t) => t.id === parentId);
-		const targetColumn = parentTask?.column_id || config.columns[0].id;
 		try {
 			await createTask({
 				parent_id: parentId,
 				title,
-				column_id: targetColumn,
+				column_id: "",
 			});
 			addToast(t("common.created") || "Subtask created", "success");
 			await loadData();
@@ -345,8 +352,9 @@ export const App: React.FC = () => {
 			const validColumnIds = new Set(newColumns.map((c) => c.id));
 			const fallbackColumn = newColumns[0];
 
-			// Reassign orphan tasks whose column was deleted
-			const orphanTasks = tasks.filter(
+			// Reassign orphan tasks across ALL tasks (not just currently search-filtered tasks)
+			const allCurrentTasks = debouncedQuery ? await fetchTasks() : tasks;
+			const orphanTasks = allCurrentTasks.filter(
 				(t) => t.column_id && !validColumnIds.has(t.column_id),
 			);
 			for (const t of orphanTasks) {
@@ -458,6 +466,7 @@ export const App: React.FC = () => {
 					allTasks={tasks}
 					onClose={() => setIsTaskModalOpen(false)}
 					onSave={handleSaveTask}
+					onRefresh={loadData}
 					onDelete={handleDeleteTask}
 					onOpenTask={(task) => setSelectedTask(task)}
 				/>

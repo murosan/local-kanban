@@ -543,7 +543,11 @@ export const TaskCard: React.FC<TaskCardProps> = ({
 										onClick={(e) => e.stopPropagation()}
 										onChange={(e) => setNewSubtaskTitle(e.target.value)}
 										onKeyDown={async (e) => {
-											if (e.key === "Enter" && newSubtaskTitle.trim()) {
+											if (
+												e.key === "Enter" &&
+												!e.nativeEvent.isComposing &&
+												newSubtaskTitle.trim()
+											) {
 												e.preventDefault();
 												e.stopPropagation();
 												const title = newSubtaskTitle.trim();

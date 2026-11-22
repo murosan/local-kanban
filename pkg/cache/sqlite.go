@@ -321,6 +321,10 @@ func (c *SQLiteCache) UpsertTask(task *model.Task) error {
 		}
 	}
 
+	if err := pruneUnusedTagsTx(tx); err != nil {
+		return fmt.Errorf("failed to prune unused tags: %w", err)
+	}
+
 	return tx.Commit()
 }
 
@@ -346,7 +350,77 @@ func (c *SQLiteCache) DeleteTask(id string) error {
 		return fmt.Errorf("failed to delete from tasks_fts: %w", err)
 	}
 
+	if err := pruneUnusedTagsTx(tx); err != nil {
+		return fmt.Errorf("failed to prune unused tags: %w", err)
+	}
+
 	return tx.Commit()
+}
+
+func pruneUnusedTagsTx(tx *sql.Tx) error {
+	rows, err := tx.Query("SELECT tags FROM tasks WHERE tags IS NOT NULL AND tags != ''")
+	if err != nil {
+		return err
+	}
+
+	activeTags := make(map[string]struct{})
+	for rows.Next() {
+		var tagsJSON sql.NullString
+		if scanErr := rows.Scan(&tagsJSON); scanErr != nil {
+			_ = rows.Close()
+			return scanErr
+		}
+		if !tagsJSON.Valid || tagsJSON.String == "" {
+			continue
+		}
+		var taskTags []string
+		if unmarshalErr := json.Unmarshal([]byte(tagsJSON.String), &taskTags); unmarshalErr != nil {
+			continue
+		}
+		for _, tag := range taskTags {
+			if trimmed := strings.TrimSpace(tag); trimmed != "" {
+				activeTags[trimmed] = struct{}{}
+			}
+		}
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return err
+	}
+	_ = rows.Close()
+
+	if len(activeTags) == 0 {
+		_, err = tx.Exec("DELETE FROM tags")
+		return err
+	}
+
+	tagRows, err := tx.Query("SELECT name FROM tags")
+	if err != nil {
+		return err
+	}
+	var staleTags []string
+	for tagRows.Next() {
+		var name string
+		if scanErr := tagRows.Scan(&name); scanErr != nil {
+			_ = tagRows.Close()
+			return scanErr
+		}
+		if _, exists := activeTags[name]; !exists {
+			staleTags = append(staleTags, name)
+		}
+	}
+	if err := tagRows.Err(); err != nil {
+		_ = tagRows.Close()
+		return err
+	}
+	_ = tagRows.Close()
+
+	for _, stale := range staleTags {
+		if _, err := tx.Exec("DELETE FROM tags WHERE name = ?", stale); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (c *SQLiteCache) SyncAll(tasks []*model.Task) error {
@@ -611,144 +685,16 @@ func (c *SQLiteCache) GetFilePathsByColumnID(columnID string) ([]string, error) 
 	return c.GetFilePathsByColumnIDs([]string{columnID})
 }
 
-// GetTasksByColumnIDs returns task summaries in specified column IDs directly from SQLite cache, ordered by rank ASC.
-func (c *SQLiteCache) GetTasksByColumnIDs(columnIDs []string) ([]*model.Task, error) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+const taskSelectColumns = "id, parent_id, title, column_id, rank, tags, created_at, updated_at, file_path, custom_fields, summary, subtasks"
 
-	if len(columnIDs) == 0 {
-		return nil, nil
-	}
-
-	placeholders := make([]string, len(columnIDs))
-	args := make([]any, len(columnIDs))
-	for i, id := range columnIDs {
-		placeholders[i] = "?"
-		args[i] = id
-	}
-
-	query := fmt.Sprintf(
-		"SELECT id, parent_id, title, column_id, rank, tags, created_at, updated_at, file_path, custom_fields, summary, subtasks FROM tasks WHERE column_id IN (%s) ORDER BY rank ASC, id ASC",
-		strings.Join(placeholders, ","),
-	) // #nosec G201 -- placeholders construction uses sanitized '?' placeholders
-
-	rows, err := c.db.Query(query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query tasks by column_ids: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-
-	var tasks []*model.Task
-	for rows.Next() {
-		var t model.Task
-		var parentID, tagsJSON, customFieldsJSON, summary, subtasksJSON sql.NullString
-		err := rows.Scan(
-			&t.ID,
-			&parentID,
-			&t.Title,
-			&t.ColumnID,
-			&t.Rank,
-			&tagsJSON,
-			&t.CreatedAt,
-			&t.UpdatedAt,
-			&t.FilePath,
-			&customFieldsJSON,
-			&summary,
-			&subtasksJSON,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan task: %w", err)
-		}
-		if parentID.Valid {
-			t.ParentID = parentID.String
-		}
-		if tagsJSON.Valid && tagsJSON.String != "" {
-			_ = json.Unmarshal([]byte(tagsJSON.String), &t.Tags)
-		}
-		if customFieldsJSON.Valid && customFieldsJSON.String != "" {
-			_ = json.Unmarshal([]byte(customFieldsJSON.String), &t.CustomFields)
-		}
-		if summary.Valid {
-			t.Summary = summary.String
-		}
-		if subtasksJSON.Valid && subtasksJSON.String != "" {
-			_ = json.Unmarshal([]byte(subtasksJSON.String), &t.Subtasks)
-		}
-		tasks = append(tasks, &t)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error during rows iteration: %w", err)
-	}
-	return tasks, nil
+type rowScanner interface {
+	Scan(dest ...any) error
 }
 
-// GetSubtasksByParentID returns all subtasks belonging to the specified parent task ID from SQLite cache.
-func (c *SQLiteCache) GetSubtasksByParentID(parentID string) ([]*model.Task, error) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	query := "SELECT id, parent_id, title, column_id, rank, tags, created_at, updated_at, file_path, custom_fields, summary, subtasks FROM tasks WHERE parent_id = ? ORDER BY rank ASC, id ASC"
-	rows, err := c.db.Query(query, parentID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query subtasks by parent_id: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-
-	var tasks []*model.Task
-	for rows.Next() {
-		var t model.Task
-		var pID, tagsJSON, customFieldsJSON, summary, subtasksJSON sql.NullString
-		err := rows.Scan(
-			&t.ID,
-			&pID,
-			&t.Title,
-			&t.ColumnID,
-			&t.Rank,
-			&tagsJSON,
-			&t.CreatedAt,
-			&t.UpdatedAt,
-			&t.FilePath,
-			&customFieldsJSON,
-			&summary,
-			&subtasksJSON,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan subtask: %w", err)
-		}
-		if pID.Valid {
-			t.ParentID = pID.String
-		}
-		if tagsJSON.Valid && tagsJSON.String != "" {
-			_ = json.Unmarshal([]byte(tagsJSON.String), &t.Tags)
-		}
-		if customFieldsJSON.Valid && customFieldsJSON.String != "" {
-			_ = json.Unmarshal([]byte(customFieldsJSON.String), &t.CustomFields)
-		}
-		if summary.Valid {
-			t.Summary = summary.String
-		}
-		if subtasksJSON.Valid && subtasksJSON.String != "" {
-			_ = json.Unmarshal([]byte(subtasksJSON.String), &t.Subtasks)
-		}
-		tasks = append(tasks, &t)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error during subtasks iteration: %w", err)
-	}
-	return tasks, nil
-}
-
-// GetTaskByID returns a single task by its ID from SQLite cache.
-func (c *SQLiteCache) GetTaskByID(id string) (*model.Task, error) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	query := "SELECT id, parent_id, title, column_id, rank, tags, created_at, updated_at, file_path, custom_fields, summary, subtasks FROM tasks WHERE id = ? LIMIT 1"
-	row := c.db.QueryRow(query, id)
-
+func scanTask(s rowScanner) (*model.Task, error) {
 	var t model.Task
 	var parentID, tagsJSON, customFieldsJSON, summary, subtasksJSON sql.NullString
-	err := row.Scan(
+	err := s.Scan(
 		&t.ID,
 		&parentID,
 		&t.Title,
@@ -763,10 +709,7 @@ func (c *SQLiteCache) GetTaskByID(id string) (*model.Task, error) {
 		&subtasksJSON,
 	)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, os.ErrNotExist
-		}
-		return nil, fmt.Errorf("failed to scan task by id: %w", err)
+		return nil, err
 	}
 	if parentID.Valid {
 		t.ParentID = parentID.String
@@ -784,4 +727,90 @@ func (c *SQLiteCache) GetTaskByID(id string) (*model.Task, error) {
 		_ = json.Unmarshal([]byte(subtasksJSON.String), &t.Subtasks)
 	}
 	return &t, nil
+}
+
+// GetTasksByColumnIDs returns task summaries in specified column IDs directly from SQLite cache, ordered by rank ASC.
+func (c *SQLiteCache) GetTasksByColumnIDs(columnIDs []string) ([]*model.Task, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if len(columnIDs) == 0 {
+		return nil, nil
+	}
+
+	placeholders := make([]string, len(columnIDs))
+	args := make([]any, len(columnIDs))
+	for i, id := range columnIDs {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+
+	query := fmt.Sprintf(
+		"SELECT %s FROM tasks WHERE column_id IN (%s) ORDER BY rank ASC, id ASC",
+		taskSelectColumns,
+		strings.Join(placeholders, ","),
+	) // #nosec G201 -- taskSelectColumns is a constant and placeholders uses sanitized '?' placeholders
+
+	rows, err := c.db.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query tasks by column_ids: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var tasks []*model.Task
+	for rows.Next() {
+		t, err := scanTask(rows)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan task: %w", err)
+		}
+		tasks = append(tasks, t)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error during rows iteration: %w", err)
+	}
+	return tasks, nil
+}
+
+// GetSubtasksByParentID returns all subtasks belonging to the specified parent task ID from SQLite cache.
+func (c *SQLiteCache) GetSubtasksByParentID(parentID string) ([]*model.Task, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	query := "SELECT " + taskSelectColumns + " FROM tasks WHERE parent_id = ? ORDER BY rank ASC, id ASC"
+	rows, err := c.db.Query(query, parentID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query subtasks by parent_id: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var tasks []*model.Task
+	for rows.Next() {
+		t, err := scanTask(rows)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan subtask: %w", err)
+		}
+		tasks = append(tasks, t)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error during subtasks iteration: %w", err)
+	}
+	return tasks, nil
+}
+
+// GetTaskByID returns a single task by its ID from SQLite cache.
+func (c *SQLiteCache) GetTaskByID(id string) (*model.Task, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	query := "SELECT " + taskSelectColumns + " FROM tasks WHERE id = ? LIMIT 1"
+	row := c.db.QueryRow(query, id)
+
+	t, err := scanTask(row)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, os.ErrNotExist
+		}
+		return nil, fmt.Errorf("failed to scan task by id: %w", err)
+	}
+	return t, nil
 }

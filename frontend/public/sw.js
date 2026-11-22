@@ -24,13 +24,22 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // Network-only for API and MCP endpoints
-  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/mcp/')) {
+  // Network-only for API, MCP, and SSE endpoints
+  if (
+    url.pathname.startsWith('/api/') ||
+    url.pathname.startsWith('/mcp/') ||
+    url.pathname === '/sse'
+  ) {
     event.respondWith(fetch(event.request));
     return;
   }
 
-  // Network-first, fallback to cache for static app assets
+  // Network-first, fallback to cache for static GET app assets
+  if (event.request.method !== 'GET') {
+    event.respondWith(fetch(event.request));
+    return;
+  }
+
   event.respondWith(
     fetch(event.request)
       .then((response) => {
