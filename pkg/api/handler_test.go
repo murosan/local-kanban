@@ -1684,3 +1684,369 @@ func TestChecklistReorderPersistence(t *testing.T) {
 	}
 	assertChecklistOrder("disk", diskTasks[0].CustomFields)
 }
+
+func TestDuplicateTaskRootWithFieldsAndPosition(t *testing.T) {
+	tempDir := t.TempDir()
+	store, err := markdown.NewStore(tempDir)
+	if err != nil {
+		t.Fatalf("failed to create store: %v", err)
+	}
+	sqliteCache, err := cache.NewSQLiteCache(filepath.Join(tempDir, ".local_cache.db"))
+	if err != nil {
+		t.Fatalf("failed to create sqlite cache: %v", err)
+	}
+	defer func() { _ = sqliteCache.Close() }()
+	store.SetCache(sqliteCache)
+
+	task1 := &model.Task{
+		Title:    "First Card",
+		ColumnID: "col-todo",
+		Rank:     "0|i0000i",
+		Tags:     []string{"backend", "go"},
+		Content:  "# Details\n\nOriginal markdown body.",
+		CustomFields: []model.CustomFieldValue{
+			{
+				ID:      "cf-priority-orig",
+				FieldID: "preset-priority",
+				Name:    "Priority",
+				Type:    model.FieldTypeDropdown,
+				Value:   "High",
+				Options: []model.CustomFieldOption{
+					{ID: "opt-1", Value: "High", Color: "#ef4444"},
+				},
+				Enabled: true,
+			},
+			{
+				ID:   "cf-checklist-orig",
+				Name: "Checklist",
+				Type: model.FieldTypeChecklist,
+				Value: []any{
+					map[string]any{"id": "item-1", "text": "Step 1", "completed": true},
+					map[string]any{"id": "item-2", "text": "Step 2", "completed": false},
+				},
+				Enabled: true,
+			},
+		},
+	}
+	task2 := &model.Task{
+		Title:    "Second Card",
+		ColumnID: "col-todo",
+		Rank:     "0|i0010i",
+	}
+	if err := store.SaveTask(task1); err != nil {
+		t.Fatalf("failed to save task1: %v", err)
+	}
+	if err := store.SaveTask(task2); err != nil {
+		t.Fatalf("failed to save task2: %v", err)
+	}
+
+	server := NewServer(store, nil)
+	mux := http.NewServeMux()
+	server.RegisterRoutes(mux)
+
+	// 1. Duplicate with custom title
+	body := bytes.NewBufferString(`{"title":"First Card (コピー)"}`)
+	req := httptest.NewRequest("POST", "/api/tasks/"+task1.ID+"/duplicate", body)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201 Created, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var dup model.Task
+	if err := json.NewDecoder(w.Body).Decode(&dup); err != nil {
+		t.Fatalf("failed to decode duplicated task: %v", err)
+	}
+
+	if dup.ID == "" || dup.ID == task1.ID {
+		t.Fatalf("expected new unique ID, got %q", dup.ID)
+	}
+	if dup.Title != "First Card (コピー)" {
+		t.Errorf("expected title 'First Card (コピー)', got %q", dup.Title)
+	}
+	if dup.ColumnID != "col-todo" {
+		t.Errorf("expected column 'col-todo', got %q", dup.ColumnID)
+	}
+	if dup.Content != task1.Content {
+		t.Errorf("expected content %q, got %q", task1.Content, dup.Content)
+	}
+	if len(dup.Tags) != 2 || dup.Tags[0] != "backend" || dup.Tags[1] != "go" {
+		t.Errorf("expected tags [backend go], got %v", dup.Tags)
+	}
+	if len(dup.CustomFields) != 2 {
+		t.Fatalf("expected 2 custom fields, got %d", len(dup.CustomFields))
+	}
+	if dup.CustomFields[0].ID == "" || dup.CustomFields[0].ID == "cf-priority-orig" {
+		t.Errorf("expected fresh custom field ID, got %q", dup.CustomFields[0].ID)
+	}
+	if dup.CustomFields[0].FieldID != "preset-priority" || dup.CustomFields[0].Value != "High" {
+		t.Errorf("unexpected cloned dropdown field: %+v", dup.CustomFields[0])
+	}
+
+	// Verify position: immediately after task1 and before task2
+	if task1.Rank >= dup.Rank || dup.Rank >= task2.Rank {
+		t.Errorf(
+			"expected duplicated rank strictly between task1 (%q) and task2 (%q), got %q",
+			task1.Rank,
+			task2.Rank,
+			dup.Rank,
+		)
+	}
+
+	// Verify GET /api/tasks returns order: task1, dup, task2
+	reqList := httptest.NewRequest("GET", "/api/tasks", nil)
+	wList := httptest.NewRecorder()
+	mux.ServeHTTP(wList, reqList)
+	var list []*model.Task
+	if err := json.NewDecoder(wList.Body).Decode(&list); err != nil {
+		t.Fatalf("failed to decode list: %v", err)
+	}
+	if len(list) != 3 || list[0].ID != task1.ID || list[1].ID != dup.ID || list[2].ID != task2.ID {
+		t.Errorf("unexpected task order after duplicate: %+v", list)
+	}
+
+	// 2. Duplicate with empty body uses default "(Copy)" suffix
+	reqDefault := httptest.NewRequest("POST", "/api/tasks/"+task2.ID+"/duplicate", nil)
+	wDefault := httptest.NewRecorder()
+	mux.ServeHTTP(wDefault, reqDefault)
+	if wDefault.Code != http.StatusCreated {
+		t.Fatalf(
+			"expected 201 Created for empty body, got %d: %s",
+			wDefault.Code,
+			wDefault.Body.String(),
+		)
+	}
+	var dup2 model.Task
+	if err := json.NewDecoder(wDefault.Body).Decode(&dup2); err != nil {
+		t.Fatalf("failed to decode dup2: %v", err)
+	}
+	if dup2.Title != "Second Card (Copy)" {
+		t.Errorf("expected default title 'Second Card (Copy)', got %q", dup2.Title)
+	}
+	if task2.Rank >= dup2.Rank {
+		t.Errorf("expected dup2 rank (%q) > task2 rank (%q)", dup2.Rank, task2.Rank)
+	}
+}
+
+func TestDuplicateTaskWithSubtasksAndIsolation(t *testing.T) {
+	tempDir := t.TempDir()
+	store, err := markdown.NewStore(tempDir)
+	if err != nil {
+		t.Fatalf("failed to create store: %v", err)
+	}
+	sqliteCache, err := cache.NewSQLiteCache(filepath.Join(tempDir, ".local_cache.db"))
+	if err != nil {
+		t.Fatalf("failed to create sqlite cache: %v", err)
+	}
+	defer func() { _ = sqliteCache.Close() }()
+	store.SetCache(sqliteCache)
+
+	parent := &model.Task{
+		Title:    "Parent Card",
+		ColumnID: "col-todo",
+		Rank:     "0|i0000i",
+		Content:  "Parent body",
+	}
+	if err := store.SaveTask(parent); err != nil {
+		t.Fatalf("failed to save parent: %v", err)
+	}
+
+	sub1 := &model.Task{
+		ParentID: parent.ID,
+		Title:    "Subtask A",
+		ColumnID: "",
+		Rank:     "0|a",
+		Tags:     []string{"sub-tag"},
+		Content:  "Full markdown body for subtask A",
+	}
+	sub2 := &model.Task{
+		ParentID: parent.ID,
+		Title:    "Subtask B",
+		ColumnID: "",
+		Rank:     "0|b",
+		Content:  "Full markdown body for subtask B",
+	}
+	if err := store.SaveTask(sub1); err != nil {
+		t.Fatalf("failed to save sub1: %v", err)
+	}
+	if err := store.SaveTask(sub2); err != nil {
+		t.Fatalf("failed to save sub2: %v", err)
+	}
+	parent.Subtasks = []model.SubtaskRef{
+		{ID: sub1.ID, Completed: true},
+		{ID: sub2.ID, Completed: false},
+	}
+	if err := store.SaveTask(parent); err != nil {
+		t.Fatalf("failed to update parent subtasks: %v", err)
+	}
+
+	server := NewServer(store, nil)
+	mux := http.NewServeMux()
+	server.RegisterRoutes(mux)
+
+	// Duplicate parent (default include_subtasks=true)
+	req := httptest.NewRequest("POST", "/api/tasks/"+parent.ID+"/duplicate", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201 Created, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var dupParent model.Task
+	if err := json.NewDecoder(w.Body).Decode(&dupParent); err != nil {
+		t.Fatalf("failed to decode duplicated parent: %v", err)
+	}
+
+	if dupParent.SubtasksCount != 2 || dupParent.SubtasksCompletedCount != 1 {
+		t.Fatalf(
+			"expected 2 subtasks (1 completed), got count=%d completed=%d",
+			dupParent.SubtasksCount,
+			dupParent.SubtasksCompletedCount,
+		)
+	}
+	if len(dupParent.Subtasks) != 2 {
+		t.Fatalf("expected 2 subtask refs on duplicated parent, got %d", len(dupParent.Subtasks))
+	}
+	if dupParent.Subtasks[0].ID == sub1.ID || dupParent.Subtasks[1].ID == sub2.ID {
+		t.Fatalf("duplicated parent must not share subtask IDs with original")
+	}
+	if !dupParent.Subtasks[0].Completed || dupParent.Subtasks[1].Completed {
+		t.Errorf("expected subtask completion states [true, false], got %+v", dupParent.Subtasks)
+	}
+
+	// Verify duplicated subtask content is preserved on disk even with SQLite cache enabled
+	dupSub1, err := store.GetTaskByID(dupParent.Subtasks[0].ID)
+	if err != nil {
+		t.Fatalf("failed to load duplicated subtask 1: %v", err)
+	}
+	if dupSub1.ParentID != dupParent.ID ||
+		dupSub1.Title != "Subtask A" ||
+		dupSub1.Content != "Full markdown body for subtask A" {
+		t.Errorf("unexpected duplicated subtask 1: %+v", dupSub1)
+	}
+
+	// Deleting duplicated parent must NOT affect original parent or original subtasks
+	reqDel := httptest.NewRequest("DELETE", "/api/tasks/"+dupParent.ID, nil)
+	wDel := httptest.NewRecorder()
+	mux.ServeHTTP(wDel, reqDel)
+	if wDel.Code != http.StatusNoContent {
+		t.Fatalf("expected 204 No Content, got %d", wDel.Code)
+	}
+
+	origSubs, err := store.GetSubtasksByParentID(parent.ID)
+	if err != nil || len(origSubs) != 2 {
+		t.Fatalf(
+			"expected original 2 subtasks intact after deleting duplicate, got %v (err=%v)",
+			origSubs,
+			err,
+		)
+	}
+
+	// Duplicate with include_subtasks=false
+	reqNoSubs := httptest.NewRequest(
+		"POST",
+		"/api/tasks/"+parent.ID+"/duplicate",
+		bytes.NewBufferString(`{"include_subtasks":false}`),
+	)
+	wNoSubs := httptest.NewRecorder()
+	mux.ServeHTTP(wNoSubs, reqNoSubs)
+	if wNoSubs.Code != http.StatusCreated {
+		t.Fatalf("expected 201 Created, got %d", wNoSubs.Code)
+	}
+	var dupNoSubs model.Task
+	if err := json.NewDecoder(wNoSubs.Body).Decode(&dupNoSubs); err != nil {
+		t.Fatalf("failed to decode dupNoSubs: %v", err)
+	}
+	if len(dupNoSubs.Subtasks) != 0 || dupNoSubs.SubtasksCount != 0 {
+		t.Errorf("expected 0 subtasks when include_subtasks=false, got %+v", dupNoSubs.Subtasks)
+	}
+}
+
+func TestDuplicateSubtaskAndErrors(t *testing.T) {
+	tempDir := t.TempDir()
+	store, err := markdown.NewStore(tempDir)
+	if err != nil {
+		t.Fatalf("failed to create store: %v", err)
+	}
+
+	parent := &model.Task{Title: "Parent", ColumnID: "col-todo", Rank: "0|i0000i"}
+	if err := store.SaveTask(parent); err != nil {
+		t.Fatalf("failed to save parent: %v", err)
+	}
+	sub1 := &model.Task{ParentID: parent.ID, Title: "Sub 1", Rank: "0|a", Content: "Sub 1 body"}
+	sub2 := &model.Task{ParentID: parent.ID, Title: "Sub 2", Rank: "0|z", Content: "Sub 2 body"}
+	if err := store.SaveTask(sub1); err != nil {
+		t.Fatalf("failed to save sub1: %v", err)
+	}
+	if err := store.SaveTask(sub2); err != nil {
+		t.Fatalf("failed to save sub2: %v", err)
+	}
+	parent.Subtasks = []model.SubtaskRef{
+		{ID: sub1.ID, Completed: true},
+		{ID: sub2.ID, Completed: false},
+	}
+	if err := store.SaveTask(parent); err != nil {
+		t.Fatalf("failed to save parent subtasks: %v", err)
+	}
+
+	server := NewServer(store, nil)
+	mux := http.NewServeMux()
+	server.RegisterRoutes(mux)
+
+	// Duplicate sub1 -> becomes sibling immediately after sub1 in parent's Subtasks
+	req := httptest.NewRequest(
+		"POST",
+		"/api/tasks/"+sub1.ID+"/duplicate",
+		bytes.NewBufferString(`{"title":"Sub 1 (Copy)"}`),
+	)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201 Created, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var dupSub model.Task
+	if err := json.NewDecoder(w.Body).Decode(&dupSub); err != nil {
+		t.Fatalf("failed to decode duplicated subtask: %v", err)
+	}
+	if dupSub.ParentID != parent.ID {
+		t.Errorf("expected duplicated subtask ParentID %q, got %q", parent.ID, dupSub.ParentID)
+	}
+	if !dupSub.Completed {
+		t.Errorf("expected duplicated subtask to preserve completed=true")
+	}
+
+	reloadedParent, err := store.GetTaskByID(parent.ID)
+	if err != nil {
+		t.Fatalf("failed to reload parent: %v", err)
+	}
+	if len(reloadedParent.Subtasks) != 3 ||
+		reloadedParent.Subtasks[0].ID != sub1.ID ||
+		reloadedParent.Subtasks[1].ID != dupSub.ID ||
+		!reloadedParent.Subtasks[1].Completed ||
+		reloadedParent.Subtasks[2].ID != sub2.ID {
+		t.Errorf("unexpected parent subtasks after duplicating sub1: %+v", reloadedParent.Subtasks)
+	}
+
+	// Error: 404 Not Found
+	req404 := httptest.NewRequest("POST", "/api/tasks/nonexistent-id/duplicate", nil)
+	w404 := httptest.NewRecorder()
+	mux.ServeHTTP(w404, req404)
+	if w404.Code != http.StatusNotFound {
+		t.Errorf("expected 404 for unknown task ID, got %d", w404.Code)
+	}
+
+	// Error: 400 Bad Request for malformed JSON
+	req400 := httptest.NewRequest(
+		"POST",
+		"/api/tasks/"+parent.ID+"/duplicate",
+		bytes.NewBufferString(`{invalid json`),
+	)
+	w400 := httptest.NewRecorder()
+	mux.ServeHTTP(w400, req400)
+	if w400.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for malformed JSON, got %d", w400.Code)
+	}
+}

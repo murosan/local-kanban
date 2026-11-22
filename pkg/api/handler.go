@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"os"
 	"slices"
@@ -44,6 +45,7 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/tasks", s.handleGetTasks)
 	mux.HandleFunc("GET /api/tasks/{id}", s.handleGetTask)
 	mux.HandleFunc("POST /api/tasks", s.handleCreateTask)
+	mux.HandleFunc("POST /api/tasks/{id}/duplicate", s.handleDuplicateTask)
 	mux.HandleFunc("PUT /api/tasks/{id}", s.handleUpdateTask)
 	mux.HandleFunc("DELETE /api/tasks/{id}", s.handleDeleteTask)
 	mux.HandleFunc("GET /api/tags", s.handleGetTags)
@@ -325,6 +327,178 @@ func (s *Server) handleCreateTask(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondJSON(w, http.StatusCreated, task)
+}
+
+type DuplicateTaskPayload struct {
+	Title           string `json:"title,omitempty"`
+	ColumnID        string `json:"column_id,omitempty"`
+	IncludeSubtasks *bool  `json:"include_subtasks,omitempty"`
+}
+
+func (s *Server) handleDuplicateTask(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		respondError(w, http.StatusBadRequest, "Task ID required")
+		return
+	}
+
+	original, err := s.store.GetTaskByID(id)
+	if err != nil {
+		respondError(w, http.StatusNotFound, "Task not found")
+		return
+	}
+
+	var payload DuplicateTaskPayload
+	if r.Body != nil {
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil && !errors.Is(err, io.EOF) {
+			respondError(w, http.StatusBadRequest, "Invalid payload")
+			return
+		}
+	}
+
+	newTitle := strings.TrimSpace(payload.Title)
+	if newTitle == "" {
+		newTitle = original.Title + " (Copy)"
+	}
+
+	targetColumnID := strings.TrimSpace(payload.ColumnID)
+	if targetColumnID == "" {
+		targetColumnID = original.ColumnID
+	}
+
+	includeSubtasks := true
+	if payload.IncludeSubtasks != nil {
+		includeSubtasks = *payload.IncludeSubtasks
+	}
+
+	var rank string
+	originalCompleted := false
+	if original.ParentID != "" {
+		siblings, _ := s.store.GetSubtasksByParentID(original.ParentID)
+		foundIdx := -1
+		for i, sib := range siblings {
+			if sib.ID == original.ID {
+				foundIdx = i
+				originalCompleted = sib.Completed
+				break
+			}
+		}
+		switch {
+		case foundIdx != -1:
+			nextRank := ""
+			if foundIdx+1 < len(siblings) {
+				nextRank = siblings[foundIdx+1].Rank
+			}
+			rank = lexorank.Between(original.Rank, nextRank)
+		case len(siblings) > 0:
+			rank = lexorank.Between(siblings[len(siblings)-1].Rank, "")
+		default:
+			rank = lexorank.InitialRank
+		}
+	} else {
+		prevID := ""
+		nextID := ""
+		if targetColumnID == original.ColumnID && targetColumnID != "" {
+			colTasks, _ := s.store.GetColumnTasks(targetColumnID)
+			for i, colTask := range colTasks {
+				if colTask.ID == original.ID {
+					prevID = original.ID
+					if i+1 < len(colTasks) {
+						nextID = colTasks[i+1].ID
+					}
+					break
+				}
+			}
+		}
+		rank, err = s.calculateRank(targetColumnID, "", prevID, nextID)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+	}
+
+	duplicated := &model.Task{
+		ParentID:     original.ParentID,
+		Title:        newTitle,
+		ColumnID:     targetColumnID,
+		Rank:         rank,
+		Tags:         slices.Clone(original.Tags),
+		CustomFields: model.CloneCustomFields(original.CustomFields),
+		Content:      original.Content,
+	}
+
+	if err := s.store.SaveTask(duplicated); err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	if original.ParentID != "" {
+		if err := s.store.InsertSubtaskLinkAfter(
+			original.ParentID,
+			original.ID,
+			duplicated.ID,
+			originalCompleted,
+		); err != nil {
+			_ = s.store.DeleteTask(duplicated.ID)
+			respondError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		duplicated.Completed = originalCompleted
+	} else if includeSubtasks {
+		if origSubtasks, subErr := s.store.GetSubtasksByParentID(
+			original.ID,
+		); subErr == nil && len(origSubtasks) > 0 {
+			subRanks := lexorank.GenerateRanks(len(origSubtasks))
+			newSubRefs := make([]model.SubtaskRef, 0, len(origSubtasks))
+			createdSubIDs := make([]string, 0, len(origSubtasks))
+
+			cleanup := func() {
+				for _, subID := range createdSubIDs {
+					_ = s.store.DeleteTask(subID)
+				}
+				_ = s.store.DeleteTask(duplicated.ID)
+			}
+
+			for i, subMeta := range origSubtasks {
+				fullSub, loadErr := s.store.GetTaskByID(subMeta.ID)
+				if loadErr != nil || fullSub == nil {
+					continue
+				}
+				dupSub := &model.Task{
+					ParentID:     duplicated.ID,
+					Title:        fullSub.Title,
+					ColumnID:     fullSub.ColumnID,
+					Rank:         subRanks[i],
+					Tags:         slices.Clone(fullSub.Tags),
+					CustomFields: model.CloneCustomFields(fullSub.CustomFields),
+					Content:      fullSub.Content,
+				}
+				if saveErr := s.store.SaveTask(dupSub); saveErr != nil {
+					cleanup()
+					respondError(w, http.StatusInternalServerError, saveErr.Error())
+					return
+				}
+				createdSubIDs = append(createdSubIDs, dupSub.ID)
+				newSubRefs = append(newSubRefs, model.SubtaskRef{
+					ID:        dupSub.ID,
+					Completed: subMeta.Completed,
+				})
+			}
+
+			if len(newSubRefs) > 0 {
+				duplicated.Subtasks = newSubRefs
+				if saveErr := s.store.SaveTask(duplicated); saveErr != nil {
+					cleanup()
+					respondError(w, http.StatusInternalServerError, saveErr.Error())
+					return
+				}
+			}
+		}
+	}
+
+	s.attachSubtaskDetails(duplicated)
+
+	respondJSON(w, http.StatusCreated, duplicated)
 }
 
 type UpdateTaskPayload struct {

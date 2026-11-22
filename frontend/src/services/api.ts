@@ -115,6 +115,28 @@ export async function deleteTask(id: string): Promise<void> {
 	if (!res.ok) throw await parseApiError(res, "Failed to delete task");
 }
 
+export interface DuplicateTaskPayload {
+	title?: string;
+	column_id?: string;
+	include_subtasks?: boolean;
+}
+
+export async function duplicateTask(
+	id: string,
+	payload?: DuplicateTaskPayload,
+): Promise<Task> {
+	const res = await fetch(
+		`${API_BASE}/tasks/${encodeURIComponent(id)}/duplicate`,
+		{
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: payload ? JSON.stringify(payload) : undefined,
+		},
+	);
+	if (!res.ok) throw await parseApiError(res, "Failed to duplicate task");
+	return res.json();
+}
+
 export async function rebuildCache(): Promise<{
 	message: string;
 	count: number;

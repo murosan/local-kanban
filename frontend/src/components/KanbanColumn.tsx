@@ -22,6 +22,7 @@ interface KanbanColumnProps {
 		fieldId: string,
 		itemId: string,
 	) => Promise<void> | void;
+	onDuplicateTask?: (task: Task) => Promise<Task | null>;
 	onAddCard?: (columnId: string) => void;
 }
 
@@ -34,6 +35,7 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
 	onSubtaskToggle,
 	onAddSubtask,
 	onChecklistItemToggle,
+	onDuplicateTask,
 	onAddCard,
 }) => {
 	const { t } = useI18n();
@@ -100,6 +102,7 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
 							onSubtaskToggle={onSubtaskToggle}
 							onAddSubtask={onAddSubtask}
 							onChecklistItemToggle={onChecklistItemToggle}
+							onDuplicate={onDuplicateTask}
 						/>
 					))}
 				</SortableContext>

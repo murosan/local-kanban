@@ -5,6 +5,7 @@ import {
 	ChevronDown,
 	ChevronRight,
 	Clock,
+	CopyPlus,
 	ExternalLink,
 	Link2,
 	ListTree,
@@ -31,6 +32,7 @@ interface TaskCardProps {
 		fieldId: string,
 		itemId: string,
 	) => Promise<void> | void;
+	onDuplicate?: (task: Task) => Promise<Task | null>;
 	isOverlay?: boolean;
 }
 
@@ -41,11 +43,13 @@ export const TaskCard: React.FC<TaskCardProps> = ({
 	onSubtaskToggle,
 	onAddSubtask,
 	onChecklistItemToggle,
+	onDuplicate,
 	isOverlay,
 }) => {
 	const { t } = useI18n();
 	const cardInstanceId = useId();
 	const [isSubtasksExpanded, setIsSubtasksExpanded] = useState(false);
+	const [isDuplicating, setIsDuplicating] = useState(false);
 	const [newSubtaskTitle, setNewSubtaskTitle] = useState("");
 	const [expandedChecklists, setExpandedChecklists] = useState<
 		Record<string, boolean>
@@ -568,7 +572,32 @@ export const TaskCard: React.FC<TaskCardProps> = ({
 			)}
 
 			{/* Footer Info */}
-			<div className="flex items-center justify-end mt-3.5 pt-2.5 border-t border-[var(--border-color)] text-xs text-[var(--text-secondary)]">
+			<div className="flex items-center justify-between gap-2 mt-3.5 pt-2.5 border-t border-[var(--border-color)] text-xs text-[var(--text-secondary)]">
+				{onDuplicate && !isOverlay ? (
+					<button
+						type="button"
+						disabled={isDuplicating}
+						onPointerDown={(e) => e.stopPropagation()}
+						onClick={async (e) => {
+							e.stopPropagation();
+							if (isDuplicating) return;
+							setIsDuplicating(true);
+							try {
+								await onDuplicate(task);
+							} finally {
+								setIsDuplicating(false);
+							}
+						}}
+						aria-label={t("taskCard.duplicate")}
+						title={t("taskCard.duplicate")}
+						className="inline-flex items-center space-x-1 px-1.5 py-0.5 -ml-1.5 rounded-md text-[11px] font-medium text-[var(--text-muted)] hover:text-blue-500 hover:bg-[var(--bg-input)] focus-visible:outline-2 focus-visible:outline-blue-500 opacity-70 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 focus-visible:opacity-100 transition-all cursor-pointer disabled:opacity-50"
+					>
+						<CopyPlus className="w-3.5 h-3.5" aria-hidden="true" />
+						<span>{t("taskModal.duplicate")}</span>
+					</button>
+				) : (
+					<span />
+				)}
 				<div className="flex items-center space-x-1 text-[var(--text-muted)] font-mono text-[10px]">
 					<Clock className="w-3 h-3" />
 					<span>{formattedDate}</span>

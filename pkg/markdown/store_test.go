@@ -786,3 +786,42 @@ func TestConcurrentGetVisibleColumnIDsWithLegacyConfig(t *testing.T) {
 		<-done
 	}
 }
+
+func TestInsertSubtaskLinkAfter(t *testing.T) {
+	tmpDir := t.TempDir()
+	store, err := NewStore(tmpDir)
+	if err != nil {
+		t.Fatalf("failed to init store: %v", err)
+	}
+
+	parent := &model.Task{
+		Title:    "Parent",
+		ColumnID: "col-todo",
+		Rank:     "0|a",
+		Subtasks: []model.SubtaskRef{
+			{ID: "sub-1", Completed: true},
+			{ID: "sub-2", Completed: false},
+		},
+	}
+	if err := store.SaveTask(parent); err != nil {
+		t.Fatalf("failed to save parent: %v", err)
+	}
+
+	if err := store.InsertSubtaskLinkAfter(parent.ID, "sub-1", "sub-1-copy", true); err != nil {
+		t.Fatalf("InsertSubtaskLinkAfter failed: %v", err)
+	}
+
+	reloaded, err := store.GetTaskByID(parent.ID)
+	if err != nil {
+		t.Fatalf("GetTaskByID failed: %v", err)
+	}
+	if len(reloaded.Subtasks) != 3 {
+		t.Fatalf("expected 3 subtasks, got %d", len(reloaded.Subtasks))
+	}
+	if reloaded.Subtasks[0].ID != "sub-1" ||
+		reloaded.Subtasks[1].ID != "sub-1-copy" ||
+		!reloaded.Subtasks[1].Completed ||
+		reloaded.Subtasks[2].ID != "sub-2" {
+		t.Errorf("unexpected subtask order: %+v", reloaded.Subtasks)
+	}
+}

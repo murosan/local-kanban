@@ -15,6 +15,7 @@ import { useI18n } from "./i18n/useI18n";
 import {
 	createTask,
 	deleteTask,
+	duplicateTask,
 	fetchBoardConfig,
 	fetchTags,
 	fetchTasks,
@@ -31,6 +32,7 @@ import type {
 	ThemeConfig,
 } from "./types/task";
 import { normalizeChecklistItems } from "./utils/checklistField";
+import { buildDuplicateTitle } from "./utils/duplicateTitle";
 
 export const App: React.FC = () => {
 	const { language, t } = useI18n();
@@ -333,6 +335,35 @@ export const App: React.FC = () => {
 		}
 	};
 
+	const handleDuplicateTask = async (
+		task: Task,
+		options?: { openAfterDuplicate?: boolean },
+	): Promise<Task | null> => {
+		try {
+			const duplicatedTitle = buildDuplicateTitle(
+				task.title,
+				t("taskModal.duplicateSuffix"),
+			);
+			const duplicated = await duplicateTask(task.id, {
+				title: duplicatedTitle,
+			});
+			addToast(t("common.duplicated") || "Card duplicated", "success");
+			await loadData();
+			if (options?.openAfterDuplicate) {
+				setSelectedTask(duplicated);
+				setIsTaskModalOpen(true);
+			}
+			return duplicated;
+		} catch (err) {
+			console.error("Error duplicating task:", err);
+			addToast(
+				t("common.duplicateFailed") || "Failed to duplicate card",
+				"error",
+			);
+			return null;
+		}
+	};
+
 	const handleDeleteTask = async (id: string) => {
 		try {
 			await deleteTask(id);
@@ -441,6 +472,7 @@ export const App: React.FC = () => {
 					onSubtaskToggle={handleSubtaskToggle}
 					onAddSubtask={handleAddSubtask}
 					onChecklistItemToggle={handleChecklistItemToggle}
+					onDuplicateTask={(task) => handleDuplicateTask(task)}
 					onAddCard={(columnId) => handleOpenNewCardModal(columnId)}
 				/>
 			</main>
@@ -469,6 +501,9 @@ export const App: React.FC = () => {
 					onClose={() => setIsTaskModalOpen(false)}
 					onSave={handleSaveTask}
 					onRefresh={loadData}
+					onDuplicate={(task) =>
+						handleDuplicateTask(task, { openAfterDuplicate: true })
+					}
 					onDelete={handleDeleteTask}
 					onOpenTask={(task) => setSelectedTask(task)}
 				/>

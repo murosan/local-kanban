@@ -6,6 +6,7 @@ import {
 	Clock,
 	Columns,
 	Copy,
+	CopyPlus,
 	FileText,
 	Loader2,
 	Maximize2,
@@ -27,6 +28,7 @@ import type {
 	Task,
 } from "../types/task";
 import { copyTextToClipboard } from "../utils/copyCommand";
+import { ActionMenu, type ActionMenuGroup } from "./ActionMenu";
 import { type ChangeOptions, MarkdownEditor } from "./MarkdownEditor";
 import { TagInput } from "./TagInput";
 import { CustomFieldsSection } from "./taskModal/CustomFieldsSection";
@@ -47,6 +49,7 @@ interface TaskModalProps {
 		options?: { silent?: boolean },
 	) => Promise<void>;
 	onRefresh?: () => Promise<void> | void;
+	onDuplicate?: (task: Task) => Promise<Task | null>;
 	onDelete?: (id: string) => Promise<void>;
 	onOpenTask?: (task: Task) => void;
 }
@@ -73,6 +76,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 	onClose,
 	onSave,
 	onRefresh,
+	onDuplicate,
 	onDelete,
 	onOpenTask,
 }) => {
@@ -95,6 +99,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 
 	const [saveStatus, setSaveStatus] = useState<SaveStatus>("saved");
 	const [isSaving, setIsSaving] = useState(false);
+	const [isDuplicating, setIsDuplicating] = useState(false);
 	const [isLoadingContent, setIsLoadingContent] = useState(false);
 	const [isMaximized, setIsMaximized] = useState(false);
 	const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -116,7 +121,6 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 	const [canUndo, setCanUndo] = useState(false);
 	const [canRedo, setCanRedo] = useState(false);
 
-	const menuRef = useRef<HTMLDivElement>(null);
 	const isDraggingCustomFieldRef = useRef(false);
 	const historyRef = useRef<FormState[]>([]);
 	const historyIndexRef = useRef<number>(-1);
@@ -275,20 +279,6 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 		},
 		[flushPendingSave, onOpenTask],
 	);
-
-	// Close kebab menu on click outside
-	useEffect(() => {
-		if (!isMenuOpen) return;
-		const handleClickOutside = (event: MouseEvent) => {
-			if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-				setIsMenuOpen(false);
-			}
-		};
-		document.addEventListener("mousedown", handleClickOutside);
-		return () => {
-			document.removeEventListener("mousedown", handleClickOutside);
-		};
-	}, [isMenuOpen]);
 
 	const currentTaskId = task?.id;
 
@@ -638,6 +628,18 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 		}
 	};
 
+	const handleDuplicate = async () => {
+		if (!task || !onDuplicate || isDuplicating) return;
+		setIsDuplicating(true);
+		try {
+			await flushPendingSave();
+			const latestTitle = latestStateRef.current.title.trim() || task.title;
+			await onDuplicate({ ...task, title: latestTitle });
+		} finally {
+			setIsDuplicating(false);
+		}
+	};
+
 	const handleDelete = async () => {
 		if (!task || !onDelete) return;
 		if (confirm(t("taskModal.deleteConfirm"))) {
@@ -650,6 +652,39 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 			}
 		}
 	};
+
+	const actionMenuGroups: ActionMenuGroup[] = [];
+	if (task && onDuplicate) {
+		actionMenuGroups.push({
+			id: "actions",
+			items: [
+				{
+					id: "duplicate",
+					label: isDuplicating
+						? t("taskModal.duplicating")
+						: t("taskModal.duplicate"),
+					icon: <CopyPlus className="w-4 h-4" />,
+					disabled: isSaving || isDuplicating,
+					onSelect: handleDuplicate,
+				},
+			],
+		});
+	}
+	if (task && onDelete) {
+		actionMenuGroups.push({
+			id: "danger",
+			items: [
+				{
+					id: "delete",
+					label: t("taskModal.delete"),
+					icon: <Trash2 className="w-4 h-4" />,
+					disabled: isSaving || isDuplicating,
+					variant: "danger",
+					onSelect: handleDelete,
+				},
+			],
+		});
+	}
 
 	const handleRefreshBoard = async () => {
 		await onRefresh?.();
@@ -752,34 +787,13 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 								</button>
 							)}
 
-							{task && onDelete && (
-								<div className="relative" ref={menuRef}>
-									<button
-										type="button"
-										onClick={() => setIsMenuOpen((prev) => !prev)}
-										className="text-[var(--text-secondary)] hover:opacity-80 p-1.5 rounded-lg transition-colors flex items-center justify-center"
-										title="操作メニュー"
-									>
-										<MoreVertical className="w-5 h-5" />
-									</button>
-
-									{isMenuOpen && (
-										<div className="absolute right-0 mt-2 w-36 bg-[var(--modal-bg)] border border-[var(--border-color)] rounded-xl shadow-xl py-1 z-20 animate-in fade-in duration-150">
-											<button
-												type="button"
-												onClick={() => {
-													setIsMenuOpen(false);
-													void handleDelete();
-												}}
-												disabled={isSaving}
-												className="w-full flex items-center space-x-2 px-3.5 py-2 text-xs font-semibold text-rose-500 hover:bg-rose-500/10 transition-colors text-left"
-											>
-												<Trash2 className="w-4 h-4" />
-												<span>{t("taskModal.delete")}</span>
-											</button>
-										</div>
-									)}
-								</div>
+							{task && actionMenuGroups.length > 0 && (
+								<ActionMenu
+									triggerLabel={t("taskModal.actionsMenu")}
+									triggerIcon={<MoreVertical className="w-5 h-5" />}
+									groups={actionMenuGroups}
+									onOpenChange={setIsMenuOpen}
+								/>
 							)}
 
 							<button
