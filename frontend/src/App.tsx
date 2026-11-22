@@ -279,14 +279,11 @@ export const App: React.FC = () => {
 	};
 
 	const handleAddSubtask = async (parentId: string, title: string) => {
-		if (!config || config.columns.length === 0) return;
-		const parentTask = tasks.find((t) => t.id === parentId);
-		const targetColumn = parentTask?.column_id || config.columns[0].id;
 		try {
 			await createTask({
 				parent_id: parentId,
 				title,
-				column_id: targetColumn,
+				column_id: "",
 			});
 			addToast(t("common.created") || "Subtask created", "success");
 			await loadData();

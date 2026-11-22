@@ -118,6 +118,13 @@ func (s *Server) handleGetTasks(w http.ResponseWriter, r *http.Request) {
 		}
 		if _, exists := taskByID[taskID]; exists {
 			matchedRootIDs[taskID] = true
+			return
+		}
+		// Handle subtasks with empty/hidden column_id not present in visible tasks
+		if sub, err := s.store.GetTaskByID(taskID); err == nil && sub != nil && sub.ParentID != "" {
+			if _, exists := taskByID[sub.ParentID]; exists {
+				matchedRootIDs[sub.ParentID] = true
+			}
 		}
 	}
 
@@ -139,6 +146,20 @@ func (s *Server) handleGetTasks(w http.ResponseWriter, r *http.Request) {
 			for _, t := range tasks {
 				if matchesTaskQuery(t, query) {
 					markMatchedTask(matchedRootIDs, t.ID)
+				}
+			}
+			// Also check subtasks of visible root tasks (subtasks may have empty column_id)
+			for _, t := range tasks {
+				if childIDs[t.ID] || matchedRootIDs[t.ID] {
+					continue
+				}
+				if subs, err := s.store.GetSubtasksByParentID(t.ID); err == nil {
+					for _, sub := range subs {
+						if matchesTaskQuery(sub, query) {
+							matchedRootIDs[t.ID] = true
+							break
+						}
+					}
 				}
 			}
 		}
@@ -256,16 +277,10 @@ func (s *Server) handleCreateTask(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	colID := payload.ColumnID
-	if colID == "" {
-		if payload.ParentID != "" {
-			if parent, err := s.store.GetTaskByID(payload.ParentID); err == nil && parent != nil {
-				colID = parent.ColumnID
-			}
-		}
-		if colID == "" {
-			colID = "col-todo"
-		}
+	colID := strings.TrimSpace(payload.ColumnID)
+	if payload.ParentID == "" && colID == "" {
+		respondError(w, http.StatusBadRequest, "column_id is required")
+		return
 	}
 
 	// Calculate LexoRank

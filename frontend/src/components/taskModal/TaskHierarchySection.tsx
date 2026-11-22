@@ -38,12 +38,19 @@ import { SortableSubtaskItem } from "./SortableSubtaskItem";
 interface TaskHierarchySectionProps {
 	task: Task;
 	columns: Column[];
+	currentColumnId: string;
 	currentParentId: string | undefined;
 	parentTask: Task | null;
 	subtasks: Task[];
 	subtaskActionTarget: Task | null;
 	onSetSubtaskActionTarget: (target: Task | null) => void;
-	onParentChange: (newParentId: string, newParentTask: Task | null) => void;
+	isUnlinkParentModalOpen: boolean;
+	onSetIsUnlinkParentModalOpen: (open: boolean) => void;
+	onParentChange: (
+		newParentId: string,
+		newParentTask: Task | null,
+		newColumnId?: string,
+	) => void;
 	onSubtasksChange: React.Dispatch<React.SetStateAction<Task[]>>;
 	onReloadHierarchy: (overrideParentId?: string) => Promise<void>;
 	onSaveSubtasks: (
@@ -57,11 +64,14 @@ interface TaskHierarchySectionProps {
 export const TaskHierarchySection: React.FC<TaskHierarchySectionProps> = ({
 	task,
 	columns,
+	currentColumnId,
 	currentParentId,
 	parentTask,
 	subtasks,
 	subtaskActionTarget,
 	onSetSubtaskActionTarget,
+	isUnlinkParentModalOpen,
+	onSetIsUnlinkParentModalOpen,
 	onParentChange,
 	onSubtasksChange,
 	onReloadHierarchy,
@@ -81,6 +91,30 @@ export const TaskHierarchySection: React.FC<TaskHierarchySectionProps> = ({
 	const [isAddingNewSubtask, setIsAddingNewSubtask] = useState(false);
 	const [isLinkingExistingOpen, setIsLinkingExistingOpen] = useState(false);
 	const [isChangingParentOpen, setIsChangingParentOpen] = useState(false);
+	const [unlinkSubtaskColumnId, setUnlinkSubtaskColumnId] = useState("");
+	const [unlinkParentColumnId, setUnlinkParentColumnId] = useState("");
+
+	const hasValidColumn = (colId?: string) =>
+		Boolean(colId && columns.some((c) => c.id === colId));
+
+	const getDefaultUnlinkColumnId = (preferredColumnId?: string) => {
+		if (preferredColumnId && columns.some((c) => c.id === preferredColumnId)) {
+			return preferredColumnId;
+		}
+		return columns[0]?.id || "";
+	};
+
+	const needsColumnForSubtaskUnlink = Boolean(
+		subtaskActionTarget && !hasValidColumn(subtaskActionTarget.column_id),
+	);
+	const selectedSubtaskUnlinkColumnId = hasValidColumn(unlinkSubtaskColumnId)
+		? unlinkSubtaskColumnId
+		: getDefaultUnlinkColumnId(task.column_id);
+
+	const needsColumnForParentUnlink = !hasValidColumn(currentColumnId);
+	const selectedParentUnlinkColumnId = hasValidColumn(unlinkParentColumnId)
+		? unlinkParentColumnId
+		: getDefaultUnlinkColumnId(parentTask?.column_id);
 
 	// Auto-expand when hierarchy data arrives for the current task
 	const hasHierarchy = Boolean(currentParentId || subtasks.length > 0);
@@ -110,7 +144,7 @@ export const TaskHierarchySection: React.FC<TaskHierarchySectionProps> = ({
 			await createTask({
 				parent_id: task.id,
 				title: titleToAdd,
-				column_id: task.column_id || columns[0]?.id || "col-todo",
+				column_id: "",
 			});
 			setNewSubtaskInput("");
 			await onReloadHierarchy();
@@ -141,12 +175,19 @@ export const TaskHierarchySection: React.FC<TaskHierarchySectionProps> = ({
 		}
 	};
 
-	const handleUnlinkSubtask = async (sub: Task) => {
+	const handleUnlinkSubtask = async (sub: Task, columnIdToSet?: string) => {
 		const remainingSubtasks = subtasks.filter((s) => s.id !== sub.id);
 		onSubtasksChange(remainingSubtasks);
 		onSetSubtaskActionTarget(null);
+		setUnlinkSubtaskColumnId("");
 		try {
-			await updateTask(sub.id, { parent_id: "" });
+			const payload: { parent_id: string; column_id?: string } = {
+				parent_id: "",
+			};
+			if (columnIdToSet) {
+				payload.column_id = columnIdToSet;
+			}
+			await updateTask(sub.id, payload);
 			await onReloadHierarchy();
 			await onRefreshBoard();
 		} catch (err) {
@@ -229,23 +270,32 @@ export const TaskHierarchySection: React.FC<TaskHierarchySectionProps> = ({
 		}
 	};
 
-	const handleUnlinkParent = async () => {
-		if (
-			window.confirm(
-				t("taskModal.unlinkParentConfirm") ||
-					"親タスクとの紐付けを解除して単独カードに戻しますか？",
-			)
-		) {
-			try {
-				await updateTask(task.id, { parent_id: "" });
-				onParentChange("", null);
-				setInputParentId("");
-				setIsChangingParentOpen(false);
-				await onReloadHierarchy("");
-				await onRefreshBoard();
-			} catch (err) {
-				console.error("Failed to unlink parent:", err);
+	const handleUnlinkParent = () => {
+		setUnlinkParentColumnId(getDefaultUnlinkColumnId(parentTask?.column_id));
+		onSetIsUnlinkParentModalOpen(true);
+	};
+
+	const handleConfirmUnlinkParent = async () => {
+		const colToSet = needsColumnForParentUnlink
+			? selectedParentUnlinkColumnId
+			: undefined;
+		try {
+			const payload: { parent_id: string; column_id?: string } = {
+				parent_id: "",
+			};
+			if (colToSet) {
+				payload.column_id = colToSet;
 			}
+			await updateTask(task.id, payload);
+			onParentChange("", null, colToSet);
+			setInputParentId("");
+			setIsChangingParentOpen(false);
+			onSetIsUnlinkParentModalOpen(false);
+			setUnlinkParentColumnId("");
+			await onReloadHierarchy("");
+			await onRefreshBoard();
+		} catch (err) {
+			console.error("Failed to unlink parent:", err);
 		}
 	};
 
@@ -648,7 +698,10 @@ export const TaskHierarchySection: React.FC<TaskHierarchySectionProps> = ({
 							</div>
 							<button
 								type="button"
-								onClick={() => onSetSubtaskActionTarget(null)}
+								onClick={() => {
+									onSetSubtaskActionTarget(null);
+									setUnlinkSubtaskColumnId("");
+								}}
 								className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] p-1 rounded-lg transition-colors cursor-pointer"
 							>
 								<X className="w-4 h-4" />
@@ -662,23 +715,76 @@ export const TaskHierarchySection: React.FC<TaskHierarchySectionProps> = ({
 						</p>
 
 						<div className="space-y-2 pt-1">
-							<button
-								type="button"
-								onClick={() => handleUnlinkSubtask(subtaskActionTarget)}
-								className="w-full flex items-start space-x-3 p-3 rounded-xl border border-[var(--border-color)] bg-[var(--bg-input)] hover:bg-[var(--bg-card)] hover:border-blue-500/50 transition-all text-left group/action cursor-pointer"
-							>
-								<div className="p-2 rounded-lg bg-blue-500/10 text-blue-500 group-hover/action:scale-105 transition-transform mt-0.5 shrink-0">
-									<Unlink className="w-4 h-4" />
-								</div>
-								<div className="flex-1 min-w-0">
-									<div className="text-xs font-semibold text-[var(--text-primary)]">
-										{t("taskModal.unlinkSubtask")}
+							{needsColumnForSubtaskUnlink && columns.length > 0 ? (
+								<div className="w-full p-3 rounded-xl border border-[var(--border-color)] bg-[var(--bg-input)] space-y-2.5">
+									<div className="flex items-start space-x-3">
+										<div className="p-2 rounded-lg bg-blue-500/10 text-blue-500 mt-0.5 shrink-0">
+											<Unlink className="w-4 h-4" />
+										</div>
+										<div className="flex-1 min-w-0">
+											<div className="text-xs font-semibold text-[var(--text-primary)]">
+												{t("taskModal.unlinkSubtask")}
+											</div>
+											<div className="text-[11px] text-[var(--text-secondary)] mt-0.5">
+												{t("taskModal.unlinkSelectColumnDesc")}
+											</div>
+										</div>
 									</div>
-									<div className="text-[11px] text-[var(--text-secondary)] mt-0.5">
-										{t("taskModal.unlinkSubtaskDesc")}
+									<div className="flex items-center space-x-2 pl-10">
+										<div className="relative flex-1 flex items-center">
+											<select
+												value={selectedSubtaskUnlinkColumnId}
+												onChange={(e) =>
+													setUnlinkSubtaskColumnId(e.target.value)
+												}
+												aria-label={t("taskModal.unlinkColumnLabel")}
+												className="w-full py-1.5 pl-2.5 pr-7 text-xs bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-lg text-[var(--text-primary)] focus:outline-none focus:border-blue-500 appearance-none cursor-pointer font-medium"
+											>
+												{columns.map((col) => (
+													<option
+														key={col.id}
+														value={col.id}
+														className="bg-[var(--modal-bg)] text-[var(--text-primary)]"
+													>
+														{col.name}
+													</option>
+												))}
+											</select>
+											<ChevronDown className="absolute right-2 w-3.5 h-3.5 text-[var(--text-secondary)] pointer-events-none" />
+										</div>
+										<button
+											type="button"
+											onClick={() =>
+												handleUnlinkSubtask(
+													subtaskActionTarget,
+													selectedSubtaskUnlinkColumnId,
+												)
+											}
+											className="px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-500 rounded-lg transition-all cursor-pointer shrink-0"
+										>
+											{t("taskModal.unlinkConfirmButton")}
+										</button>
 									</div>
 								</div>
-							</button>
+							) : (
+								<button
+									type="button"
+									onClick={() => handleUnlinkSubtask(subtaskActionTarget)}
+									className="w-full flex items-start space-x-3 p-3 rounded-xl border border-[var(--border-color)] bg-[var(--bg-input)] hover:bg-[var(--bg-card)] hover:border-blue-500/50 transition-all text-left group/action cursor-pointer"
+								>
+									<div className="p-2 rounded-lg bg-blue-500/10 text-blue-500 group-hover/action:scale-105 transition-transform mt-0.5 shrink-0">
+										<Unlink className="w-4 h-4" />
+									</div>
+									<div className="flex-1 min-w-0">
+										<div className="text-xs font-semibold text-[var(--text-primary)]">
+											{t("taskModal.unlinkSubtask")}
+										</div>
+										<div className="text-[11px] text-[var(--text-secondary)] mt-0.5">
+											{t("taskModal.unlinkSubtaskDesc")}
+										</div>
+									</div>
+								</button>
+							)}
 
 							<button
 								type="button"
@@ -702,10 +808,95 @@ export const TaskHierarchySection: React.FC<TaskHierarchySectionProps> = ({
 						<div className="pt-2 flex justify-end">
 							<button
 								type="button"
-								onClick={() => onSetSubtaskActionTarget(null)}
+								onClick={() => {
+									onSetSubtaskActionTarget(null);
+									setUnlinkSubtaskColumnId("");
+								}}
 								className="px-4 py-1.5 text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] bg-[var(--bg-input)] hover:bg-[var(--bg-card)] border border-[var(--border-color)] rounded-xl transition-all cursor-pointer"
 							>
 								{t("taskModal.cancel")}
+							</button>
+						</div>
+					</div>
+				</div>
+			)}
+
+			{/* Unlink Parent Confirmation Dialog */}
+			{isUnlinkParentModalOpen && (
+				<div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150">
+					<div className="w-full max-w-md bg-[var(--modal-bg)] text-[var(--text-primary)] rounded-2xl border border-[var(--border-color)] shadow-2xl overflow-hidden p-5 space-y-4 animate-in zoom-in-95 duration-150">
+						<div className="flex items-center justify-between">
+							<div className="flex items-center space-x-2">
+								<div className="p-2 rounded-xl bg-blue-500/10 text-blue-500">
+									<Unlink className="w-5 h-5" />
+								</div>
+								<h3 className="text-base font-bold text-[var(--text-primary)]">
+									{t("taskModal.unlinkParent")}
+								</h3>
+							</div>
+							<button
+								type="button"
+								onClick={() => {
+									onSetIsUnlinkParentModalOpen(false);
+									setUnlinkParentColumnId("");
+								}}
+								className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] p-1 rounded-lg transition-colors cursor-pointer"
+							>
+								<X className="w-4 h-4" />
+							</button>
+						</div>
+
+						<p className="text-xs text-[var(--text-secondary)]">
+							{needsColumnForParentUnlink
+								? t("taskModal.unlinkSelectColumnDesc")
+								: t("taskModal.unlinkParentConfirm")}
+						</p>
+
+						{needsColumnForParentUnlink && columns.length > 0 && (
+							<div className="space-y-1.5">
+								<label className="block text-[11px] font-semibold text-[var(--text-secondary)]">
+									{t("taskModal.unlinkColumnLabel")}
+								</label>
+								<div className="relative flex items-center">
+									<select
+										value={selectedParentUnlinkColumnId}
+										onChange={(e) => setUnlinkParentColumnId(e.target.value)}
+										className="w-full py-2 px-3 pr-8 text-sm bg-[var(--bg-input)] border border-[var(--border-color)] rounded-xl text-[var(--text-primary)] focus:outline-none focus:border-blue-500 appearance-none cursor-pointer font-medium"
+									>
+										{columns.map((col) => (
+											<option
+												key={col.id}
+												value={col.id}
+												className="bg-[var(--modal-bg)] text-[var(--text-primary)]"
+											>
+												{col.name}
+											</option>
+										))}
+									</select>
+									<ChevronDown className="absolute right-2.5 w-4 h-4 text-[var(--text-secondary)] pointer-events-none" />
+								</div>
+							</div>
+						)}
+
+						<div className="pt-2 flex justify-end space-x-2">
+							<button
+								type="button"
+								onClick={() => {
+									onSetIsUnlinkParentModalOpen(false);
+									setUnlinkParentColumnId("");
+								}}
+								className="px-4 py-1.5 text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] bg-[var(--bg-input)] hover:bg-[var(--bg-card)] border border-[var(--border-color)] rounded-xl transition-all cursor-pointer"
+							>
+								{t("taskModal.cancel")}
+							</button>
+							<button
+								type="button"
+								onClick={handleConfirmUnlinkParent}
+								className="px-4 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-500 rounded-xl transition-all cursor-pointer"
+							>
+								{needsColumnForParentUnlink
+									? t("taskModal.unlinkConfirmButton")
+									: t("taskModal.unlinkParent")}
 							</button>
 						</div>
 					</div>

@@ -81,9 +81,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 
 	const [title, setTitle] = useState(() => (task ? task.title : ""));
 	const [columnId, setColumnId] = useState<string>(() =>
-		task
-			? task.column_id || initialColumnId
-			: initialColumnId || columns[0]?.id || "",
+		task ? task.column_id || "" : initialColumnId || columns[0]?.id || "",
 	);
 	const [tags, setTags] = useState<string[]>(() =>
 		task?.tags ? [...task.tags] : [],
@@ -112,6 +110,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 	const [subtaskActionTarget, setSubtaskActionTarget] = useState<Task | null>(
 		null,
 	);
+	const [isUnlinkParentModalOpen, setIsUnlinkParentModalOpen] = useState(false);
 	const currentParentId = parentId !== undefined ? parentId : task?.parent_id;
 
 	const [canUndo, setCanUndo] = useState(false);
@@ -210,7 +209,9 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 						id: task.id,
 						parent_id: currentParentId,
 						title: currentState.title.trim(),
-						column_id: currentState.columnId || columns[0]?.id,
+						column_id: currentParentId
+							? currentState.columnId
+							: currentState.columnId || columns[0]?.id,
 						tags: currentState.tags || [],
 						custom_fields: currentState.customFieldsState,
 						content: currentState.content.trimEnd(),
@@ -319,11 +320,12 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 		setIsMenuOpen(false);
 		setIsAddFieldOpen(false);
 		setSubtaskActionTarget(null);
+		setIsUnlinkParentModalOpen(false);
 		contentDirtyRef.current = false;
 
 		const initialTitle = currentTask ? currentTask.title : "";
 		const initialCol = currentTask
-			? currentTask.column_id || initColId
+			? currentTask.column_id || ""
 			: initColId || currentColumns[0]?.id || "";
 		const initialTags = currentTask?.tags ? [...currentTask.tags] : [];
 		const initialContent = currentTask ? currentTask.content || "" : "";
@@ -501,6 +503,10 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 			if (e.key === "Escape") {
 				if (isDraggingCustomFieldRef.current) return;
 				e.preventDefault();
+				if (isUnlinkParentModalOpen) {
+					setIsUnlinkParentModalOpen(false);
+					return;
+				}
 				if (subtaskActionTarget) {
 					setSubtaskActionTarget(null);
 					return;
@@ -541,6 +547,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 		};
 	}, [
 		isOpen,
+		isUnlinkParentModalOpen,
 		subtaskActionTarget,
 		isAddFieldOpen,
 		isMenuOpen,
@@ -828,6 +835,14 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 										onChange={(e) => handleColumnIdChange(e.target.value)}
 										className="w-full py-2 px-3.5 pr-9 text-sm bg-[var(--bg-input)] border border-[var(--border-color)] rounded-xl text-[var(--text-primary)] focus:outline-none focus:border-blue-500 appearance-none cursor-pointer font-medium"
 									>
+										{(Boolean(currentParentId) || !columnId) && (
+											<option
+												value=""
+												className="bg-[var(--modal-bg)] text-[var(--text-muted)]"
+											>
+												-
+											</option>
+										)}
 										{columns.map((col) => (
 											<option
 												key={col.id}
@@ -861,14 +876,30 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 							<TaskHierarchySection
 								task={task}
 								columns={columns}
+								currentColumnId={columnId}
 								currentParentId={currentParentId}
 								parentTask={parentTask}
 								subtasks={subtasks}
 								subtaskActionTarget={subtaskActionTarget}
 								onSetSubtaskActionTarget={setSubtaskActionTarget}
-								onParentChange={(newParentId, newParentTask) => {
+								isUnlinkParentModalOpen={isUnlinkParentModalOpen}
+								onSetIsUnlinkParentModalOpen={setIsUnlinkParentModalOpen}
+								onParentChange={(newParentId, newParentTask, newColumnId) => {
 									setParentId(newParentId);
 									setParentTask(newParentTask);
+									if (newColumnId !== undefined) {
+										setColumnId(newColumnId);
+										latestStateRef.current = {
+											...latestStateRef.current,
+											columnId: newColumnId,
+										};
+										if (historyRef.current[historyIndexRef.current]) {
+											historyRef.current[historyIndexRef.current] = {
+												...historyRef.current[historyIndexRef.current],
+												columnId: newColumnId,
+											};
+										}
+									}
 								}}
 								onSubtasksChange={setSubtasks}
 								onReloadHierarchy={reloadHierarchy}

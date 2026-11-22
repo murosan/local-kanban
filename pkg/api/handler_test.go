@@ -1374,3 +1374,106 @@ func TestPartialUpdateWithCachePreservesContentAndWhitespaceSearch(t *testing.T)
 		t.Fatalf("expected whitespace-only query to return all tasks, got %+v", spaceResults)
 	}
 }
+
+func TestSubtaskEmptyColumnBehavior(t *testing.T) {
+	tmpDir := t.TempDir()
+	store, err := markdown.NewStore(tmpDir)
+	if err != nil {
+		t.Fatalf("failed to create store: %v", err)
+	}
+
+	server := NewServer(store, nil)
+	mux := http.NewServeMux()
+	server.RegisterRoutes(mux)
+
+	// 1. Root task without column_id returns 400 Bad Request
+	rootNoColBody, _ := json.Marshal(map[string]any{"title": "No Column Root"})
+	reqRootNoCol := httptest.NewRequest("POST", "/api/tasks", bytes.NewReader(rootNoColBody))
+	wRootNoCol := httptest.NewRecorder()
+	mux.ServeHTTP(wRootNoCol, reqRootNoCol)
+	if wRootNoCol.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for root task without column_id, got %d", wRootNoCol.Code)
+	}
+
+	// 2. Create parent task with explicit column_id
+	parentBody, _ := json.Marshal(map[string]any{
+		"title":     "Parent Card",
+		"column_id": "col-todo",
+	})
+	reqParent := httptest.NewRequest("POST", "/api/tasks", bytes.NewReader(parentBody))
+	wParent := httptest.NewRecorder()
+	mux.ServeHTTP(wParent, reqParent)
+	if wParent.Code != http.StatusCreated {
+		t.Fatalf("expected 201 for parent, got %d", wParent.Code)
+	}
+	var parent model.Task
+	_ = json.NewDecoder(wParent.Body).Decode(&parent)
+
+	// 3. Create subtask without column_id -> succeeds with empty column_id
+	subBody, _ := json.Marshal(map[string]any{
+		"parent_id": parent.ID,
+		"title":     "UniqueEmptyColSubtask",
+	})
+	reqSub := httptest.NewRequest("POST", "/api/tasks", bytes.NewReader(subBody))
+	wSub := httptest.NewRecorder()
+	mux.ServeHTTP(wSub, reqSub)
+	if wSub.Code != http.StatusCreated {
+		t.Fatalf(
+			"expected 201 for subtask without column_id, got %d: %s",
+			wSub.Code,
+			wSub.Body.String(),
+		)
+	}
+	var sub model.Task
+	_ = json.NewDecoder(wSub.Body).Decode(&sub)
+	if sub.ColumnID != "" {
+		t.Fatalf("expected empty column_id for subtask, got %q", sub.ColumnID)
+	}
+
+	// 4. GET /api/tasks returns parent with subtask attached (and subtask not as root)
+	reqList := httptest.NewRequest("GET", "/api/tasks", nil)
+	wList := httptest.NewRecorder()
+	mux.ServeHTTP(wList, reqList)
+	if wList.Code != http.StatusOK {
+		t.Fatalf("expected 200 GET /api/tasks, got %d", wList.Code)
+	}
+	var list []*model.Task
+	_ = json.NewDecoder(wList.Body).Decode(&list)
+	if len(list) != 1 || list[0].ID != parent.ID || list[0].SubtasksCount != 1 {
+		t.Fatalf("unexpected task list: %+v", list)
+	}
+
+	// 5. Fallback search (no FTS) still finds parent via empty-column subtask title
+	reqSearch := httptest.NewRequest("GET", "/api/tasks?q=UniqueEmptyColSubtask", nil)
+	wSearch := httptest.NewRecorder()
+	mux.ServeHTTP(wSearch, reqSearch)
+	if wSearch.Code != http.StatusOK {
+		t.Fatalf("expected 200 GET /api/tasks?q=..., got %d", wSearch.Code)
+	}
+	var searchList []*model.Task
+	_ = json.NewDecoder(wSearch.Body).Decode(&searchList)
+	if len(searchList) != 1 || searchList[0].ID != parent.ID {
+		t.Fatalf("expected search to match parent via empty-column subtask, got %+v", searchList)
+	}
+
+	// 6. Unlink subtask with explicit column_id -> appears on board as standalone card
+	unlinkBody, _ := json.Marshal(map[string]any{
+		"parent_id": "",
+		"column_id": "col-in-progress",
+	})
+	reqUnlink := httptest.NewRequest("PUT", "/api/tasks/"+sub.ID, bytes.NewReader(unlinkBody))
+	wUnlink := httptest.NewRecorder()
+	mux.ServeHTTP(wUnlink, reqUnlink)
+	if wUnlink.Code != http.StatusOK {
+		t.Fatalf("expected 200 PUT unlink, got %d", wUnlink.Code)
+	}
+
+	reqListAfter := httptest.NewRequest("GET", "/api/tasks", nil)
+	wListAfter := httptest.NewRecorder()
+	mux.ServeHTTP(wListAfter, reqListAfter)
+	var listAfter []*model.Task
+	_ = json.NewDecoder(wListAfter.Body).Decode(&listAfter)
+	if len(listAfter) != 2 {
+		t.Fatalf("expected 2 root tasks after unlink with column_id, got %d", len(listAfter))
+	}
+}

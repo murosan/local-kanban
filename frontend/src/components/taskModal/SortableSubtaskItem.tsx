@@ -80,7 +80,7 @@ export const SortableSubtaskItem: React.FC<SortableSubtaskItemProps> = ({
 				</span>
 			</div>
 			<div className="flex items-center space-x-2 shrink-0">
-				{matchedCol && (
+				{matchedCol ? (
 					<span
 						className="text-[10px] font-semibold px-2 py-0.5 rounded-md border"
 						style={{
@@ -90,6 +90,10 @@ export const SortableSubtaskItem: React.FC<SortableSubtaskItemProps> = ({
 						}}
 					>
 						{matchedCol.name}
+					</span>
+				) : (
+					<span className="text-[10px] font-semibold px-2 py-0.5 rounded-md border border-[var(--border-color)] bg-[var(--bg-surface)] text-[var(--text-muted)]">
+						-
 					</span>
 				)}
 				<button

@@ -149,6 +149,10 @@ export const translations = {
 		"taskModal.unlinkParent": "親タスクを解除",
 		"taskModal.unlinkParentConfirm":
 			"親タスクとの紐付けを解除して単独カードに戻しますか？",
+		"taskModal.unlinkSelectColumnDesc":
+			"カラムが未設定のため、ボードに戻す先のカラムを選択してください。",
+		"taskModal.unlinkColumnLabel": "移動先カラム",
+		"taskModal.unlinkConfirmButton": "解除してボードに戻す",
 		"taskModal.subtaskActionTitle": "サブタスクの操作",
 		"taskModal.subtaskActionDesc":
 			"サブタスク「{title}」に対する操作を選択してください。",
@@ -382,6 +386,10 @@ export const translations = {
 		"taskModal.unlinkParent": "Unlink Parent",
 		"taskModal.unlinkParentConfirm":
 			"Are you sure you want to unlink this task from its parent?",
+		"taskModal.unlinkSelectColumnDesc":
+			"This subtask has no column assigned. Choose a column to return it to the board.",
+		"taskModal.unlinkColumnLabel": "Destination Column",
+		"taskModal.unlinkConfirmButton": "Unlink & Return to Board",
 		"taskModal.subtaskActionTitle": "Subtask Action",
 		"taskModal.subtaskActionDesc": 'Choose an action for subtask "{title}".',
 		"taskModal.unlinkSubtask": "Unlink from Parent Task",
