@@ -70,6 +70,30 @@ func TestExtractCustomFieldsSearchText(t *testing.T) {
 			Enabled: true,
 		},
 		{
+			ID:   "cf-link-list",
+			Name: "関連リンク",
+			Type: FieldTypeLink,
+			Value: []any{
+				map[string]any{
+					"id":    "link-item-1",
+					"label": "設計ドキュメント",
+					"url":   "https://example.com/architecture",
+				},
+				map[string]any{
+					"id":  "link-item-2",
+					"url": "vscode://file/workspace/README.md",
+				},
+			},
+			Enabled: true,
+		},
+		{
+			ID:      "cf-link-empty",
+			Name:    "空リンク",
+			Type:    FieldTypeLink,
+			Value:   []any{},
+			Enabled: true,
+		},
+		{
 			ID:      "cf-chk-true",
 			Name:    "緊急",
 			Type:    FieldTypeCheckbox,
@@ -107,6 +131,7 @@ func TestExtractCustomFieldsSearchText(t *testing.T) {
 		"見積 2.5",
 		"期限 2026-08-28",
 		"リンク https://example.com/spec",
+		"関連リンク 設計ドキュメント https://example.com/architecture vscode://file/workspace/README.md",
 		"緊急",
 		"買い物リスト 牛乳 電動ドライバー",
 	}
@@ -120,12 +145,15 @@ func TestExtractCustomFieldsSearchText(t *testing.T) {
 		"低",
 		"#ef4444",
 		"空フィールド",
+		"空リンク",
 		"非表示フィールド",
 		"シークレット",
 		"確認済み",
 		"true",
 		"false",
 		"item-1",
+		"link-item-1",
+		"link-item-2",
 		"削除済み候補",
 		"preset-priority",
 	}

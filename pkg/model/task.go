@@ -26,6 +26,12 @@ type CustomFieldOption struct {
 	Color string `json:"color,omitempty" yaml:"color,omitempty"`
 }
 
+type LinkItem struct {
+	ID    string `json:"id"              yaml:"id"`
+	URL   string `json:"url"             yaml:"url"`
+	Label string `json:"label,omitempty" yaml:"label,omitempty"`
+}
+
 type CustomFieldDef struct {
 	ID      string              `json:"id"                yaml:"id"`
 	Name    string              `json:"name"              yaml:"name"`
@@ -69,6 +75,16 @@ func ExtractCustomFieldsSearchText(fields []CustomFieldValue) string {
 			fieldParts = append(fieldParts, items...)
 			if len(fieldParts) > 0 {
 				parts = append(parts, strings.Join(fieldParts, " "))
+			}
+		case FieldTypeLink:
+			items := extractLinkSearchTexts(cf.Value)
+			if len(items) == 0 {
+				continue
+			}
+			if name != "" {
+				parts = append(parts, name+" "+strings.Join(items, " "))
+			} else {
+				parts = append(parts, strings.Join(items, " "))
 			}
 		default:
 			if valBool, ok := cf.Value.(bool); ok {
@@ -138,6 +154,64 @@ func extractChecklistSearchTexts(v any) []string {
 						items = append(items, trimmed)
 					}
 				}
+			}
+		}
+	}
+	return items
+}
+
+func extractLinkSearchTexts(v any) []string {
+	var items []string
+	appendNonEmpty := func(s string) {
+		if trimmed := strings.TrimSpace(s); trimmed != "" {
+			items = append(items, trimmed)
+		}
+	}
+	appendFromStringMap := func(m map[string]any) {
+		if label, ok := m["label"].(string); ok {
+			appendNonEmpty(label)
+		}
+		if url, ok := m["url"].(string); ok {
+			appendNonEmpty(url)
+		}
+	}
+	appendFromAnyMap := func(m map[any]any) {
+		if label, ok := m["label"].(string); ok {
+			appendNonEmpty(label)
+		}
+		if url, ok := m["url"].(string); ok {
+			appendNonEmpty(url)
+		}
+	}
+
+	switch val := v.(type) {
+	case string:
+		appendNonEmpty(val)
+	case []string:
+		for _, s := range val {
+			appendNonEmpty(s)
+		}
+	case []LinkItem:
+		for _, item := range val {
+			appendNonEmpty(item.Label)
+			appendNonEmpty(item.URL)
+		}
+	case []map[string]any:
+		for _, m := range val {
+			appendFromStringMap(m)
+		}
+	case []any:
+		for _, elem := range val {
+			switch item := elem.(type) {
+			case string:
+				appendNonEmpty(item)
+			case LinkItem:
+				appendNonEmpty(item.Label)
+				appendNonEmpty(item.URL)
+			case map[string]any:
+				appendFromStringMap(item)
+			case map[any]any:
+				appendFromAnyMap(item)
 			}
 		}
 	}

@@ -433,6 +433,23 @@ func TestSearchFTSCustomFields(t *testing.T) {
 				},
 				Enabled: true,
 			},
+			{
+				ID:   "cf-9",
+				Name: "参考リンク",
+				Type: model.FieldTypeLink,
+				Value: []any{
+					map[string]any{
+						"id":    "link-1",
+						"label": "調達カタログ",
+						"url":   "https://example.com/catalog",
+					},
+					map[string]any{
+						"id":  "link-2",
+						"url": "https://example.com/vendor-portal",
+					},
+				},
+				Enabled: true,
+			},
 		},
 	}
 
@@ -462,6 +479,8 @@ func TestSearchFTSCustomFields(t *testing.T) {
 		{"checklist short 2-char LIKE", "牛乳", []string{"task-cf-2"}},
 		{"checklist long FTS5", "電動ドライバー", []string{"task-cf-2"}},
 		{"checklist unselected options excluded", "不要アイテム", nil},
+		{"link list label FTS5", "調達カタログ", []string{"task-cf-2"}},
+		{"link list URL FTS5", "vendor-portal", []string{"task-cf-2"}},
 	}
 
 	for _, tc := range testCases {

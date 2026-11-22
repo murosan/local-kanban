@@ -119,6 +119,23 @@ export const translations = {
 		"taskModal.noChecklistItems":
 			"チェック項目がありません。「＋」から項目を追加できます。",
 		"taskModal.itemPlaceholder": "チェック項目の内容を入力...",
+		"taskModal.addLinkItem": "＋ リンクを追加",
+		"taskModal.noLinks": "リンクがありません。下のフォームから追加できます。",
+		"taskModal.linkLabelPlaceholder": "表示テキスト（任意）",
+		"taskModal.linkUrlPlaceholder": "URL（https://..., vscode://...）",
+		"taskModal.editLink": "リンクを編集",
+		"taskModal.doneEditLink": "完了",
+		"taskModal.removeLink": "リンクを削除",
+		"taskModal.removeLinkConfirm":
+			'リンク "{name}" を削除してもよろしいですか？',
+		"taskModal.removeLinkConfirmGeneric":
+			"このリンクを削除してもよろしいですか？",
+		"taskModal.copyLink": '"{name}" のURLをコピー',
+		"taskModal.copyFailed": "コピー失敗",
+		"taskModal.openLink": "リンクを開く",
+		"taskModal.emptyLink": "（URL未入力）",
+		"taskModal.invalidUrlError":
+			"有効なURLを入力してください（例: https://example.com, vscode://...）",
 		"taskModal.hierarchyLabel": "サブタスク・親タスク",
 		"taskModal.notSet": "未設定",
 		"taskModal.subtasksLabel": "サブタスク",
@@ -335,6 +352,23 @@ export const translations = {
 		"taskModal.noChecklistItems":
 			'No checklist items. You can add items using "+".',
 		"taskModal.itemPlaceholder": "Enter checklist item...",
+		"taskModal.addLinkItem": "+ Add link",
+		"taskModal.noLinks": "No links yet. Add one using the form below.",
+		"taskModal.linkLabelPlaceholder": "Display text (optional)",
+		"taskModal.linkUrlPlaceholder": "URL (https://..., vscode://...)",
+		"taskModal.editLink": "Edit link",
+		"taskModal.doneEditLink": "Done",
+		"taskModal.removeLink": "Remove link",
+		"taskModal.removeLinkConfirm":
+			'Are you sure you want to remove link "{name}"?',
+		"taskModal.removeLinkConfirmGeneric":
+			"Are you sure you want to remove this link?",
+		"taskModal.copyLink": 'Copy URL for "{name}"',
+		"taskModal.copyFailed": "Copy failed",
+		"taskModal.openLink": "Open link",
+		"taskModal.emptyLink": "(Empty URL)",
+		"taskModal.invalidUrlError":
+			"Enter a valid URL (e.g. https://example.com, vscode://...).",
 		"taskModal.hierarchyLabel": "Subtasks & Parent",
 		"taskModal.notSet": "None",
 		"taskModal.subtasksLabel": "Subtasks",

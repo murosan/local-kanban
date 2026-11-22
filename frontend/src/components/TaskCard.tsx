@@ -6,15 +6,18 @@ import {
 	ChevronRight,
 	Clock,
 	ExternalLink,
+	Link2,
 	ListTree,
 	Square,
 	Tag,
 } from "lucide-react";
 import type React from "react";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useI18n } from "../i18n/useI18n";
 import type { ChecklistItem, CustomFieldDef, Task } from "../types/task";
+import { getLinkDisplayText, normalizeLinkItems } from "../utils/linkField";
 import { getSafeUrl } from "../utils/url";
+import { CopyButton } from "./CopyButton";
 
 interface TaskCardProps {
 	task: Task;
@@ -40,6 +43,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
 	isOverlay,
 }) => {
 	const { t } = useI18n();
+	const cardInstanceId = useId();
 	const [isSubtasksExpanded, setIsSubtasksExpanded] = useState(false);
 	const [newSubtaskTitle, setNewSubtaskTitle] = useState("");
 	const [expandedChecklists, setExpandedChecklists] = useState<
@@ -75,6 +79,8 @@ export const TaskCard: React.FC<TaskCardProps> = ({
 				.filter((cf) => {
 					if (!cf || cf.enabled === false) return false;
 					if (cf.type === "checklist") return true;
+					if (cf.type === "link")
+						return normalizeLinkItems(cf.value).length > 0;
 					if (Array.isArray(cf.value)) return cf.value.length > 0;
 					return (
 						cf.value !== undefined && cf.value !== "" && cf.value !== false
@@ -156,10 +162,97 @@ export const TaskCard: React.FC<TaskCardProps> = ({
 				<div className="flex flex-col space-y-1.5 mt-3">
 					{displayFields.map((field) => {
 						const hasColor = !!field.color;
-						const safeUrl =
-							field.type === "link" ? getSafeUrl(field.value) : null;
 						const isChecklist = field.type === "checklist";
+						const isLink = field.type === "link";
 						const isExpanded = Boolean(expandedChecklists[field.id]);
+
+						if (isLink) {
+							const linkItems = normalizeLinkItems(field.value, field.id);
+							return (
+								<details
+									key={field.id}
+									className="link-disclosure rounded-lg bg-[var(--bg-input)] text-[var(--text-secondary)] border border-[var(--border-color)] transition-all"
+									onClick={(e) => e.stopPropagation()}
+								>
+									<summary
+										className="flex items-center justify-between text-[11px] px-2.5 py-1.5 cursor-pointer select-none hover:bg-[var(--bg-surface)] transition-colors group/lnk rounded-lg"
+										onPointerDown={(e) => e.stopPropagation()}
+									>
+										<span className="text-[var(--text-secondary)] font-medium truncate max-w-[65%] flex items-center space-x-1.5">
+											<Link2
+												className="w-3.5 h-3.5 text-blue-500 shrink-0"
+												aria-hidden="true"
+											/>
+											<span className="truncate">{field.name}</span>
+										</span>
+										<div className="flex items-center space-x-1.5 shrink-0">
+											<span className="font-semibold font-mono text-[11px] px-1.5 py-0.5 rounded-full bg-blue-500/10 text-blue-500">
+												{linkItems.length}
+											</span>
+											<span className="p-0.5 rounded text-[var(--text-muted)] group-hover/lnk:text-[var(--text-primary)] transition-colors inline-flex items-center justify-center">
+												<ChevronRight
+													className="disclosure-chevron w-3.5 h-3.5"
+													aria-hidden="true"
+												/>
+											</span>
+										</div>
+									</summary>
+									<div className="px-2.5 pb-2 pt-1.5 border-t border-[var(--border-color)]">
+										<ul className="space-y-1">
+											{linkItems.map((item) => {
+												const safeUrl = getSafeUrl(item.url);
+												const displayText = getLinkDisplayText(item);
+												const linkElementId = `${cardInstanceId}-link-${field.id}-${item.id}`;
+												return (
+													<li
+														key={item.id}
+														className="flex items-center justify-between gap-1 text-[11px] min-w-0"
+													>
+														{safeUrl ? (
+															<a
+																id={linkElementId}
+																href={safeUrl}
+																target="_blank"
+																rel="noopener noreferrer"
+																data-copy-text={item.url}
+																onClick={(e) => e.stopPropagation()}
+																onPointerDown={(e) => e.stopPropagation()}
+																className="hover:underline text-blue-500 inline-flex items-center space-x-1 font-semibold truncate min-w-0 flex-1"
+																title={item.url}
+															>
+																<ExternalLink
+																	className="w-3 h-3 shrink-0"
+																	aria-hidden="true"
+																/>
+																<span className="truncate">{displayText}</span>
+															</a>
+														) : (
+															<span
+																id={linkElementId}
+																data-copy-text={item.url}
+																className="text-[var(--text-primary)] truncate min-w-0 flex-1"
+																title={item.url}
+															>
+																{displayText}
+															</span>
+														)}
+														{item.url.trim() && (
+															<CopyButton
+																targetId={linkElementId}
+																ariaLabel={t("taskModal.copyLink", {
+																	name: displayText,
+																})}
+																size="sm"
+															/>
+														)}
+													</li>
+												);
+											})}
+										</ul>
+									</div>
+								</details>
+							);
+						}
 
 						if (isChecklist) {
 							const items = Array.isArray(field.value)
@@ -316,27 +409,13 @@ export const TaskCard: React.FC<TaskCardProps> = ({
 											style={{ backgroundColor: field.color }}
 										/>
 									)}
-									{safeUrl ? (
-										<a
-											href={safeUrl}
-											target="_blank"
-											rel="noopener noreferrer"
-											onClick={(e) => e.stopPropagation()}
-											className="hover:underline text-blue-500 inline-flex items-center space-x-1 font-semibold truncate max-w-[120px]"
-											title={String(field.value)}
-										>
-											<ExternalLink className="w-3 h-3 shrink-0" />
-											<span className="truncate">{String(field.value)}</span>
-										</a>
-									) : (
-										<span className="truncate max-w-[120px]">
-											{typeof field.value === "boolean"
-												? field.value
-													? "✓"
-													: "✗"
-												: String(field.value ?? "")}
-										</span>
-									)}
+									<span className="truncate max-w-[120px]">
+										{typeof field.value === "boolean"
+											? field.value
+												? "✓"
+												: "✗"
+											: String(field.value ?? "")}
+									</span>
 								</span>
 							</div>
 						);

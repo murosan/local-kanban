@@ -35,6 +35,7 @@ import {
 	Maximize2,
 	Minimize2,
 	MoreVertical,
+	Pencil,
 	Plus,
 	Save,
 	Settings,
@@ -46,7 +47,7 @@ import {
 	X,
 } from "lucide-react";
 import type React from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { COLOR_PRESETS } from "../constants/colors";
 import { useI18n } from "../i18n/useI18n";
 import {
@@ -62,15 +63,22 @@ import type {
 	CustomFieldOption,
 	CustomFieldType,
 	CustomFieldValue,
+	LinkItem,
 	Task,
 } from "../types/task";
+import {
+	createLinkItem,
+	getLinkDisplayText,
+	normalizeLinkItems,
+} from "../utils/linkField";
 import {
 	ensureUniqueIds,
 	moveItemByOffset,
 	prefersReducedMotion,
 	reorderItemsById,
 } from "../utils/reorder";
-import { getSafeUrl } from "../utils/url";
+import { getSafeUrl, isValidUrl } from "../utils/url";
+import { CopyButton } from "./CopyButton";
 import { type ChangeOptions, MarkdownEditor } from "./MarkdownEditor";
 import { TagInput } from "./TagInput";
 
@@ -394,6 +402,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 	onOpenTask,
 }) => {
 	const { t } = useI18n();
+	const modalInstanceId = useId();
 	const [title, setTitle] = useState(() => (task ? task.title : ""));
 	const [columnId, setColumnId] = useState<string>(() =>
 		task
@@ -412,18 +421,25 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 			if (!taskData?.custom_fields) return [];
 			if (Array.isArray(taskData.custom_fields)) {
 				return ensureUniqueIds(
-					taskData.custom_fields.map((cf) => ({
-						id:
+					taskData.custom_fields.map((cf) => {
+						const fieldId =
 							cf.id ||
 							cf.field_id ||
-							`cf-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-						field_id: cf.field_id,
-						name: cf.name || cf.field_id || "Field",
-						type: cf.type || "text",
-						value: cf.value,
-						options: cf.options,
-						enabled: cf.enabled ?? true,
-					})),
+							`cf-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+						const fieldType = cf.type || "text";
+						return {
+							id: fieldId,
+							field_id: cf.field_id,
+							name: cf.name || cf.field_id || "Field",
+							type: fieldType,
+							value:
+								fieldType === "link"
+									? normalizeLinkItems(cf.value, `link-${fieldId}`)
+									: cf.value,
+							options: cf.options,
+							enabled: cf.enabled ?? true,
+						};
+					}),
 					"cf",
 				);
 			}
@@ -435,13 +451,17 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 			return ensureUniqueIds(
 				Object.entries(legacyMap).map(([key, cf]) => {
 					const fieldDef = customFields.find((f) => f.id === key);
+					const fieldType = fieldDef ? fieldDef.type : "text";
 					return {
 						id: key,
 						field_id: key,
 						name: fieldDef ? fieldDef.name : key.replace("cf-", ""),
-						type: fieldDef ? fieldDef.type : "text",
+						type: fieldType,
 						options: fieldDef?.options,
-						value: cf?.value ?? "",
+						value:
+							fieldType === "link"
+								? normalizeLinkItems(cf?.value, `link-${key}`)
+								: (cf?.value ?? ""),
 						enabled: cf?.enabled ?? true,
 					};
 				}),
@@ -525,6 +545,34 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 	const [newChecklistItemInputs, setNewChecklistItemInputs] = useState<
 		Record<string, string>
 	>({});
+	const [newLinkInputs, setNewLinkInputs] = useState<
+		Record<string, { url: string; label: string; touched?: boolean }>
+	>({});
+	const [editingLinkItem, setEditingLinkItem] = useState<{
+		fieldId: string;
+		itemId: string;
+		url: string;
+		label: string;
+		touched?: boolean;
+	} | null>(null);
+	const [linkValidationAnnouncement, setLinkValidationAnnouncement] =
+		useState("");
+	const linkAnnounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+		null,
+	);
+	const newLinkUrlInputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
+	const editLinkUrlInputRef = useRef<HTMLInputElement | null>(null);
+
+	const announceLinkValidationError = useCallback((message: string) => {
+		if (linkAnnounceTimerRef.current) {
+			clearTimeout(linkAnnounceTimerRef.current);
+		}
+		setLinkValidationAnnouncement("");
+		if (!message) return;
+		linkAnnounceTimerRef.current = setTimeout(() => {
+			setLinkValidationAnnouncement(message);
+		}, 500);
+	}, []);
 
 	const [saveStatus, setSaveStatus] = useState<SaveStatus>("saved");
 	const [isSaving, setIsSaving] = useState(false);
@@ -951,6 +999,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 				autoSaveTimerRef.current = null;
 			}
 			setIsMenuOpen(false);
+			setEditingLinkItem(null);
+			setNewLinkInputs({});
 			const initialTitle = task ? task.title : "";
 			const initialCol = task
 				? task.column_id || initialColumnId
@@ -1012,6 +1062,9 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 			}
 			if (customFieldAnnounceTimerRef.current) {
 				clearTimeout(customFieldAnnounceTimerRef.current);
+			}
+			if (linkAnnounceTimerRef.current) {
+				clearTimeout(linkAnnounceTimerRef.current);
 			}
 			document.documentElement.classList.remove("is-dragging-item");
 		};
@@ -1295,6 +1348,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 		let initialValue: CustomFieldValue["value"] = "";
 		if (preset.type === "checkbox") {
 			initialValue = false;
+		} else if (preset.type === "link") {
+			initialValue = [];
 		} else if (preset.type === "checklist") {
 			if (preset.options && preset.options.length > 0) {
 				initialValue = preset.options.map((opt) => ({
@@ -1355,6 +1410,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 
 		if (newCustomType === "checkbox") {
 			initialValue = false;
+		} else if (newCustomType === "link") {
+			initialValue = [];
 		} else if (newCustomType === "checklist") {
 			if (options && options.length > 0) {
 				initialValue = options.map((opt) => ({
@@ -1506,6 +1563,143 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 			return nextCustomFields;
 		});
 		setNewChecklistItemInputs((prev) => ({ ...prev, [fieldId]: "" }));
+	};
+
+	const handleAddLinkItem = (fieldId: string) => {
+		const input = newLinkInputs[fieldId];
+		if (!input?.url.trim()) return;
+		const newItem = createLinkItem(input.url, input.label);
+		if (!newItem) {
+			setNewLinkInputs((prev) => ({
+				...prev,
+				[fieldId]: {
+					url: input.url,
+					label: input.label,
+					touched: true,
+				},
+			}));
+			newLinkUrlInputRefs.current.get(fieldId)?.focus();
+			return;
+		}
+
+		announceLinkValidationError("");
+		setCustomFieldsState((prev) => {
+			const nextCustomFields = prev.map((cf) => {
+				if (cf.id === fieldId) {
+					const currentItems = normalizeLinkItems(cf.value, `link-${cf.id}`);
+					return { ...cf, value: [...currentItems, newItem] };
+				}
+				return cf;
+			});
+			const newState = {
+				title,
+				columnId,
+				tags,
+				content,
+				customFieldsState: nextCustomFields,
+			};
+			recordHistory(newState, { immediate: true });
+			triggerAutoSave(newState, true);
+			return nextCustomFields;
+		});
+		setNewLinkInputs((prev) => ({
+			...prev,
+			[fieldId]: { url: "", label: "", touched: false },
+		}));
+	};
+
+	const handleFinishEditLinkItem = () => {
+		if (!editingLinkItem) return;
+		const { fieldId, itemId, url, label } = editingLinkItem;
+		const safeUrl = getSafeUrl(url);
+		if (!safeUrl) {
+			setEditingLinkItem((prev) => (prev ? { ...prev, touched: true } : null));
+			editLinkUrlInputRef.current?.focus();
+			return;
+		}
+
+		announceLinkValidationError("");
+		const trimmedLabel = label.trim();
+		setCustomFieldsState((prev) => {
+			const nextCustomFields = prev.map((cf) => {
+				if (cf.id === fieldId) {
+					const currentItems = Array.isArray(cf.value)
+						? (cf.value as LinkItem[])
+						: normalizeLinkItems(cf.value, `link-${cf.id}`);
+					const nextItems = currentItems.map((item) => {
+						if (item.id !== itemId) return item;
+						const cleaned: LinkItem = {
+							id: item.id,
+							url: safeUrl,
+						};
+						if (trimmedLabel) {
+							cleaned.label = trimmedLabel;
+						}
+						return cleaned;
+					});
+					return { ...cf, value: nextItems };
+				}
+				return cf;
+			});
+			const newState = {
+				title,
+				columnId,
+				tags,
+				content,
+				customFieldsState: nextCustomFields,
+			};
+			recordHistory(newState, { immediate: true });
+			triggerAutoSave(newState, true);
+			return nextCustomFields;
+		});
+		setEditingLinkItem(null);
+	};
+
+	const handleRemoveLinkItem = (fieldId: string, itemId: string) => {
+		const targetField = customFieldsState.find((cf) => cf.id === fieldId);
+		const currentItems = targetField
+			? Array.isArray(targetField.value)
+				? (targetField.value as LinkItem[])
+				: normalizeLinkItems(targetField.value, `link-${targetField.id}`)
+			: [];
+		const targetItem = currentItems.find((item) => item.id === itemId);
+		const linkName = targetItem
+			? getLinkDisplayText(targetItem) || targetItem.url
+			: "";
+		const confirmMessage = linkName
+			? t("taskModal.removeLinkConfirm", { name: linkName })
+			: t("taskModal.removeLinkConfirmGeneric");
+		if (!confirm(confirmMessage)) {
+			return;
+		}
+		if (
+			editingLinkItem?.fieldId === fieldId &&
+			editingLinkItem?.itemId === itemId
+		) {
+			setEditingLinkItem(null);
+		}
+		setCustomFieldsState((prev) => {
+			const nextCustomFields = prev.map((cf) => {
+				if (cf.id === fieldId) {
+					const currentItems = Array.isArray(cf.value)
+						? (cf.value as LinkItem[])
+						: normalizeLinkItems(cf.value, `link-${cf.id}`);
+					const nextItems = currentItems.filter((item) => item.id !== itemId);
+					return { ...cf, value: nextItems };
+				}
+				return cf;
+			});
+			const newState = {
+				title,
+				columnId,
+				tags,
+				content,
+				customFieldsState: nextCustomFields,
+			};
+			recordHistory(newState, { immediate: true });
+			triggerAutoSave(newState, true);
+			return nextCustomFields;
+		});
 	};
 
 	const handleAddOptionToField = (fieldId: string, optionValue: string) => {
@@ -2082,6 +2276,9 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 							<div className="sr-only" aria-live="polite" aria-atomic="true">
 								{customFieldLiveAnnouncement}
 							</div>
+							<div className="sr-only" aria-live="polite" aria-atomic="true">
+								{linkValidationAnnouncement}
+							</div>
 							{customFieldsState.length > 0 ? (
 								<DndContext
 									sensors={subtaskSensors}
@@ -2365,31 +2562,484 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 
 														{field.type === "link" &&
 															(() => {
-																const safeUrl = getSafeUrl(field.value);
+																const linkItems = Array.isArray(field.value)
+																	? (field.value as LinkItem[])
+																	: normalizeLinkItems(
+																			field.value,
+																			`link-${field.id}`,
+																		);
+																const currentInput = newLinkInputs[
+																	field.id
+																] || {
+																	url: "",
+																	label: "",
+																	touched: false,
+																};
+																const isNewUrlInvalid = Boolean(
+																	currentInput.touched &&
+																		currentInput.url.trim() &&
+																		!isValidUrl(currentInput.url),
+																);
+																const newLinkErrorId = `${modalInstanceId}-link-error-${field.id}`;
+
 																return (
-																	<div className="relative flex items-center">
-																		<input
-																			type="text"
-																			value={String(field.value ?? "")}
-																			onChange={(e) =>
-																				handleUpdateCustomField(field.id, {
-																					value: e.target.value,
-																				})
-																			}
-																			placeholder="https://... または vscode://..."
-																			className="w-full px-3 py-2 text-sm bg-[var(--bg-input)] border border-[var(--border-color)] rounded-xl text-[var(--text-primary)] focus:outline-none focus:border-blue-500 pr-9"
-																		/>
-																		{safeUrl && (
-																			<a
-																				href={safeUrl}
-																				target="_blank"
-																				rel="noopener noreferrer"
-																				className="absolute right-3 text-[var(--text-secondary)] hover:text-blue-500 transition-colors"
-																				title="リンクを開く"
-																			>
-																				<ExternalLink className="w-4 h-4" />
-																			</a>
+																	<div className="space-y-2.5 bg-[var(--bg-input)] p-3 rounded-xl border border-[var(--border-color)]">
+																		{/* Links List */}
+																		{linkItems.length > 0 ? (
+																			<ul className="space-y-1.5">
+																				{linkItems.map((item) => {
+																					const isEditing =
+																						editingLinkItem?.fieldId ===
+																							field.id &&
+																						editingLinkItem?.itemId === item.id;
+																					const safeUrl = getSafeUrl(item.url);
+																					const displayText =
+																						getLinkDisplayText(item);
+																					const linkElementId = `${modalInstanceId}-link-${field.id}-${item.id}`;
+
+																					if (isEditing && editingLinkItem) {
+																						const isEditUrlInvalid = Boolean(
+																							editingLinkItem.touched &&
+																								!isValidUrl(
+																									editingLinkItem.url,
+																								),
+																						);
+																						const editLinkErrorId = `${modalInstanceId}-link-edit-error-${field.id}-${item.id}`;
+
+																						return (
+																							<li
+																								key={item.id}
+																								className="p-2 rounded-lg bg-[var(--bg-surface)] border border-blue-500/40 space-y-2"
+																							>
+																								<div className="flex flex-col sm:flex-row gap-1.5">
+																									<input
+																										type="text"
+																										value={
+																											editingLinkItem.label
+																										}
+																										onChange={(e) =>
+																											setEditingLinkItem(
+																												(prev) =>
+																													prev
+																														? {
+																																...prev,
+																																label:
+																																	e.target
+																																		.value,
+																															}
+																														: null,
+																											)
+																										}
+																										onKeyDown={(e) => {
+																											if (
+																												e.key === "Enter" &&
+																												!e.nativeEvent
+																													.isComposing
+																											) {
+																												e.preventDefault();
+																												handleFinishEditLinkItem();
+																											}
+																										}}
+																										placeholder={t(
+																											"taskModal.linkLabelPlaceholder",
+																										)}
+																										className="sm:w-1/3 px-2.5 py-1.5 text-xs bg-[var(--bg-input)] border border-[var(--border-color)] rounded-lg text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-blue-500"
+																									/>
+																									<input
+																										ref={editLinkUrlInputRef}
+																										type="text"
+																										autoFocus
+																										value={editingLinkItem.url}
+																										aria-invalid={
+																											isEditUrlInvalid
+																												? "true"
+																												: "false"
+																										}
+																										aria-describedby={
+																											isEditUrlInvalid
+																												? editLinkErrorId
+																												: undefined
+																										}
+																										onChange={(e) => {
+																											const nextUrl =
+																												e.target.value;
+																											setEditingLinkItem(
+																												(prev) =>
+																													prev
+																														? {
+																																...prev,
+																																url: nextUrl,
+																															}
+																														: null,
+																											);
+																											if (isValidUrl(nextUrl)) {
+																												announceLinkValidationError(
+																													"",
+																												);
+																											}
+																										}}
+																										onBlur={() => {
+																											const invalid =
+																												!isValidUrl(
+																													editingLinkItem.url,
+																												);
+																											setEditingLinkItem(
+																												(prev) =>
+																													prev
+																														? {
+																																...prev,
+																																touched: true,
+																															}
+																														: null,
+																											);
+																											if (invalid) {
+																												announceLinkValidationError(
+																													t(
+																														"taskModal.invalidUrlError",
+																													),
+																												);
+																											}
+																										}}
+																										onKeyDown={(e) => {
+																											if (
+																												e.key === "Enter" &&
+																												!e.nativeEvent
+																													.isComposing
+																											) {
+																												e.preventDefault();
+																												handleFinishEditLinkItem();
+																											}
+																										}}
+																										placeholder={t(
+																											"taskModal.linkUrlPlaceholder",
+																										)}
+																										className={`flex-1 px-2.5 py-1.5 text-xs bg-[var(--bg-input)] border rounded-lg text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none ${
+																											isEditUrlInvalid
+																												? "border-rose-500 focus:border-rose-500"
+																												: "border-[var(--border-color)] focus:border-blue-500"
+																										}`}
+																									/>
+																								</div>
+																								{isEditUrlInvalid && (
+																									<p
+																										id={editLinkErrorId}
+																										className="flex items-center space-x-1.5 text-[11px] text-rose-500 font-medium"
+																									>
+																										<AlertCircle
+																											className="w-3.5 h-3.5 shrink-0"
+																											aria-hidden="true"
+																										/>
+																										<span>
+																											{t(
+																												"taskModal.invalidUrlError",
+																											)}
+																										</span>
+																									</p>
+																								)}
+																								<div className="flex items-center justify-end gap-1.5">
+																									<button
+																										type="button"
+																										onClick={() => {
+																											setEditingLinkItem(null);
+																											announceLinkValidationError(
+																												"",
+																											);
+																										}}
+																										className="px-2 py-1 text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] rounded-lg transition-colors cursor-pointer"
+																									>
+																										{t("taskModal.cancel")}
+																									</button>
+																									<button
+																										type="button"
+																										onClick={() =>
+																											handleFinishEditLinkItem()
+																										}
+																										className="inline-flex items-center space-x-1 px-2.5 py-1 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-500 rounded-lg transition-colors cursor-pointer"
+																									>
+																										<Check
+																											className="w-3.5 h-3.5"
+																											aria-hidden="true"
+																										/>
+																										<span>
+																											{t(
+																												"taskModal.doneEditLink",
+																											)}
+																										</span>
+																									</button>
+																									<button
+																										type="button"
+																										onClick={() =>
+																											handleRemoveLinkItem(
+																												field.id,
+																												item.id,
+																											)
+																										}
+																										className="p-1 text-[var(--text-muted)] hover:text-rose-500 rounded transition-colors cursor-pointer"
+																										aria-label={t(
+																											"taskModal.removeLink",
+																										)}
+																										title={t(
+																											"taskModal.removeLink",
+																										)}
+																									>
+																										<X
+																											className="w-3.5 h-3.5"
+																											aria-hidden="true"
+																										/>
+																									</button>
+																								</div>
+																							</li>
+																						);
+																					}
+
+																					return (
+																						<li
+																							key={item.id}
+																							className="flex items-center justify-between gap-2 px-2 py-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-color)] hover:border-[var(--border-color)]/80 transition-all"
+																						>
+																							<div className="flex items-center space-x-1.5 flex-1 min-w-0">
+																								{safeUrl ? (
+																									<a
+																										id={linkElementId}
+																										href={safeUrl}
+																										target="_blank"
+																										rel="noopener noreferrer"
+																										data-copy-text={item.url}
+																										className="inline-flex items-center space-x-1.5 text-xs font-medium text-blue-500 hover:underline truncate min-w-0"
+																										title={item.url}
+																									>
+																										<ExternalLink
+																											className="w-3.5 h-3.5 shrink-0"
+																											aria-hidden="true"
+																										/>
+																										<span className="truncate">
+																											{displayText}
+																										</span>
+																									</a>
+																								) : (
+																									<span
+																										id={linkElementId}
+																										data-copy-text={item.url}
+																										className="inline-flex items-center space-x-1.5 text-xs text-[var(--text-muted)] truncate min-w-0"
+																										title={item.url}
+																									>
+																										<Link2
+																											className="w-3.5 h-3.5 shrink-0"
+																											aria-hidden="true"
+																										/>
+																										<span className="truncate">
+																											{displayText ||
+																												t(
+																													"taskModal.emptyLink",
+																												)}
+																										</span>
+																									</span>
+																								)}
+																							</div>
+
+																							<div className="flex items-center space-x-1 shrink-0">
+																								{item.url.trim() && (
+																									<CopyButton
+																										targetId={linkElementId}
+																										ariaLabel={t(
+																											"taskModal.copyLink",
+																											{
+																												name: displayText,
+																											},
+																										)}
+																										size="md"
+																									/>
+																								)}
+																								<button
+																									type="button"
+																									onClick={() =>
+																										setEditingLinkItem({
+																											fieldId: field.id,
+																											itemId: item.id,
+																											url: item.url,
+																											label: item.label ?? "",
+																											touched: false,
+																										})
+																									}
+																									className="min-w-6 min-h-6 inline-flex items-center justify-center rounded-md text-[var(--text-muted)] hover:text-blue-500 hover:bg-[var(--bg-input)] transition-colors cursor-pointer"
+																									aria-label={t(
+																										"taskModal.editLink",
+																									)}
+																									title={t(
+																										"taskModal.editLink",
+																									)}
+																								>
+																									<Pencil
+																										className="w-3.5 h-3.5"
+																										aria-hidden="true"
+																									/>
+																								</button>
+																								<button
+																									type="button"
+																									onClick={() =>
+																										handleRemoveLinkItem(
+																											field.id,
+																											item.id,
+																										)
+																									}
+																									className="min-w-6 min-h-6 inline-flex items-center justify-center rounded-md text-[var(--text-muted)] hover:text-rose-500 hover:bg-rose-500/10 transition-colors cursor-pointer"
+																									aria-label={t(
+																										"taskModal.removeLink",
+																									)}
+																									title={t(
+																										"taskModal.removeLink",
+																									)}
+																								>
+																									<X
+																										className="w-3.5 h-3.5"
+																										aria-hidden="true"
+																									/>
+																								</button>
+																							</div>
+																						</li>
+																					);
+																				})}
+																			</ul>
+																		) : (
+																			<p className="text-xs text-[var(--text-muted)] italic py-1 text-center">
+																				{t("taskModal.noLinks")}
+																			</p>
 																		)}
+
+																		{/* Add Link Input Form */}
+																		<div className="space-y-1.5 pt-1">
+																			<div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5">
+																				<input
+																					type="text"
+																					value={currentInput.label}
+																					onChange={(e) =>
+																						setNewLinkInputs((prev) => ({
+																							...prev,
+																							[field.id]: {
+																								...currentInput,
+																								label: e.target.value,
+																							},
+																						}))
+																					}
+																					onKeyDown={(e) => {
+																						if (
+																							e.key === "Enter" &&
+																							!e.nativeEvent.isComposing
+																						) {
+																							e.preventDefault();
+																							handleAddLinkItem(field.id);
+																						}
+																					}}
+																					placeholder={t(
+																						"taskModal.linkLabelPlaceholder",
+																					)}
+																					className="sm:w-1/3 px-2.5 py-1.5 text-xs bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-lg text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-blue-500"
+																				/>
+																				<input
+																					ref={(el) => {
+																						if (el) {
+																							newLinkUrlInputRefs.current.set(
+																								field.id,
+																								el,
+																							);
+																						} else {
+																							newLinkUrlInputRefs.current.delete(
+																								field.id,
+																							);
+																						}
+																					}}
+																					type="text"
+																					value={currentInput.url}
+																					aria-invalid={
+																						isNewUrlInvalid ? "true" : "false"
+																					}
+																					aria-describedby={
+																						isNewUrlInvalid
+																							? newLinkErrorId
+																							: undefined
+																					}
+																					onChange={(e) => {
+																						const nextUrl = e.target.value;
+																						setNewLinkInputs((prev) => ({
+																							...prev,
+																							[field.id]: {
+																								...currentInput,
+																								url: nextUrl,
+																								touched: nextUrl.trim()
+																									? currentInput.touched
+																									: false,
+																							},
+																						}));
+																						if (
+																							!nextUrl.trim() ||
+																							isValidUrl(nextUrl)
+																						) {
+																							announceLinkValidationError("");
+																						}
+																					}}
+																					onBlur={() => {
+																						if (!currentInput.url.trim())
+																							return;
+																						const invalid = !isValidUrl(
+																							currentInput.url,
+																						);
+																						setNewLinkInputs((prev) => ({
+																							...prev,
+																							[field.id]: {
+																								...currentInput,
+																								touched: true,
+																							},
+																						}));
+																						if (invalid) {
+																							announceLinkValidationError(
+																								t("taskModal.invalidUrlError"),
+																							);
+																						}
+																					}}
+																					onKeyDown={(e) => {
+																						if (
+																							e.key === "Enter" &&
+																							!e.nativeEvent.isComposing
+																						) {
+																							e.preventDefault();
+																							handleAddLinkItem(field.id);
+																						}
+																					}}
+																					placeholder={t(
+																						"taskModal.linkUrlPlaceholder",
+																					)}
+																					className={`flex-1 px-2.5 py-1.5 text-xs bg-[var(--bg-surface)] border rounded-lg text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none ${
+																						isNewUrlInvalid
+																							? "border-rose-500 focus:border-rose-500"
+																							: "border-[var(--border-color)] focus:border-blue-500"
+																					}`}
+																				/>
+																				<button
+																					type="button"
+																					onClick={() =>
+																						handleAddLinkItem(field.id)
+																					}
+																					disabled={!currentInput.url.trim()}
+																					className="px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-500 rounded-lg shrink-0 disabled:opacity-50 transition-colors cursor-pointer disabled:cursor-not-allowed"
+																				>
+																					{t("taskModal.addLinkItem")}
+																				</button>
+																			</div>
+																			{isNewUrlInvalid && (
+																				<p
+																					id={newLinkErrorId}
+																					className="flex items-center space-x-1.5 text-[11px] text-rose-500 font-medium"
+																				>
+																					<AlertCircle
+																						className="w-3.5 h-3.5 shrink-0"
+																						aria-hidden="true"
+																					/>
+																					<span>
+																						{t("taskModal.invalidUrlError")}
+																					</span>
+																				</p>
+																			)}
+																		</div>
 																	</div>
 																);
 															})()}
