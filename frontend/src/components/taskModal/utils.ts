@@ -4,6 +4,7 @@ import type {
 	CustomFieldValue,
 	Task,
 } from "../../types/task";
+import { normalizeChecklistItems } from "../../utils/checklistField";
 import { normalizeLinkItems } from "../../utils/linkField";
 import { ensureUniqueIds } from "../../utils/reorder";
 
@@ -38,7 +39,9 @@ export const parseInitialCustomFields = (
 					value:
 						fieldType === "link"
 							? normalizeLinkItems(cf.value, `link-${fieldId}`)
-							: cf.value,
+							: fieldType === "checklist"
+								? normalizeChecklistItems(cf.value, `item-${fieldId}`)
+								: cf.value,
 					options: cf.options,
 					enabled: cf.enabled ?? true,
 				};
@@ -64,7 +67,9 @@ export const parseInitialCustomFields = (
 				value:
 					fieldType === "link"
 						? normalizeLinkItems(cf?.value, `link-${key}`)
-						: (cf?.value ?? ""),
+						: fieldType === "checklist"
+							? normalizeChecklistItems(cf?.value, `item-${key}`)
+							: (cf?.value ?? ""),
 				enabled: cf?.enabled ?? true,
 			};
 		}),

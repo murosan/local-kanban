@@ -1477,3 +1477,210 @@ func TestSubtaskEmptyColumnBehavior(t *testing.T) {
 		t.Fatalf("expected 2 root tasks after unlink with column_id, got %d", len(listAfter))
 	}
 }
+
+func TestChecklistReorderPersistence(t *testing.T) {
+	tempDir := t.TempDir()
+	store, err := markdown.NewStore(tempDir)
+	if err != nil {
+		t.Fatalf("failed to create store: %v", err)
+	}
+
+	sqliteCache, err := cache.NewSQLiteCache(filepath.Join(tempDir, ".local_cache.db"))
+	if err != nil {
+		t.Fatalf("failed to create sqlite cache: %v", err)
+	}
+	defer func() { _ = sqliteCache.Close() }()
+	store.SetCache(sqliteCache)
+
+	server := NewServer(store, nil)
+	mux := http.NewServeMux()
+	server.RegisterRoutes(mux)
+
+	// 1. Reorder preset checklist options via PUT /api/config
+	cfg, err := store.GetBoardConfig()
+	if err != nil {
+		t.Fatalf("GetBoardConfig failed: %v", err)
+	}
+	cfg.CustomFields = []model.CustomFieldDef{
+		{
+			ID:   "preset-chk",
+			Name: "Release Checklist",
+			Type: model.FieldTypeChecklist,
+			Options: []model.CustomFieldOption{
+				{ID: "opt-1", Value: "Design", Color: "#3b82f6"},
+				{ID: "opt-2", Value: "Implement", Color: "#10b981"},
+				{ID: "opt-3", Value: "Test", Color: "#f59e0b"},
+			},
+		},
+	}
+	cfgBytes, _ := json.Marshal(cfg)
+	reqPutCfg := httptest.NewRequest("PUT", "/api/config", bytes.NewReader(cfgBytes))
+	wPutCfg := httptest.NewRecorder()
+	mux.ServeHTTP(wPutCfg, reqPutCfg)
+	if wPutCfg.Code != http.StatusOK {
+		t.Fatalf("expected 200 PUT /api/config, got %d", wPutCfg.Code)
+	}
+
+	cfg.CustomFields[0].Options = []model.CustomFieldOption{
+		cfg.CustomFields[0].Options[2],
+		cfg.CustomFields[0].Options[0],
+		cfg.CustomFields[0].Options[1],
+	}
+	reorderedCfgBytes, _ := json.Marshal(cfg)
+	reqPutCfg2 := httptest.NewRequest("PUT", "/api/config", bytes.NewReader(reorderedCfgBytes))
+	wPutCfg2 := httptest.NewRecorder()
+	mux.ServeHTTP(wPutCfg2, reqPutCfg2)
+	if wPutCfg2.Code != http.StatusOK {
+		t.Fatalf("expected 200 PUT /api/config reorder, got %d", wPutCfg2.Code)
+	}
+
+	reqGetCfg := httptest.NewRequest("GET", "/api/config", nil)
+	wGetCfg := httptest.NewRecorder()
+	mux.ServeHTTP(wGetCfg, reqGetCfg)
+	var loadedCfg model.BoardConfig
+	if err := json.NewDecoder(wGetCfg.Body).Decode(&loadedCfg); err != nil {
+		t.Fatalf("failed to decode config: %v", err)
+	}
+	expectedOptOrder := []string{"opt-3", "opt-1", "opt-2"}
+	if len(loadedCfg.CustomFields) != 1 ||
+		len(loadedCfg.CustomFields[0].Options) != len(expectedOptOrder) {
+		t.Fatalf("unexpected preset checklist options: %+v", loadedCfg.CustomFields)
+	}
+	for i, wantID := range expectedOptOrder {
+		if loadedCfg.CustomFields[0].Options[i].ID != wantID {
+			t.Errorf(
+				"preset options[%d]: want %q, got %q",
+				i,
+				wantID,
+				loadedCfg.CustomFields[0].Options[i].ID,
+			)
+		}
+	}
+
+	// 2. Reorder checklist items on a task via PUT /api/tasks/{id}
+	initialItems := []map[string]any{
+		{"id": "item-1", "text": "Spec", "completed": true},
+		{"id": "item-2", "text": "Code", "completed": false},
+		{"id": "item-3", "text": "Review", "completed": true},
+	}
+	createPayload, _ := json.Marshal(map[string]any{
+		"title":     "Checklist Reorder Task",
+		"column_id": "col-todo",
+		"custom_fields": []model.CustomFieldValue{
+			{
+				ID:      "cf-chk-1",
+				Name:    "Steps",
+				Type:    model.FieldTypeChecklist,
+				Value:   initialItems,
+				Enabled: true,
+			},
+		},
+	})
+	reqCreate := httptest.NewRequest("POST", "/api/tasks", bytes.NewReader(createPayload))
+	wCreate := httptest.NewRecorder()
+	mux.ServeHTTP(wCreate, reqCreate)
+	if wCreate.Code != http.StatusCreated {
+		t.Fatalf("expected 201 POST /api/tasks, got %d", wCreate.Code)
+	}
+	var createdTask model.Task
+	if err := json.NewDecoder(wCreate.Body).Decode(&createdTask); err != nil {
+		t.Fatalf("failed to decode created task: %v", err)
+	}
+
+	reorderedItems := []map[string]any{
+		initialItems[2],
+		initialItems[0],
+		initialItems[1],
+	}
+	updatePayload, _ := json.Marshal(map[string]any{
+		"custom_fields": []model.CustomFieldValue{
+			{
+				ID:      "cf-chk-1",
+				Name:    "Steps",
+				Type:    model.FieldTypeChecklist,
+				Value:   reorderedItems,
+				Enabled: true,
+			},
+		},
+	})
+	reqUpdate := httptest.NewRequest(
+		"PUT",
+		"/api/tasks/"+createdTask.ID,
+		bytes.NewReader(updatePayload),
+	)
+	wUpdate := httptest.NewRecorder()
+	mux.ServeHTTP(wUpdate, reqUpdate)
+	if wUpdate.Code != http.StatusOK {
+		t.Fatalf("expected 200 PUT /api/tasks/{id}, got %d", wUpdate.Code)
+	}
+
+	assertChecklistOrder := func(source string, fields []model.CustomFieldValue) {
+		t.Helper()
+		if len(fields) != 1 {
+			t.Fatalf("%s: expected 1 custom field, got %d", source, len(fields))
+		}
+		rawItems, ok := fields[0].Value.([]any)
+		if !ok {
+			t.Fatalf("%s: expected []any checklist value, got %T", source, fields[0].Value)
+		}
+		wantOrder := []struct {
+			id        string
+			text      string
+			completed bool
+		}{
+			{"item-3", "Review", true},
+			{"item-1", "Spec", true},
+			{"item-2", "Code", false},
+		}
+		if len(rawItems) != len(wantOrder) {
+			t.Fatalf(
+				"%s: expected %d checklist items, got %d",
+				source,
+				len(wantOrder),
+				len(rawItems),
+			)
+		}
+		for i, want := range wantOrder {
+			m, ok := rawItems[i].(map[string]any)
+			if !ok {
+				t.Fatalf("%s: checklist[%d] want map[string]any, got %T", source, i, rawItems[i])
+			}
+			if m["id"] != want.id || m["text"] != want.text || m["completed"] != want.completed {
+				t.Errorf("%s: checklist[%d] = %+v, want %+v", source, i, m, want)
+			}
+		}
+	}
+
+	// Verify GET /api/tasks/{id} (SQLite cache)
+	reqGetOne := httptest.NewRequest("GET", "/api/tasks/"+createdTask.ID, nil)
+	wGetOne := httptest.NewRecorder()
+	mux.ServeHTTP(wGetOne, reqGetOne)
+	var loadedTask model.Task
+	if err := json.NewDecoder(wGetOne.Body).Decode(&loadedTask); err != nil {
+		t.Fatalf("failed to decode task: %v", err)
+	}
+	assertChecklistOrder("GET /api/tasks/{id}", loadedTask.CustomFields)
+
+	// Verify GET /api/tasks (board list)
+	reqGetAll := httptest.NewRequest("GET", "/api/tasks", nil)
+	wGetAll := httptest.NewRecorder()
+	mux.ServeHTTP(wGetAll, reqGetAll)
+	var listTasks []*model.Task
+	if err := json.NewDecoder(wGetAll.Body).Decode(&listTasks); err != nil {
+		t.Fatalf("failed to decode task list: %v", err)
+	}
+	if len(listTasks) != 1 {
+		t.Fatalf("expected 1 task in list, got %d", len(listTasks))
+	}
+	assertChecklistOrder("GET /api/tasks", listTasks[0].CustomFields)
+
+	// Verify directly from Markdown file on disk
+	diskTasks, err := store.GetAllTasks()
+	if err != nil {
+		t.Fatalf("GetAllTasks failed: %v", err)
+	}
+	if len(diskTasks) != 1 {
+		t.Fatalf("expected 1 disk task, got %d", len(diskTasks))
+	}
+	assertChecklistOrder("disk", diskTasks[0].CustomFields)
+}

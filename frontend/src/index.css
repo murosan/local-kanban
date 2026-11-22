@@ -551,11 +551,13 @@ html.is-dragging-item * {
 	cursor: grabbing;
 }
 
-.sortable-field-item {
+.sortable-field-item,
+.sortable-checklist-item {
 	scroll-margin: 1rem;
 }
 
-.sortable-field-item:has(.drag-handle:focus-visible) {
+.sortable-field-item:has(.drag-handle:not(.nested-drag-handle):focus-visible),
+.sortable-checklist-item:has(.nested-drag-handle:focus-visible) {
 	outline: 2px solid var(--accent-color);
 	outline-offset: 2px;
 }
@@ -651,7 +653,8 @@ html.is-dragging-item * {
 }
 
 @media (prefers-reduced-motion: reduce) {
-	.sortable-field-item {
+	.sortable-field-item,
+	.sortable-checklist-item {
 		transition: none;
 	}
 

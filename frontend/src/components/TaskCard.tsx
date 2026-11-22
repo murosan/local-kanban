@@ -14,7 +14,8 @@ import {
 import type React from "react";
 import { useId, useState } from "react";
 import { useI18n } from "../i18n/useI18n";
-import type { ChecklistItem, CustomFieldDef, Task } from "../types/task";
+import type { CustomFieldDef, Task } from "../types/task";
+import { normalizeChecklistItems } from "../utils/checklistField";
 import { getLinkDisplayText, normalizeLinkItems } from "../utils/linkField";
 import { getSafeUrl } from "../utils/url";
 import { CopyButton } from "./CopyButton";
@@ -255,9 +256,10 @@ export const TaskCard: React.FC<TaskCardProps> = ({
 						}
 
 						if (isChecklist) {
-							const items = Array.isArray(field.value)
-								? (field.value as ChecklistItem[])
-								: [];
+							const items = normalizeChecklistItems(
+								field.value,
+								`item-${field.id}`,
+							);
 							const completedCount = items.filter((i) => i.completed).length;
 							const totalCount = items.length;
 							const isAllDone = totalCount > 0 && completedCount === totalCount;

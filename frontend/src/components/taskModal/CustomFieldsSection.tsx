@@ -25,6 +25,7 @@ import type {
 	CustomFieldValue,
 	LinkItem,
 } from "../../types/task";
+import { normalizeChecklistItems } from "../../utils/checklistField";
 import { moveItemByOffset, reorderItemsById } from "../../utils/reorder";
 import { ChecklistFieldEditor } from "./ChecklistFieldEditor";
 import { DropdownFieldEditor } from "./DropdownFieldEditor";
@@ -434,9 +435,7 @@ export const CustomFieldsSection: React.FC<CustomFieldsSectionProps> = ({
 	) => {
 		const nextFields = fields.map((cf) => {
 			if (cf.id !== fieldId) return cf;
-			const currentItems = Array.isArray(cf.value)
-				? (cf.value as ChecklistItem[])
-				: [];
+			const currentItems = normalizeChecklistItems(cf.value, `item-${cf.id}`);
 			return { ...cf, value: updater(currentItems) };
 		});
 		onChangeFields(nextFields, immediate);
@@ -790,6 +789,10 @@ export const CustomFieldsSection: React.FC<CustomFieldsSectionProps> = ({
 													true,
 												);
 											}}
+											onReorderItems={(nextItems) =>
+												updateChecklistItems(field.id, () => nextItems, true)
+											}
+											onDragStateChange={onDragStateChange}
 										/>
 									)}
 								</SortableCustomFieldRow>

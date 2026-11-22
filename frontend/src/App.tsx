@@ -24,13 +24,13 @@ import {
 } from "./services/api";
 import type {
 	BoardConfig,
-	ChecklistItem,
 	Column,
 	CustomFieldDef,
 	SubtaskRef,
 	Task,
 	ThemeConfig,
 } from "./types/task";
+import { normalizeChecklistItems } from "./utils/checklistField";
 
 export const App: React.FC = () => {
 	const { language, t } = useI18n();
@@ -303,9 +303,11 @@ export const App: React.FC = () => {
 			const match =
 				cf.id === fieldId || cf.field_id === fieldId || cf.name === fieldId;
 			if (match && cf.type === "checklist") {
-				const currentItems = Array.isArray(cf.value)
-					? (cf.value as ChecklistItem[])
-					: [];
+				const resolvedFieldId = cf.id || cf.field_id || cf.name;
+				const currentItems = normalizeChecklistItems(
+					cf.value,
+					`item-${resolvedFieldId}`,
+				);
 				const newItems = currentItems.map((item) =>
 					item.id === itemId ? { ...item, completed: !item.completed } : item,
 				);

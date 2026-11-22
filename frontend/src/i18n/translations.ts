@@ -51,6 +51,13 @@ export const translations = {
 		"configModal.moveFieldDown": '"{name}" を下へ移動',
 		"configModal.fieldMovedAnnouncement":
 			'"{name}" を {position} / {total} 番目に移動しました',
+		"configModal.dragToReorderChecklistItem": '"{name}" をドラッグして並び替え',
+		"configModal.moveChecklistItemUp": '"{name}" を上へ移動',
+		"configModal.moveChecklistItemDown": '"{name}" を下へ移動',
+		"configModal.checklistItemMovedAnnouncement":
+			'"{name}" を {position} / {total} 番目に移動しました',
+		"configModal.checklistItemMoveCancelled":
+			'"{name}" の移動をキャンセルしました',
 		"configModal.columnsDesc":
 			"ボード上の表示順序・名前・表示/非表示を設定します。",
 		"configModal.addColumn": "新規カラムを追加",
@@ -119,6 +126,15 @@ export const translations = {
 		"taskModal.noChecklistItems":
 			"チェック項目がありません。「＋」から項目を追加できます。",
 		"taskModal.itemPlaceholder": "チェック項目の内容を入力...",
+		"taskModal.dragToReorderChecklistItem": '"{name}" をドラッグして並び替え',
+		"taskModal.moveChecklistItemUp": '"{name}" を上へ移動',
+		"taskModal.moveChecklistItemDown": '"{name}" を下へ移動',
+		"taskModal.checklistItemMovedAnnouncement":
+			'"{name}" を {position} / {total} 番目に移動しました',
+		"taskModal.checklistItemMoveCancelled":
+			'"{name}" の移動をキャンセルしました',
+		"taskModal.checklistItemFallbackName": "チェック項目 {index}",
+		"taskModal.removeChecklistItem": "項目を削除",
 		"taskModal.addLinkItem": "＋ リンクを追加",
 		"taskModal.noLinks": "リンクがありません。下のフォームから追加できます。",
 		"taskModal.linkLabelPlaceholder": "表示テキスト（任意）",
@@ -287,6 +303,12 @@ export const translations = {
 		"configModal.moveFieldDown": 'Move "{name}" down',
 		"configModal.fieldMovedAnnouncement":
 			'Moved "{name}" to position {position} of {total}',
+		"configModal.dragToReorderChecklistItem": 'Drag to reorder "{name}"',
+		"configModal.moveChecklistItemUp": 'Move "{name}" up',
+		"configModal.moveChecklistItemDown": 'Move "{name}" down',
+		"configModal.checklistItemMovedAnnouncement":
+			'Moved "{name}" to position {position} of {total}',
+		"configModal.checklistItemMoveCancelled": 'Cancelled moving "{name}"',
 		"configModal.columnsDesc":
 			"Configure display order, name, and visibility for board columns.",
 		"configModal.addColumn": "Add New Column",
@@ -356,6 +378,14 @@ export const translations = {
 		"taskModal.noChecklistItems":
 			'No checklist items. You can add items using "+".',
 		"taskModal.itemPlaceholder": "Enter checklist item...",
+		"taskModal.dragToReorderChecklistItem": 'Drag to reorder "{name}"',
+		"taskModal.moveChecklistItemUp": 'Move "{name}" up',
+		"taskModal.moveChecklistItemDown": 'Move "{name}" down',
+		"taskModal.checklistItemMovedAnnouncement":
+			'Moved "{name}" to position {position} of {total}',
+		"taskModal.checklistItemMoveCancelled": 'Cancelled moving "{name}"',
+		"taskModal.checklistItemFallbackName": "Checklist item {index}",
+		"taskModal.removeChecklistItem": "Remove item",
 		"taskModal.addLinkItem": "+ Add link",
 		"taskModal.noLinks": "No links yet. Add one using the form below.",
 		"taskModal.linkLabelPlaceholder": "Display text (optional)",
