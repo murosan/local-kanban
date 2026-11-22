@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -12,6 +13,7 @@ import (
 	"github.com/murosan/local-kanban/pkg/cache"
 	"github.com/murosan/local-kanban/pkg/markdown"
 	"github.com/murosan/local-kanban/pkg/model"
+	"github.com/murosan/local-kanban/pkg/search"
 )
 
 func TestConfigRoutes(t *testing.T) {
@@ -938,4 +940,353 @@ func TestRebuildCacheRebalancesAllRanks(t *testing.T) {
 	if len(afterMove) != 5 || afterMove[0].ID != t5.ID || afterMove[1].ID != t1.ID {
 		t.Fatalf("expected t5 at index 0 before t1, got %v", afterMove)
 	}
+}
+
+func TestCustomFieldsReorderPersistence(t *testing.T) {
+	tempDir := t.TempDir()
+	store, err := markdown.NewStore(tempDir)
+	if err != nil {
+		t.Fatalf("failed to create store: %v", err)
+	}
+
+	sqliteCache, err := cache.NewSQLiteCache(filepath.Join(tempDir, ".local_cache.db"))
+	if err != nil {
+		t.Fatalf("failed to create sqlite cache: %v", err)
+	}
+	defer func() { _ = sqliteCache.Close() }()
+	store.SetCache(sqliteCache)
+
+	server := NewServer(store, nil)
+	mux := http.NewServeMux()
+	server.RegisterRoutes(mux)
+
+	// 1. Reorder preset custom fields via PUT /api/config
+	cfg, err := store.GetBoardConfig()
+	if err != nil {
+		t.Fatalf("GetBoardConfig failed: %v", err)
+	}
+	cfg.CustomFields = []model.CustomFieldDef{
+		{ID: "preset-1", Name: "Priority", Type: model.FieldTypeDropdown},
+		{ID: "preset-2", Name: "Assignee", Type: model.FieldTypeText},
+		{ID: "preset-3", Name: "Due Date", Type: model.FieldTypeDate},
+	}
+	cfgBytes, _ := json.Marshal(cfg)
+	reqPutCfg := httptest.NewRequest("PUT", "/api/config", bytes.NewReader(cfgBytes))
+	wPutCfg := httptest.NewRecorder()
+	mux.ServeHTTP(wPutCfg, reqPutCfg)
+	if wPutCfg.Code != http.StatusOK {
+		t.Fatalf("expected 200 PUT /api/config, got %d", wPutCfg.Code)
+	}
+
+	cfg.CustomFields = []model.CustomFieldDef{
+		cfg.CustomFields[2],
+		cfg.CustomFields[0],
+		cfg.CustomFields[1],
+	}
+	reorderedCfgBytes, _ := json.Marshal(cfg)
+	reqPutCfg2 := httptest.NewRequest("PUT", "/api/config", bytes.NewReader(reorderedCfgBytes))
+	wPutCfg2 := httptest.NewRecorder()
+	mux.ServeHTTP(wPutCfg2, reqPutCfg2)
+	if wPutCfg2.Code != http.StatusOK {
+		t.Fatalf("expected 200 PUT /api/config reorder, got %d", wPutCfg2.Code)
+	}
+
+	reqGetCfg := httptest.NewRequest("GET", "/api/config", nil)
+	wGetCfg := httptest.NewRecorder()
+	mux.ServeHTTP(wGetCfg, reqGetCfg)
+	var loadedCfg model.BoardConfig
+	if err := json.NewDecoder(wGetCfg.Body).Decode(&loadedCfg); err != nil {
+		t.Fatalf("failed to decode config: %v", err)
+	}
+	expectedPresetOrder := []string{"preset-3", "preset-1", "preset-2"}
+	if len(loadedCfg.CustomFields) != len(expectedPresetOrder) {
+		t.Fatalf(
+			"expected %d preset custom fields, got %d",
+			len(expectedPresetOrder),
+			len(loadedCfg.CustomFields),
+		)
+	}
+	for i, wantID := range expectedPresetOrder {
+		if loadedCfg.CustomFields[i].ID != wantID {
+			t.Errorf(
+				"config custom_fields[%d]: want %q, got %q",
+				i,
+				wantID,
+				loadedCfg.CustomFields[i].ID,
+			)
+		}
+	}
+
+	// 2. Create task with 3 custom fields, then reorder them via PUT /api/tasks/{id}
+	initialFields := []model.CustomFieldValue{
+		{ID: "cf-1", Name: "Priority", Type: model.FieldTypeText, Value: "High", Enabled: true},
+		{ID: "cf-2", Name: "Assignee", Type: model.FieldTypeText, Value: "Alice", Enabled: true},
+		{
+			ID:      "cf-3",
+			Name:    "Due Date",
+			Type:    model.FieldTypeDate,
+			Value:   "2026-12-01",
+			Enabled: true,
+		},
+	}
+	createPayload, _ := json.Marshal(map[string]any{
+		"title":         "Reorder Fields Task",
+		"column_id":     "col-todo",
+		"custom_fields": initialFields,
+	})
+	reqCreate := httptest.NewRequest("POST", "/api/tasks", bytes.NewReader(createPayload))
+	wCreate := httptest.NewRecorder()
+	mux.ServeHTTP(wCreate, reqCreate)
+	if wCreate.Code != http.StatusCreated {
+		t.Fatalf("expected 201 POST /api/tasks, got %d", wCreate.Code)
+	}
+	var createdTask model.Task
+	if err := json.NewDecoder(wCreate.Body).Decode(&createdTask); err != nil {
+		t.Fatalf("failed to decode created task: %v", err)
+	}
+
+	reorderedFields := []model.CustomFieldValue{
+		initialFields[2],
+		initialFields[0],
+		initialFields[1],
+	}
+	updatePayload, _ := json.Marshal(map[string]any{
+		"custom_fields": reorderedFields,
+	})
+	reqUpdate := httptest.NewRequest(
+		"PUT",
+		"/api/tasks/"+createdTask.ID,
+		bytes.NewReader(updatePayload),
+	)
+	wUpdate := httptest.NewRecorder()
+	mux.ServeHTTP(wUpdate, reqUpdate)
+	if wUpdate.Code != http.StatusOK {
+		t.Fatalf("expected 200 PUT /api/tasks/{id}, got %d", wUpdate.Code)
+	}
+
+	expectedFieldOrder := []string{"cf-3", "cf-1", "cf-2"}
+
+	// Verify via GET /api/tasks/{id} (SQLite cache)
+	reqGetOne := httptest.NewRequest("GET", "/api/tasks/"+createdTask.ID, nil)
+	wGetOne := httptest.NewRecorder()
+	mux.ServeHTTP(wGetOne, reqGetOne)
+	var loadedTask model.Task
+	if err := json.NewDecoder(wGetOne.Body).Decode(&loadedTask); err != nil {
+		t.Fatalf("failed to decode task: %v", err)
+	}
+	if len(loadedTask.CustomFields) != len(expectedFieldOrder) {
+		t.Fatalf(
+			"expected %d task custom fields, got %d",
+			len(expectedFieldOrder),
+			len(loadedTask.CustomFields),
+		)
+	}
+	for i, wantID := range expectedFieldOrder {
+		if loadedTask.CustomFields[i].ID != wantID {
+			t.Errorf(
+				"GET /api/tasks/{id} custom_fields[%d]: want %q, got %q",
+				i,
+				wantID,
+				loadedTask.CustomFields[i].ID,
+			)
+		}
+	}
+
+	// Verify via GET /api/tasks (board list)
+	reqGetAll := httptest.NewRequest("GET", "/api/tasks", nil)
+	wGetAll := httptest.NewRecorder()
+	mux.ServeHTTP(wGetAll, reqGetAll)
+	var listTasks []*model.Task
+	if err := json.NewDecoder(wGetAll.Body).Decode(&listTasks); err != nil {
+		t.Fatalf("failed to decode task list: %v", err)
+	}
+	if len(listTasks) != 1 || len(listTasks[0].CustomFields) != len(expectedFieldOrder) {
+		t.Fatalf(
+			"expected 1 task with %d custom fields, got %+v",
+			len(expectedFieldOrder),
+			listTasks,
+		)
+	}
+	for i, wantID := range expectedFieldOrder {
+		if listTasks[0].CustomFields[i].ID != wantID {
+			t.Errorf(
+				"GET /api/tasks custom_fields[%d]: want %q, got %q",
+				i,
+				wantID,
+				listTasks[0].CustomFields[i].ID,
+			)
+		}
+	}
+
+	// Verify directly from Markdown file on disk
+	diskTasks, err := store.GetAllTasks()
+	if err != nil {
+		t.Fatalf("GetAllTasks failed: %v", err)
+	}
+	if len(diskTasks) != 1 || len(diskTasks[0].CustomFields) != len(expectedFieldOrder) {
+		t.Fatalf("expected 1 disk task with %d custom fields", len(expectedFieldOrder))
+	}
+	for i, wantID := range expectedFieldOrder {
+		if diskTasks[0].CustomFields[i].ID != wantID {
+			t.Errorf(
+				"disk custom_fields[%d]: want %q, got %q",
+				i,
+				wantID,
+				diskTasks[0].CustomFields[i].ID,
+			)
+		}
+	}
+}
+
+func TestGetTasksSearchCustomFields(t *testing.T) {
+	runSearchCases := func(t *testing.T, mode string) {
+		t.Helper()
+		tempDir := t.TempDir()
+		store, err := markdown.NewStore(tempDir)
+		if err != nil {
+			t.Fatalf("failed to create store: %v", err)
+		}
+
+		var engine *search.Engine
+		switch mode {
+		case "sqlite":
+			sqliteCache, err := cache.NewSQLiteCache(filepath.Join(tempDir, ".local_cache.db"))
+			if err != nil {
+				t.Fatalf("failed to create sqlite cache: %v", err)
+			}
+			defer func() { _ = sqliteCache.Close() }()
+			store.SetCache(sqliteCache)
+			engine = search.NewEngine(sqliteCache)
+		case "unavailable":
+			engine = search.NewEngine(nil)
+		}
+
+		parentTask := &model.Task{
+			Title:    "親タスク",
+			ColumnID: "col-todo",
+			Rank:     "0|a",
+			CustomFields: []model.CustomFieldValue{
+				{
+					ID:    "cf-priority",
+					Name:  "優先度",
+					Type:  model.FieldTypeDropdown,
+					Value: "高",
+					Options: []model.CustomFieldOption{
+						{ID: "opt-1", Value: "高"},
+						{ID: "opt-2", Value: "低"},
+					},
+					Enabled: true,
+				},
+				{
+					ID:      "cf-hidden",
+					Name:    "非公開メモ",
+					Type:    model.FieldTypeText,
+					Value:   "非表示テキスト",
+					Enabled: false,
+				},
+			},
+		}
+		if err := store.SaveTask(parentTask); err != nil {
+			t.Fatalf("failed to save parentTask: %v", err)
+		}
+
+		subTask := &model.Task{
+			ParentID: parentTask.ID,
+			Title:    "子タスク",
+			ColumnID: "col-todo",
+			Rank:     "0|b",
+			CustomFields: []model.CustomFieldValue{
+				{
+					ID:      "cf-sub-link",
+					Name:    "仕様書",
+					Type:    model.FieldTypeLink,
+					Value:   "https://example.com/subtask-spec",
+					Enabled: true,
+				},
+			},
+		}
+		if err := store.SaveTask(subTask); err != nil {
+			t.Fatalf("failed to save subTask: %v", err)
+		}
+		parentTask.Subtasks = []model.SubtaskRef{{ID: subTask.ID, Completed: false}}
+		if err := store.SaveTask(parentTask); err != nil {
+			t.Fatalf("failed to update parentTask subtasks: %v", err)
+		}
+
+		otherTask := &model.Task{
+			Title:    "別タスク",
+			ColumnID: "col-in-progress",
+			Rank:     "0|c",
+			CustomFields: []model.CustomFieldValue{
+				{
+					ID:      "cf-date",
+					Name:    "期限",
+					Type:    model.FieldTypeDate,
+					Value:   "2026-12-31",
+					Enabled: true,
+				},
+			},
+		}
+		if err := store.SaveTask(otherTask); err != nil {
+			t.Fatalf("failed to save otherTask: %v", err)
+		}
+
+		server := NewServer(store, engine)
+		mux := http.NewServeMux()
+		server.RegisterRoutes(mux)
+
+		queryTasks := func(q string) []*model.Task {
+			req := httptest.NewRequest("GET", "/api/tasks?q="+url.QueryEscape(q), nil)
+			w := httptest.NewRecorder()
+			mux.ServeHTTP(w, req)
+			if w.Code != http.StatusOK {
+				t.Fatalf("GET /api/tasks?q=%s returned %d", q, w.Code)
+			}
+			var tasks []*model.Task
+			if err := json.NewDecoder(w.Body).Decode(&tasks); err != nil {
+				t.Fatalf("failed to decode tasks for query %q: %v", q, err)
+			}
+			return tasks
+		}
+
+		// 1. Short dropdown value matches parentTask
+		resHigh := queryTasks("高")
+		if len(resHigh) != 1 || resHigh[0].ID != parentTask.ID {
+			t.Errorf("query '高': expected parentTask, got %+v", resHigh)
+		}
+
+		// 2. Unselected dropdown option does not match
+		resLow := queryTasks("低")
+		if len(resLow) != 0 {
+			t.Errorf("query '低': expected 0 tasks, got %+v", resLow)
+		}
+
+		// 3. Disabled custom field does not match
+		resHidden := queryTasks("非表示テキスト")
+		if len(resHidden) != 0 {
+			t.Errorf("query '非表示テキスト': expected 0 tasks, got %+v", resHidden)
+		}
+
+		// 4. Date custom field matches otherTask
+		resDate := queryTasks("2026-12-31")
+		if len(resDate) != 1 || resDate[0].ID != otherTask.ID {
+			t.Errorf("query '2026-12-31': expected otherTask, got %+v", resDate)
+		}
+
+		// 5. Subtask custom field match surfaces parentTask
+		resSub := queryTasks("subtask-spec")
+		if len(resSub) != 1 || resSub[0].ID != parentTask.ID {
+			t.Errorf("query 'subtask-spec': expected parentTask, got %+v", resSub)
+		}
+	}
+
+	t.Run("with_search_engine", func(t *testing.T) {
+		runSearchCases(t, "sqlite")
+	})
+	t.Run("without_search_engine_fallback", func(t *testing.T) {
+		runSearchCases(t, "nil")
+	})
+	t.Run("with_unavailable_search_engine_fallback", func(t *testing.T) {
+		runSearchCases(t, "unavailable")
+	})
 }

@@ -106,9 +106,11 @@ func (s *Server) handleGetTasks(w http.ResponseWriter, r *http.Request) {
 	var matchedRootIDs map[string]bool
 	if query != "" {
 		matchedRootIDs = make(map[string]bool)
-		if s.searchEngine != nil {
+		usedSearchEngine := false
+		if s.searchEngine != nil && s.searchEngine.Available() {
 			matchedIDs, err := s.searchEngine.Search(rawQuery)
 			if err == nil {
+				usedSearchEngine = true
 				for _, id := range matchedIDs {
 					if t, exists := taskByID[id]; exists {
 						if childIDs[t.ID] {
@@ -129,7 +131,8 @@ func (s *Server) handleGetTasks(w http.ResponseWriter, r *http.Request) {
 					}
 				}
 			}
-		} else {
+		}
+		if !usedSearchEngine {
 			for _, t := range tasks {
 				match := strings.Contains(strings.ToLower(t.Title), query) ||
 					strings.Contains(strings.ToLower(t.Content), query) ||
@@ -140,6 +143,12 @@ func (s *Server) handleGetTasks(w http.ResponseWriter, r *http.Request) {
 							match = true
 							break
 						}
+					}
+				}
+				if !match {
+					cfText := model.ExtractCustomFieldsSearchText(t.CustomFields)
+					if strings.Contains(strings.ToLower(cfText), query) {
+						match = true
 					}
 				}
 				if match {

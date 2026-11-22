@@ -140,6 +140,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS tasks_fts USING fts5(
     title,
     content,
     tags,
+    custom_fields,
     tokenize = 'trigram'
 );
 ```

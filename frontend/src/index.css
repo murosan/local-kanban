@@ -2,6 +2,8 @@
 @config "../tailwind.config.js";
 
 :root {
+	color-scheme: dark;
+	accent-color: var(--accent-color);
 	--bg-primary: #0b0f19;
 	--bg-surface: #111827;
 	--bg-card: #1f293d;
@@ -16,6 +18,7 @@
 }
 
 [data-theme="midnight"] {
+	color-scheme: dark;
 	--bg-primary: #0a0e1a;
 	--bg-surface: #0f172a;
 	--bg-card: #1e293b;
@@ -30,6 +33,7 @@
 }
 
 [data-theme="nord"] {
+	color-scheme: dark;
 	--bg-primary: #2e3440;
 	--bg-surface: #3b4252;
 	--bg-card: #434c5e;
@@ -44,6 +48,7 @@
 }
 
 [data-theme="dracula"] {
+	color-scheme: dark;
 	--bg-primary: #282a36;
 	--bg-surface: #343746;
 	--bg-card: #44475a;
@@ -58,6 +63,7 @@
 }
 
 [data-theme="monokai"] {
+	color-scheme: dark;
 	--bg-primary: #272822;
 	--bg-surface: #3e3d32;
 	--bg-card: #49483e;
@@ -72,6 +78,7 @@
 }
 
 [data-theme="cyberpunk"] {
+	color-scheme: dark;
 	--bg-primary: #120024;
 	--bg-surface: #1a0033;
 	--bg-card: #2a004f;
@@ -86,6 +93,7 @@
 }
 
 [data-theme="forest"] {
+	color-scheme: dark;
 	--bg-primary: #061712;
 	--bg-surface: #0b231c;
 	--bg-card: #14352b;
@@ -101,6 +109,7 @@
 
 [data-theme="light-clean"],
 [data-theme="light"] {
+	color-scheme: light;
 	--bg-primary: #f8fafc;
 	--bg-surface: #ffffff;
 	--bg-card: #ffffff;
@@ -116,6 +125,7 @@
 }
 
 [data-theme="warm-paper"] {
+	color-scheme: light;
 	--bg-primary: #fbf9f5;
 	--bg-surface: #f7f3eb;
 	--bg-card: #f3efe6;
@@ -130,6 +140,7 @@
 }
 
 [data-theme="dim-light"] {
+	color-scheme: light;
 	--bg-primary: #94a3b8;
 	--bg-surface: #cbd5e1;
 	--bg-card: #bfcbda;
@@ -144,6 +155,7 @@
 }
 
 [data-theme="dim-dark"] {
+	color-scheme: dark;
 	--bg-primary: #1f2937;
 	--bg-surface: #374151;
 	--bg-card: #252e3d;
@@ -162,6 +174,10 @@
 		background-color: var(--bg-primary);
 		color: var(--text-primary);
 		@apply font-sans antialiased min-h-screen selection:bg-blue-600 selection:text-white transition-colors duration-300;
+	}
+
+	input[type="date"]::-webkit-calendar-picker-indicator {
+		cursor: pointer;
 	}
 }
 
@@ -521,4 +537,130 @@
 .markdown-preview h5,
 .markdown-preview h6 {
 	scroll-margin-top: 1rem;
+}
+
+/* Accessible drag-and-drop reordering */
+.drag-handle {
+	touch-action: none;
+	-webkit-user-select: none;
+	user-select: none;
+}
+
+html.is-dragging-item,
+html.is-dragging-item * {
+	cursor: grabbing;
+}
+
+.sortable-field-item {
+	scroll-margin: 1rem;
+}
+
+.sortable-field-item:has(.drag-handle:focus-visible) {
+	outline: 2px solid var(--accent-color);
+	outline-offset: 2px;
+}
+
+/* Copy button & confirmation live-region bubble */
+.copy-wrapper {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+	flex-shrink: 0;
+}
+
+.copy-button {
+	min-inline-size: 24px;
+	min-block-size: 24px;
+}
+
+.copy-button .copy-icon-copied,
+.copy-button .copy-icon-failed {
+	display: none;
+}
+
+.copy-button[data-copied] .copy-icon-default,
+.copy-button[data-failed] .copy-icon-default {
+	display: none;
+}
+
+.copy-button[data-copied] .copy-icon-copied {
+	display: block;
+}
+
+.copy-button[data-failed] .copy-icon-failed {
+	display: block;
+}
+
+.copy-tip {
+	position: absolute;
+	inset-block-end: calc(100% + 4px);
+	inset-inline-end: 0;
+	pointer-events: none;
+	white-space: nowrap;
+	padding: 0.125rem 0.45rem;
+	border-radius: 0.375rem;
+	font-size: 10px;
+	font-weight: 600;
+	line-height: 1.4;
+	background-color: var(--modal-bg);
+	color: var(--text-primary);
+	border: 1px solid var(--border-color);
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+	z-index: 30;
+	opacity: 0;
+	transform: translateY(2px);
+	transition:
+		opacity 0.15s ease,
+		transform 0.15s ease;
+}
+
+.copy-button[data-copied] + .copy-tip {
+	opacity: 1;
+	transform: translateY(0);
+	color: #10b981;
+	border-color: rgba(16, 185, 129, 0.35);
+}
+
+.copy-button[data-failed] + .copy-tip {
+	opacity: 1;
+	transform: translateY(0);
+	color: #f43f5e;
+	border-color: rgba(244, 63, 94, 0.35);
+}
+
+/* Collapsible link list disclosure on cards */
+.link-disclosure > summary {
+	list-style: none;
+}
+
+.link-disclosure > summary::-webkit-details-marker {
+	display: none;
+}
+
+.link-disclosure > summary .disclosure-chevron {
+	transition: rotate 0.2s ease;
+}
+
+.link-disclosure[open] > summary {
+	border-end-start-radius: 0;
+	border-end-end-radius: 0;
+}
+
+.link-disclosure[open] > summary .disclosure-chevron {
+	rotate: 90deg;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.sortable-field-item {
+		transition: none;
+	}
+
+	.copy-tip {
+		transform: none;
+		transition: opacity 0.15s ease;
+	}
+
+	.link-disclosure > summary .disclosure-chevron {
+		transition: none;
+	}
 }

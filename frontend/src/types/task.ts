@@ -13,6 +13,12 @@ export interface ChecklistItem {
 	completed: boolean;
 }
 
+export interface LinkItem {
+	id: string;
+	url: string;
+	label?: string;
+}
+
 export interface CustomFieldOption {
 	id: string;
 	value: string;
@@ -31,7 +37,14 @@ export interface CustomFieldValue {
 	field_id?: string;
 	name: string;
 	type: CustomFieldType;
-	value: string | number | boolean | string[] | ChecklistItem[] | null;
+	value:
+		| string
+		| number
+		| boolean
+		| string[]
+		| ChecklistItem[]
+		| LinkItem[]
+		| null;
 	options?: CustomFieldOption[];
 	enabled?: boolean;
 }

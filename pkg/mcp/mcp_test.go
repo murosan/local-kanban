@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/murosan/local-kanban/pkg/cache"
 	"github.com/murosan/local-kanban/pkg/markdown"
 	"github.com/murosan/local-kanban/pkg/model"
 	"github.com/murosan/local-kanban/pkg/search"
@@ -307,5 +309,79 @@ func TestMCPSubtasks(t *testing.T) {
 
 	if len(outSubs.Tasks) != 1 || outSubs.Tasks[0].ID != subTask.ID {
 		t.Errorf("expected 1 subtask, got %+v", outSubs.Tasks)
+	}
+}
+
+func TestMCPSearchTasksCustomFields(t *testing.T) {
+	tempDir := t.TempDir()
+	store, err := markdown.NewStore(tempDir)
+	if err != nil {
+		t.Fatalf("failed to create store: %v", err)
+	}
+
+	sqliteCache, err := cache.NewSQLiteCache(filepath.Join(tempDir, ".local_cache.db"))
+	if err != nil {
+		t.Fatalf("failed to create sqlite cache: %v", err)
+	}
+	defer func() { _ = sqliteCache.Close() }()
+	store.SetCache(sqliteCache)
+
+	task := &model.Task{
+		Title:    "MCP Custom Field Task",
+		ColumnID: "col-todo",
+		Rank:     "0|a",
+		CustomFields: []model.CustomFieldValue{
+			{
+				ID:      "cf-owner",
+				Name:    "担当者",
+				Type:    model.FieldTypeText,
+				Value:   "鈴木一郎",
+				Enabled: true,
+			},
+		},
+	}
+	if err := store.SaveTask(task); err != nil {
+		t.Fatalf("failed to save task: %v", err)
+	}
+
+	mcpSrv, err := NewMCPServer(store, search.NewEngine(sqliteCache))
+	if err != nil {
+		t.Fatalf("failed to create MCP server: %v", err)
+	}
+
+	clientTransport, serverTransport := mcpSDK.NewInMemoryTransports()
+	ctx := t.Context()
+
+	go func() {
+		_ = mcpSrv.MCPServer().Run(ctx, serverTransport)
+	}()
+
+	client := mcpSDK.NewClient(&mcpSDK.Implementation{
+		Name:    "TestClient",
+		Version: "1.0.0",
+	}, nil)
+
+	session, err := client.Connect(ctx, clientTransport, nil)
+	if err != nil {
+		t.Fatalf("failed to connect client: %v", err)
+	}
+	defer func() { _ = session.Close() }()
+
+	res, err := session.CallTool(ctx, &mcpSDK.CallToolParams{
+		Name: "search_tasks_fts",
+		Arguments: map[string]any{
+			"query": "鈴木一郎",
+		},
+	})
+	if err != nil {
+		t.Fatalf("search_tasks_fts failed: %v", err)
+	}
+
+	var output SearchTasksOutput
+	data, _ := json.Marshal(res.StructuredContent)
+	_ = json.Unmarshal(data, &output)
+
+	if len(output.Tasks) != 1 || output.Tasks[0].ID != task.ID {
+		t.Errorf("expected task %s from search_tasks_fts, got %+v", task.ID, output.Tasks)
 	}
 }

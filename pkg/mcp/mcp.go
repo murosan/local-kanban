@@ -230,7 +230,7 @@ func (s *Server) registerTools() {
 	// 4. search_tasks_fts
 	mcp.AddTool(s.mcpServer, &mcp.Tool{
 		Name:        "search_tasks_fts",
-		Description: "Search tasks using SQLite FTS5 full-text search.",
+		Description: "Search tasks by title, content, tags, and custom fields using SQLite FTS5 full-text search.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input SearchTasksInput) (*mcp.CallToolResult, *SearchTasksOutput, error) {
 		if strings.TrimSpace(input.Query) == "" {
 			return nil, nil, fmt.Errorf("query is required")

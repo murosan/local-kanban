@@ -367,6 +367,75 @@ func TestChecklistCustomField(t *testing.T) {
 	}
 }
 
+func TestLinkListCustomField(t *testing.T) {
+	tmpDir := t.TempDir()
+	store, err := NewStore(tmpDir)
+	if err != nil {
+		t.Fatalf("failed to init store: %v", err)
+	}
+
+	linkItems := []model.LinkItem{
+		{ID: "link-1", URL: "https://example.com/spec", Label: "仕様書"},
+		{ID: "link-2", URL: "vscode://file/workspace/app.go"},
+	}
+
+	task := &model.Task{
+		Title:    "Link List Test Task",
+		ColumnID: "col-todo",
+		Rank:     "0|m",
+		CustomFields: []model.CustomFieldValue{
+			{
+				ID:      "cf-link-1",
+				Name:    "関連リンク",
+				Type:    model.FieldTypeLink,
+				Value:   linkItems,
+				Enabled: true,
+			},
+		},
+		Content: "Task with multiple links",
+	}
+
+	if err := store.SaveTask(task); err != nil {
+		t.Fatalf("failed to save task with link list: %v", err)
+	}
+
+	loadedTask, err := store.GetTaskByID(task.ID)
+	if err != nil {
+		t.Fatalf("failed to get task: %v", err)
+	}
+
+	if len(loadedTask.CustomFields) != 1 {
+		t.Fatalf("expected 1 custom field, got %d", len(loadedTask.CustomFields))
+	}
+
+	cf := loadedTask.CustomFields[0]
+	if cf.Type != model.FieldTypeLink {
+		t.Errorf("expected type %s, got %s", model.FieldTypeLink, cf.Type)
+	}
+
+	items, ok := cf.Value.([]any)
+	if !ok {
+		t.Fatalf("expected []any for link list value, got %T (%+v)", cf.Value, cf.Value)
+	}
+	if len(items) != 2 {
+		t.Fatalf("expected 2 link items, got %d", len(items))
+	}
+	first, ok := items[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected map[string]any for first link item, got %T", items[0])
+	}
+	if first["label"] != "仕様書" || first["url"] != "https://example.com/spec" {
+		t.Errorf("unexpected first link item: %+v", first)
+	}
+	second, ok := items[1].(map[string]any)
+	if !ok {
+		t.Fatalf("expected map[string]any for second link item, got %T", items[1])
+	}
+	if second["url"] != "vscode://file/workspace/app.go" {
+		t.Errorf("unexpected second link item: %+v", second)
+	}
+}
+
 func TestSubtasksCRUDAndCascade(t *testing.T) {
 	tmpDir := t.TempDir()
 	store, err := NewStore(tmpDir)

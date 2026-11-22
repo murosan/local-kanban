@@ -5,7 +5,8 @@ export const translations = {
 		// Header
 		"header.title": "LocalKanban",
 		"header.subtitle": "ローカルファースト カンバン",
-		"header.searchPlaceholder": "カード、タグ、本文を検索...",
+		"header.searchPlaceholder":
+			"カード、タグ、本文、カスタムフィールドを検索...",
 		"header.theme": "テーマ",
 		"header.columns": "設定",
 		"header.sync": "同期",
@@ -45,6 +46,11 @@ export const translations = {
 		"configModal.checklistItems": "チェックリスト初期項目（色付け設定）:",
 		"configModal.deleteFieldConfirm":
 			'カスタムフィールド "{name}" を削除してもよろしいですか？',
+		"configModal.dragToReorderField": '"{name}" をドラッグして並び替え',
+		"configModal.moveFieldUp": '"{name}" を上へ移動',
+		"configModal.moveFieldDown": '"{name}" を下へ移動',
+		"configModal.fieldMovedAnnouncement":
+			'"{name}" を {position} / {total} 番目に移動しました',
 		"configModal.columnsDesc":
 			"ボード上の表示順序・名前・表示/非表示を設定します。",
 		"configModal.addColumn": "新規カラムを追加",
@@ -95,6 +101,11 @@ export const translations = {
 		"taskModal.removeField": "削除",
 		"taskModal.removeFieldConfirm":
 			'カスタムフィールド "{name}" を削除してもよろしいですか？',
+		"taskModal.dragToReorderField": '"{name}" をドラッグして並び替え',
+		"taskModal.moveFieldUp": '"{name}" を上へ移動',
+		"taskModal.moveFieldDown": '"{name}" を下へ移動',
+		"taskModal.fieldMovedAnnouncement":
+			'"{name}" を {position} / {total} 番目に移動しました',
 		"taskModal.cancel": "キャンセル",
 		"taskModal.save": "保存",
 		"taskModal.saving": "保存中...",
@@ -108,6 +119,23 @@ export const translations = {
 		"taskModal.noChecklistItems":
 			"チェック項目がありません。「＋」から項目を追加できます。",
 		"taskModal.itemPlaceholder": "チェック項目の内容を入力...",
+		"taskModal.addLinkItem": "＋ リンクを追加",
+		"taskModal.noLinks": "リンクがありません。下のフォームから追加できます。",
+		"taskModal.linkLabelPlaceholder": "表示テキスト（任意）",
+		"taskModal.linkUrlPlaceholder": "URL（https://..., vscode://...）",
+		"taskModal.editLink": "リンクを編集",
+		"taskModal.doneEditLink": "完了",
+		"taskModal.removeLink": "リンクを削除",
+		"taskModal.removeLinkConfirm":
+			'リンク "{name}" を削除してもよろしいですか？',
+		"taskModal.removeLinkConfirmGeneric":
+			"このリンクを削除してもよろしいですか？",
+		"taskModal.copyLink": '"{name}" のURLをコピー',
+		"taskModal.copyFailed": "コピー失敗",
+		"taskModal.openLink": "リンクを開く",
+		"taskModal.emptyLink": "（URL未入力）",
+		"taskModal.invalidUrlError":
+			"有効なURLを入力してください（例: https://example.com, vscode://...）",
 		"taskModal.hierarchyLabel": "サブタスク・親タスク",
 		"taskModal.notSet": "未設定",
 		"taskModal.subtasksLabel": "サブタスク",
@@ -210,7 +238,7 @@ export const translations = {
 		// Header
 		"header.title": "LocalKanban",
 		"header.subtitle": "Local-First Kanban",
-		"header.searchPlaceholder": "Search cards, tags, content...",
+		"header.searchPlaceholder": "Search cards, tags, content, custom fields...",
 		"header.theme": "Theme",
 		"header.columns": "Config",
 		"header.sync": "Sync",
@@ -250,6 +278,11 @@ export const translations = {
 		"configModal.checklistItems": "Checklist Default Items (Color settings):",
 		"configModal.deleteFieldConfirm":
 			'Are you sure you want to delete custom field "{name}"?',
+		"configModal.dragToReorderField": 'Drag to reorder "{name}"',
+		"configModal.moveFieldUp": 'Move "{name}" up',
+		"configModal.moveFieldDown": 'Move "{name}" down',
+		"configModal.fieldMovedAnnouncement":
+			'Moved "{name}" to position {position} of {total}',
 		"configModal.columnsDesc":
 			"Configure display order, name, and visibility for board columns.",
 		"configModal.addColumn": "Add New Column",
@@ -301,6 +334,11 @@ export const translations = {
 		"taskModal.removeField": "Remove",
 		"taskModal.removeFieldConfirm":
 			'Are you sure you want to remove custom field "{name}"?',
+		"taskModal.dragToReorderField": 'Drag to reorder "{name}"',
+		"taskModal.moveFieldUp": 'Move "{name}" up',
+		"taskModal.moveFieldDown": 'Move "{name}" down',
+		"taskModal.fieldMovedAnnouncement":
+			'Moved "{name}" to position {position} of {total}',
 		"taskModal.cancel": "Cancel",
 		"taskModal.save": "Save",
 		"taskModal.saving": "Saving...",
@@ -314,6 +352,23 @@ export const translations = {
 		"taskModal.noChecklistItems":
 			'No checklist items. You can add items using "+".',
 		"taskModal.itemPlaceholder": "Enter checklist item...",
+		"taskModal.addLinkItem": "+ Add link",
+		"taskModal.noLinks": "No links yet. Add one using the form below.",
+		"taskModal.linkLabelPlaceholder": "Display text (optional)",
+		"taskModal.linkUrlPlaceholder": "URL (https://..., vscode://...)",
+		"taskModal.editLink": "Edit link",
+		"taskModal.doneEditLink": "Done",
+		"taskModal.removeLink": "Remove link",
+		"taskModal.removeLinkConfirm":
+			'Are you sure you want to remove link "{name}"?',
+		"taskModal.removeLinkConfirmGeneric":
+			"Are you sure you want to remove this link?",
+		"taskModal.copyLink": 'Copy URL for "{name}"',
+		"taskModal.copyFailed": "Copy failed",
+		"taskModal.openLink": "Open link",
+		"taskModal.emptyLink": "(Empty URL)",
+		"taskModal.invalidUrlError":
+			"Enter a valid URL (e.g. https://example.com, vscode://...).",
 		"taskModal.hierarchyLabel": "Subtasks & Parent",
 		"taskModal.notSet": "None",
 		"taskModal.subtasksLabel": "Subtasks",

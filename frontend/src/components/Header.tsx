@@ -59,7 +59,7 @@ export const Header: React.FC<HeaderProps> = ({
 				{/* Controls */}
 				<div className="flex items-center space-x-1.5 w-full md:w-auto">
 					{/* Search Bar */}
-					<div className="relative flex-1 md:w-56">
+					<div className="relative flex-1 md:w-72">
 						<Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--text-muted)]" />
 						<input
 							type="text"

@@ -34,6 +34,23 @@ func TestSearchEngine(t *testing.T) {
 		UpdatedAt: time.Now().UTC(),
 		FilePath:  filepath.Join(tmpDir, "task1.md"),
 		Content:   "## 詳細\nこのタスクは SQLite FTS5 と LIKE 検索の動作確認用です。",
+		CustomFields: []model.CustomFieldValue{
+			{
+				ID:      "cf-assignee",
+				Name:    "担当者",
+				Type:    model.FieldTypeText,
+				Value:   "田中花子",
+				Enabled: true,
+			},
+			{
+				ID:      "cf-priority",
+				Name:    "優先度",
+				Type:    model.FieldTypeDropdown,
+				Value:   "高",
+				Options: []model.CustomFieldOption{{ID: "o1", Value: "高"}, {ID: "o2", Value: "低"}},
+				Enabled: true,
+			},
+		},
 	}
 	if err := c.UpsertTask(task); err != nil {
 		t.Fatalf("failed to upsert task: %v", err)
@@ -57,5 +74,23 @@ func TestSearchEngine(t *testing.T) {
 	}
 	if len(idsShort) == 0 || idsShort[0] != "task-unique-123" {
 		t.Errorf("expected ['task-unique-123'] for '検索', got %v", idsShort)
+	}
+
+	// Test Search matching custom field value (FTS5)
+	idsCF, err := engine.Search("田中花子")
+	if err != nil {
+		t.Fatalf("search failed for custom field query: %v", err)
+	}
+	if len(idsCF) != 1 || idsCF[0] != "task-unique-123" {
+		t.Errorf("expected ['task-unique-123'] for '田中花子', got %v", idsCF)
+	}
+
+	// Test Search matching short custom field value (LIKE fallback)
+	idsCFShort, err := engine.Search("高")
+	if err != nil {
+		t.Fatalf("search failed for short custom field query: %v", err)
+	}
+	if len(idsCFShort) != 1 || idsCFShort[0] != "task-unique-123" {
+		t.Errorf("expected ['task-unique-123'] for '高', got %v", idsCFShort)
 	}
 }
