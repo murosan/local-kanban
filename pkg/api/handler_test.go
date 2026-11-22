@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -12,6 +13,7 @@ import (
 	"github.com/murosan/local-kanban/pkg/cache"
 	"github.com/murosan/local-kanban/pkg/markdown"
 	"github.com/murosan/local-kanban/pkg/model"
+	"github.com/murosan/local-kanban/pkg/search"
 )
 
 func TestConfigRoutes(t *testing.T) {
@@ -1134,4 +1136,157 @@ func TestCustomFieldsReorderPersistence(t *testing.T) {
 			)
 		}
 	}
+}
+
+func TestGetTasksSearchCustomFields(t *testing.T) {
+	runSearchCases := func(t *testing.T, mode string) {
+		t.Helper()
+		tempDir := t.TempDir()
+		store, err := markdown.NewStore(tempDir)
+		if err != nil {
+			t.Fatalf("failed to create store: %v", err)
+		}
+
+		var engine *search.Engine
+		switch mode {
+		case "sqlite":
+			sqliteCache, err := cache.NewSQLiteCache(filepath.Join(tempDir, ".local_cache.db"))
+			if err != nil {
+				t.Fatalf("failed to create sqlite cache: %v", err)
+			}
+			defer func() { _ = sqliteCache.Close() }()
+			store.SetCache(sqliteCache)
+			engine = search.NewEngine(sqliteCache)
+		case "unavailable":
+			engine = search.NewEngine(nil)
+		}
+
+		parentTask := &model.Task{
+			Title:    "親タスク",
+			ColumnID: "col-todo",
+			Rank:     "0|a",
+			CustomFields: []model.CustomFieldValue{
+				{
+					ID:    "cf-priority",
+					Name:  "優先度",
+					Type:  model.FieldTypeDropdown,
+					Value: "高",
+					Options: []model.CustomFieldOption{
+						{ID: "opt-1", Value: "高"},
+						{ID: "opt-2", Value: "低"},
+					},
+					Enabled: true,
+				},
+				{
+					ID:      "cf-hidden",
+					Name:    "非公開メモ",
+					Type:    model.FieldTypeText,
+					Value:   "非表示テキスト",
+					Enabled: false,
+				},
+			},
+		}
+		if err := store.SaveTask(parentTask); err != nil {
+			t.Fatalf("failed to save parentTask: %v", err)
+		}
+
+		subTask := &model.Task{
+			ParentID: parentTask.ID,
+			Title:    "子タスク",
+			ColumnID: "col-todo",
+			Rank:     "0|b",
+			CustomFields: []model.CustomFieldValue{
+				{
+					ID:      "cf-sub-link",
+					Name:    "仕様書",
+					Type:    model.FieldTypeLink,
+					Value:   "https://example.com/subtask-spec",
+					Enabled: true,
+				},
+			},
+		}
+		if err := store.SaveTask(subTask); err != nil {
+			t.Fatalf("failed to save subTask: %v", err)
+		}
+		parentTask.Subtasks = []model.SubtaskRef{{ID: subTask.ID, Completed: false}}
+		if err := store.SaveTask(parentTask); err != nil {
+			t.Fatalf("failed to update parentTask subtasks: %v", err)
+		}
+
+		otherTask := &model.Task{
+			Title:    "別タスク",
+			ColumnID: "col-in-progress",
+			Rank:     "0|c",
+			CustomFields: []model.CustomFieldValue{
+				{
+					ID:      "cf-date",
+					Name:    "期限",
+					Type:    model.FieldTypeDate,
+					Value:   "2026-12-31",
+					Enabled: true,
+				},
+			},
+		}
+		if err := store.SaveTask(otherTask); err != nil {
+			t.Fatalf("failed to save otherTask: %v", err)
+		}
+
+		server := NewServer(store, engine)
+		mux := http.NewServeMux()
+		server.RegisterRoutes(mux)
+
+		queryTasks := func(q string) []*model.Task {
+			req := httptest.NewRequest("GET", "/api/tasks?q="+url.QueryEscape(q), nil)
+			w := httptest.NewRecorder()
+			mux.ServeHTTP(w, req)
+			if w.Code != http.StatusOK {
+				t.Fatalf("GET /api/tasks?q=%s returned %d", q, w.Code)
+			}
+			var tasks []*model.Task
+			if err := json.NewDecoder(w.Body).Decode(&tasks); err != nil {
+				t.Fatalf("failed to decode tasks for query %q: %v", q, err)
+			}
+			return tasks
+		}
+
+		// 1. Short dropdown value matches parentTask
+		resHigh := queryTasks("高")
+		if len(resHigh) != 1 || resHigh[0].ID != parentTask.ID {
+			t.Errorf("query '高': expected parentTask, got %+v", resHigh)
+		}
+
+		// 2. Unselected dropdown option does not match
+		resLow := queryTasks("低")
+		if len(resLow) != 0 {
+			t.Errorf("query '低': expected 0 tasks, got %+v", resLow)
+		}
+
+		// 3. Disabled custom field does not match
+		resHidden := queryTasks("非表示テキスト")
+		if len(resHidden) != 0 {
+			t.Errorf("query '非表示テキスト': expected 0 tasks, got %+v", resHidden)
+		}
+
+		// 4. Date custom field matches otherTask
+		resDate := queryTasks("2026-12-31")
+		if len(resDate) != 1 || resDate[0].ID != otherTask.ID {
+			t.Errorf("query '2026-12-31': expected otherTask, got %+v", resDate)
+		}
+
+		// 5. Subtask custom field match surfaces parentTask
+		resSub := queryTasks("subtask-spec")
+		if len(resSub) != 1 || resSub[0].ID != parentTask.ID {
+			t.Errorf("query 'subtask-spec': expected parentTask, got %+v", resSub)
+		}
+	}
+
+	t.Run("with_search_engine", func(t *testing.T) {
+		runSearchCases(t, "sqlite")
+	})
+	t.Run("without_search_engine_fallback", func(t *testing.T) {
+		runSearchCases(t, "nil")
+	})
+	t.Run("with_unavailable_search_engine_fallback", func(t *testing.T) {
+		runSearchCases(t, "unavailable")
+	})
 }

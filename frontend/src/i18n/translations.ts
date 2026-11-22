@@ -5,7 +5,8 @@ export const translations = {
 		// Header
 		"header.title": "LocalKanban",
 		"header.subtitle": "ローカルファースト カンバン",
-		"header.searchPlaceholder": "カード、タグ、本文を検索...",
+		"header.searchPlaceholder":
+			"カード、タグ、本文、カスタムフィールドを検索...",
 		"header.theme": "テーマ",
 		"header.columns": "設定",
 		"header.sync": "同期",
@@ -220,7 +221,7 @@ export const translations = {
 		// Header
 		"header.title": "LocalKanban",
 		"header.subtitle": "Local-First Kanban",
-		"header.searchPlaceholder": "Search cards, tags, content...",
+		"header.searchPlaceholder": "Search cards, tags, content, custom fields...",
 		"header.theme": "Theme",
 		"header.columns": "Config",
 		"header.sync": "Sync",

@@ -16,6 +16,11 @@ func NewEngine(c *cache.SQLiteCache) *Engine {
 	}
 }
 
+// Available reports whether the backing SQLite cache is initialized.
+func (e *Engine) Available() bool {
+	return e != nil && e.cache != nil
+}
+
 // Search searches task IDs matching query using SQLite FTS5 with LIKE fallback.
 func (e *Engine) Search(query string) ([]string, error) {
 	cleanQuery := strings.TrimSpace(query)

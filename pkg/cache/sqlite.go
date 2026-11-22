@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/murosan/local-kanban/pkg/model"
 
@@ -72,13 +73,13 @@ func (c *SQLiteCache) initSchema() error {
 
 	CREATE INDEX IF NOT EXISTS idx_tasks_column_rank ON tasks(column_id, rank);
 	CREATE INDEX IF NOT EXISTS idx_tasks_updated_at ON tasks(updated_at DESC);
-	CREATE INDEX IF NOT EXISTS idx_tasks_parent_id ON tasks(parent_id);
 
 	CREATE VIRTUAL TABLE IF NOT EXISTS tasks_fts USING fts5(
 		id UNINDEXED,
 		title,
 		content,
 		tags,
+		custom_fields,
 		tokenize = 'trigram'
 	);
 
@@ -97,7 +98,130 @@ func (c *SQLiteCache) initSchema() error {
 	_, _ = c.db.Exec("ALTER TABLE tasks ADD COLUMN parent_id TEXT;")
 	_, _ = c.db.Exec("ALTER TABLE tasks ADD COLUMN subtasks TEXT;")
 	_, _ = c.db.Exec("CREATE INDEX IF NOT EXISTS idx_tasks_parent_id ON tasks(parent_id);")
+
+	if err := c.migrateTasksFTSSchema(); err != nil {
+		return err
+	}
 	return nil
+}
+
+func (c *SQLiteCache) migrateTasksFTSSchema() error {
+	rows, err := c.db.Query("PRAGMA table_info(tasks_fts)")
+	if err != nil {
+		return fmt.Errorf("failed to inspect tasks_fts schema: %w", err)
+	}
+
+	hasCustomFields := false
+	for rows.Next() {
+		var cid int
+		var name, colType string
+		var notNull int
+		var dfltValue sql.NullString
+		var pk int
+		if scanErr := rows.Scan(&cid, &name, &colType, &notNull, &dfltValue, &pk); scanErr != nil {
+			_ = rows.Close()
+			return fmt.Errorf("failed to scan tasks_fts column info: %w", scanErr)
+		}
+		if name == "custom_fields" {
+			hasCustomFields = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return fmt.Errorf("error iterating tasks_fts column info: %w", err)
+	}
+	_ = rows.Close()
+
+	if hasCustomFields {
+		return nil
+	}
+
+	type ftsMigrationRow struct {
+		id           string
+		title        string
+		content      string
+		tags         string
+		customFields string
+	}
+
+	existingRows, err := c.db.Query(`
+		SELECT f.id, COALESCE(f.title, ''), COALESCE(f.content, ''), COALESCE(f.tags, ''), COALESCE(t.custom_fields, '')
+		FROM tasks_fts f
+		LEFT JOIN tasks t ON f.id = t.id
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to read existing tasks_fts rows for migration: %w", err)
+	}
+
+	var migrated []ftsMigrationRow
+	for existingRows.Next() {
+		var row ftsMigrationRow
+		var cfJSON string
+		if scanErr := existingRows.Scan(
+			&row.id,
+			&row.title,
+			&row.content,
+			&row.tags,
+			&cfJSON,
+		); scanErr != nil {
+			_ = existingRows.Close()
+			return fmt.Errorf("failed to scan existing tasks_fts row: %w", scanErr)
+		}
+		if cfJSON != "" {
+			var cfs []model.CustomFieldValue
+			if unmarshalErr := json.Unmarshal([]byte(cfJSON), &cfs); unmarshalErr == nil {
+				row.customFields = model.ExtractCustomFieldsSearchText(cfs)
+			}
+		}
+		migrated = append(migrated, row)
+	}
+	if err := existingRows.Err(); err != nil {
+		_ = existingRows.Close()
+		return fmt.Errorf("error iterating existing tasks_fts rows: %w", err)
+	}
+	_ = existingRows.Close()
+
+	tx, err := c.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin tasks_fts migration tx: %w", err)
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
+	if _, err := tx.Exec("DROP TABLE tasks_fts;"); err != nil {
+		return fmt.Errorf("failed to drop legacy tasks_fts table: %w", err)
+	}
+
+	createFTSSQL := `
+	CREATE VIRTUAL TABLE tasks_fts USING fts5(
+		id UNINDEXED,
+		title,
+		content,
+		tags,
+		custom_fields,
+		tokenize = 'trigram'
+	);
+	`
+	if _, err := tx.Exec(createFTSSQL); err != nil {
+		return fmt.Errorf("failed to recreate tasks_fts table: %w", err)
+	}
+
+	insertSQL := "INSERT INTO tasks_fts (id, title, content, tags, custom_fields) VALUES (?, ?, ?, ?, ?)"
+	for _, row := range migrated {
+		if _, err := tx.Exec(
+			insertSQL,
+			row.id,
+			row.title,
+			row.content,
+			row.tags,
+			row.customFields,
+		); err != nil {
+			return fmt.Errorf("failed to migrate tasks_fts row %s: %w", row.id, err)
+		}
+	}
+
+	return tx.Commit()
 }
 
 func (c *SQLiteCache) UpsertTask(task *model.Task) error {
@@ -167,13 +291,15 @@ func (c *SQLiteCache) UpsertTask(task *model.Task) error {
 
 	// Update FTS5 table
 	tagsStr := strings.Join(task.Tags, " ")
+	customFieldsText := model.ExtractCustomFieldsSearchText(task.CustomFields)
 	_, _ = tx.Exec("DELETE FROM tasks_fts WHERE id = ?", task.ID)
 	_, err = tx.Exec(
-		"INSERT INTO tasks_fts (id, title, content, tags) VALUES (?, ?, ?, ?)",
+		"INSERT INTO tasks_fts (id, title, content, tags, custom_fields) VALUES (?, ?, ?, ?, ?)",
 		task.ID,
 		task.Title,
 		task.Content,
 		tagsStr,
+		customFieldsText,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to insert into tasks_fts: %w", err)
@@ -250,7 +376,7 @@ func (c *SQLiteCache) SyncAll(tasks []*model.Task) error {
 	INSERT INTO tasks (id, parent_id, title, column_id, rank, tags, created_at, updated_at, file_path, custom_fields, summary, subtasks)
 	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 	`
-	ftsSQL := `INSERT INTO tasks_fts (id, title, content, tags) VALUES (?, ?, ?, ?);`
+	ftsSQL := `INSERT INTO tasks_fts (id, title, content, tags, custom_fields) VALUES (?, ?, ?, ?, ?);`
 	upsertTagSQL := `
 	INSERT INTO tags (name, last_used_at)
 	VALUES (?, ?)
@@ -286,7 +412,8 @@ func (c *SQLiteCache) SyncAll(tasks []*model.Task) error {
 		}
 
 		tagsStr := strings.Join(task.Tags, " ")
-		_, err = tx.Exec(ftsSQL, task.ID, task.Title, task.Content, tagsStr)
+		customFieldsText := model.ExtractCustomFieldsSearchText(task.CustomFields)
+		_, err = tx.Exec(ftsSQL, task.ID, task.Title, task.Content, tagsStr, customFieldsText)
 		if err != nil {
 			return err
 		}
@@ -369,8 +496,9 @@ func (c *SQLiteCache) SearchFTS(query string) ([]string, error) {
 		}
 	}
 
-	// If escaped query yielded no results, retry with raw query
-	if len(ids) == 0 && err == nil {
+	// If escaped query yielded no results, retry with raw query only when all terms are >= 3 runes
+	// (FTS5 trigram silently ignores unquoted terms shorter than 3 characters).
+	if len(ids) == 0 && err == nil && allTermsAtLeastThreeRunes(cleanQuery) {
 		_ = rows.Close()
 		rawRows, errRaw := c.db.Query(
 			"SELECT id FROM tasks_fts WHERE tasks_fts MATCH ?",
@@ -389,12 +517,22 @@ func (c *SQLiteCache) SearchFTS(query string) ([]string, error) {
 
 	// Fallback to LIKE query if FTS5 yields no results (e.g. for short 1-2 char Japanese queries)
 	if len(ids) == 0 {
-		likePattern := "%" + cleanQuery + "%"
-		likeRows, err := c.db.Query(
-			"SELECT id FROM tasks WHERE title LIKE ? OR tags LIKE ? ORDER BY updated_at DESC",
-			likePattern,
-			likePattern,
-		)
+		terms := strings.Fields(cleanQuery)
+		if len(terms) == 0 {
+			terms = []string{cleanQuery}
+		}
+		conditions := make([]string, len(terms))
+		args := make([]any, 0, len(terms)*4)
+		for i, term := range terms {
+			likePattern := "%" + escapeLikePattern(term) + "%"
+			conditions[i] = `(f.title LIKE ? ESCAPE '\' OR f.content LIKE ? ESCAPE '\' OR f.tags LIKE ? ESCAPE '\' OR f.custom_fields LIKE ? ESCAPE '\')`
+			args = append(args, likePattern, likePattern, likePattern, likePattern)
+		}
+		likeSQL := fmt.Sprintf(
+			"SELECT t.id FROM tasks t JOIN tasks_fts f ON t.id = f.id WHERE %s ORDER BY t.updated_at DESC",
+			strings.Join(conditions, " AND "),
+		) // #nosec G201 -- conditions uses static parameterized predicates joined by AND
+		likeRows, err := c.db.Query(likeSQL, args...)
 		if err == nil {
 			defer func() { _ = likeRows.Close() }()
 			for likeRows.Next() {
@@ -407,6 +545,24 @@ func (c *SQLiteCache) SearchFTS(query string) ([]string, error) {
 	}
 
 	return ids, nil
+}
+
+func allTermsAtLeastThreeRunes(query string) bool {
+	fields := strings.Fields(query)
+	if len(fields) == 0 {
+		return false
+	}
+	for _, f := range fields {
+		if utf8.RuneCountInString(f) < 3 {
+			return false
+		}
+	}
+	return true
+}
+
+func escapeLikePattern(s string) string {
+	r := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+	return r.Replace(s)
 }
 
 // GetFilePathsByColumnIDs returns file paths of tasks in specified column IDs, ordered by column_id and rank using idx_tasks_column_rank.

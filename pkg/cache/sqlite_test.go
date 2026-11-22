@@ -1,6 +1,8 @@
 package cache
 
 import (
+	"database/sql"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -331,5 +333,264 @@ func TestSubtasksCache(t *testing.T) {
 	}
 	if len(tasksInTodo) != 2 {
 		t.Fatalf("expected 2 tasks in col-todo, got %d", len(tasksInTodo))
+	}
+}
+
+func TestSearchFTSCustomFields(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "cf_search_test.db")
+	c, err := NewSQLiteCache(dbPath)
+	if err != nil {
+		t.Fatalf("failed to init SQLiteCache: %v", err)
+	}
+	defer func() { _ = c.Close() }()
+
+	now := time.Now().UTC()
+	task1 := &model.Task{
+		ID:        "task-cf-1",
+		Title:     "デザイン調整",
+		ColumnID:  "col-todo",
+		Rank:      "0|a",
+		CreatedAt: now,
+		UpdatedAt: now,
+		FilePath:  "/tmp/cf-1.md",
+		CustomFields: []model.CustomFieldValue{
+			{
+				ID:    "cf-1",
+				Name:  "優先度",
+				Type:  model.FieldTypeDropdown,
+				Value: "高",
+				Options: []model.CustomFieldOption{
+					{ID: "opt-1", Value: "高", Color: "#ef4444"},
+					{ID: "opt-2", Value: "低", Color: "#6366f1"},
+				},
+				Enabled: true,
+			},
+			{
+				ID:      "cf-2",
+				Name:    "期限",
+				Type:    model.FieldTypeDate,
+				Value:   "2026-08-28",
+				Enabled: true,
+			},
+			{
+				ID:      "cf-3",
+				Name:    "リンク",
+				Type:    model.FieldTypeLink,
+				Value:   "https://example.com/design-doc",
+				Enabled: true,
+			},
+			{
+				ID:      "cf-4",
+				Name:    "緊急フラグ",
+				Type:    model.FieldTypeCheckbox,
+				Value:   true,
+				Enabled: true,
+			},
+			{
+				ID:      "cf-5",
+				Name:    "非表示メモ",
+				Type:    model.FieldTypeText,
+				Value:   "シークレットワード",
+				Enabled: false,
+			},
+		},
+	}
+
+	task2 := &model.Task{
+		ID:        "task-cf-2",
+		Title:     "備品調達",
+		ColumnID:  "col-todo",
+		Rank:      "0|b",
+		CreatedAt: now,
+		UpdatedAt: now,
+		FilePath:  "/tmp/cf-2.md",
+		CustomFields: []model.CustomFieldValue{
+			{
+				ID:      "cf-6",
+				Name:    "見積",
+				Type:    model.FieldTypeNumber,
+				Value:   "42",
+				Enabled: true,
+			},
+			{
+				ID:      "cf-7",
+				Name:    "未チェック",
+				Type:    model.FieldTypeCheckbox,
+				Value:   false,
+				Enabled: true,
+			},
+			{
+				ID:   "cf-8",
+				Name: "買い物リスト",
+				Type: model.FieldTypeChecklist,
+				Value: []any{
+					map[string]any{"id": "item-1", "text": "牛乳", "completed": false},
+					map[string]any{"id": "item-2", "text": "電動ドライバー", "completed": true},
+				},
+				Options: []model.CustomFieldOption{
+					{ID: "opt-old", Value: "不要アイテム"},
+				},
+				Enabled: true,
+			},
+		},
+	}
+
+	if err := c.UpsertTask(task1); err != nil {
+		t.Fatalf("failed to upsert task1: %v", err)
+	}
+	if err := c.UpsertTask(task2); err != nil {
+		t.Fatalf("failed to upsert task2: %v", err)
+	}
+
+	testCases := []struct {
+		name    string
+		query   string
+		wantIDs []string
+	}{
+		{"dropdown short 1-char LIKE", "高", []string{"task-cf-1"}},
+		{"dropdown field name FTS5", "優先度", []string{"task-cf-1"}},
+		{"dropdown field name + value", "優先度 高", []string{"task-cf-1"}},
+		{"dropdown field name + unselected value excluded", "優先度 低", nil},
+		{"dropdown unselected option excluded", "低", nil},
+		{"date full FTS5", "2026-08-28", []string{"task-cf-1"}},
+		{"link URL FTS5", "https://example.com/design-doc", []string{"task-cf-1"}},
+		{"checkbox true matches name", "緊急フラグ", []string{"task-cf-1"}},
+		{"checkbox false excluded", "未チェック", nil},
+		{"disabled field excluded", "シークレットワード", nil},
+		{"number short 2-char LIKE", "42", []string{"task-cf-2"}},
+		{"checklist short 2-char LIKE", "牛乳", []string{"task-cf-2"}},
+		{"checklist long FTS5", "電動ドライバー", []string{"task-cf-2"}},
+		{"checklist unselected options excluded", "不要アイテム", nil},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := c.SearchFTS(tc.query)
+			if err != nil {
+				t.Fatalf("SearchFTS(%q) failed: %v", tc.query, err)
+			}
+			if len(got) != len(tc.wantIDs) {
+				t.Fatalf("SearchFTS(%q): want %v, got %v", tc.query, tc.wantIDs, got)
+			}
+			for i := range tc.wantIDs {
+				if got[i] != tc.wantIDs[i] {
+					t.Errorf(
+						"SearchFTS(%q)[%d]: want %q, got %q",
+						tc.query,
+						i,
+						tc.wantIDs[i],
+						got[i],
+					)
+				}
+			}
+		})
+	}
+
+	// Verify SyncAll preserves custom field indexing as well
+	if err := c.SyncAll([]*model.Task{task1, task2}); err != nil {
+		t.Fatalf("SyncAll failed: %v", err)
+	}
+	gotAfterSync, err := c.SearchFTS("電動ドライバー")
+	if err != nil {
+		t.Fatalf("SearchFTS after SyncAll failed: %v", err)
+	}
+	if len(gotAfterSync) != 1 || gotAfterSync[0] != "task-cf-2" {
+		t.Errorf("expected ['task-cf-2'] after SyncAll, got %v", gotAfterSync)
+	}
+}
+
+func TestLegacyTasksFTSMigration(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "legacy.db")
+
+	// Create a legacy DB without parent_id/subtasks in tasks and without custom_fields in tasks_fts
+	rawDB, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatalf("failed to open raw sqlite db: %v", err)
+	}
+	legacySchema := `
+	CREATE TABLE tasks (
+		id TEXT PRIMARY KEY,
+		title TEXT NOT NULL,
+		column_id TEXT NOT NULL,
+		rank TEXT NOT NULL,
+		tags TEXT,
+		created_at DATETIME NOT NULL,
+		updated_at DATETIME NOT NULL,
+		file_path TEXT UNIQUE NOT NULL,
+		custom_fields TEXT,
+		summary TEXT
+	);
+	CREATE VIRTUAL TABLE tasks_fts USING fts5(
+		id UNINDEXED,
+		title,
+		content,
+		tags,
+		tokenize = 'trigram'
+	);
+	`
+	if _, err := rawDB.Exec(legacySchema); err != nil {
+		_ = rawDB.Close()
+		t.Fatalf("failed to create legacy schema: %v", err)
+	}
+
+	cfJSON, _ := json.Marshal([]model.CustomFieldValue{
+		{
+			ID:      "cf-legacy",
+			Name:    "担当者",
+			Type:    model.FieldTypeText,
+			Value:   "佐藤太郎",
+			Enabled: true,
+		},
+	})
+	now := time.Now().UTC()
+	if _, err := rawDB.Exec(
+		`INSERT INTO tasks (id, title, column_id, rank, tags, created_at, updated_at, file_path, custom_fields, summary)
+		 VALUES (?, ?, 'col-todo', '0|a', '["backend"]', ?, ?, '/tmp/legacy.md', ?, '')`,
+		"legacy-1",
+		"レガシータスク",
+		now,
+		now,
+		string(cfJSON),
+	); err != nil {
+		_ = rawDB.Close()
+		t.Fatalf("failed to insert legacy task: %v", err)
+	}
+	if _, err := rawDB.Exec(
+		`INSERT INTO tasks_fts (id, title, content, tags) VALUES (?, ?, ?, ?)`,
+		"legacy-1",
+		"レガシータスク",
+		"本文に含まれる重要キーワード",
+		"backend",
+	); err != nil {
+		_ = rawDB.Close()
+		t.Fatalf("failed to insert legacy fts row: %v", err)
+	}
+	_ = rawDB.Close()
+
+	// Re-open with NewSQLiteCache to trigger automatic FTS migration
+	c, err := NewSQLiteCache(dbPath)
+	if err != nil {
+		t.Fatalf("NewSQLiteCache migration failed: %v", err)
+	}
+	defer func() { _ = c.Close() }()
+
+	// Custom field value must be searchable immediately after migration
+	idsCF, err := c.SearchFTS("佐藤太郎")
+	if err != nil {
+		t.Fatalf("SearchFTS custom field after migration failed: %v", err)
+	}
+	if len(idsCF) != 1 || idsCF[0] != "legacy-1" {
+		t.Errorf("expected ['legacy-1'] for custom field after migration, got %v", idsCF)
+	}
+
+	// Existing body content must also be preserved after migration
+	idsContent, err := c.SearchFTS("重要キーワード")
+	if err != nil {
+		t.Fatalf("SearchFTS content after migration failed: %v", err)
+	}
+	if len(idsContent) != 1 || idsContent[0] != "legacy-1" {
+		t.Errorf("expected ['legacy-1'] for content after migration, got %v", idsContent)
 	}
 }
