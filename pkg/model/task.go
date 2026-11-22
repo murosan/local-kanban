@@ -3,6 +3,7 @@ package model
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -49,6 +50,71 @@ type CustomFieldValue struct {
 	Value   any                 `json:"value"              yaml:"value"`
 	Options []CustomFieldOption `json:"options,omitempty"  yaml:"options,omitempty"`
 	Enabled bool                `json:"enabled"            yaml:"enabled"`
+}
+
+// CloneCustomFields returns a deep copy of fields with cleared instance IDs so a duplicated task
+// gets fresh unique IDs upon save while preserving FieldID, options, enabled state, and values.
+func CloneCustomFields(fields []CustomFieldValue) []CustomFieldValue {
+	if len(fields) == 0 {
+		return nil
+	}
+	cloned := make([]CustomFieldValue, len(fields))
+	for i, cf := range fields {
+		cloned[i] = CustomFieldValue{
+			ID:      "",
+			FieldID: cf.FieldID,
+			Name:    cf.Name,
+			Type:    cf.Type,
+			Value:   cloneAnyValue(cf.Value),
+			Options: slices.Clone(cf.Options),
+			Enabled: cf.Enabled,
+		}
+	}
+	return cloned
+}
+
+func cloneAnyValue(v any) any {
+	switch val := v.(type) {
+	case nil:
+		return nil
+	case []string:
+		return slices.Clone(val)
+	case []LinkItem:
+		return slices.Clone(val)
+	case []map[string]any:
+		out := make([]map[string]any, len(val))
+		for i, m := range val {
+			if m == nil {
+				continue
+			}
+			copied := make(map[string]any, len(m))
+			for k, mv := range m {
+				copied[k] = cloneAnyValue(mv)
+			}
+			out[i] = copied
+		}
+		return out
+	case []any:
+		out := make([]any, len(val))
+		for i, elem := range val {
+			out[i] = cloneAnyValue(elem)
+		}
+		return out
+	case map[string]any:
+		out := make(map[string]any, len(val))
+		for k, mv := range val {
+			out[k] = cloneAnyValue(mv)
+		}
+		return out
+	case map[any]any:
+		out := make(map[any]any, len(val))
+		for k, mv := range val {
+			out[k] = cloneAnyValue(mv)
+		}
+		return out
+	default:
+		return val
+	}
 }
 
 // ExtractCustomFieldsSearchText extracts searchable plain text from enabled custom fields.

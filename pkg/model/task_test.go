@@ -163,3 +163,68 @@ func TestExtractCustomFieldsSearchText(t *testing.T) {
 		}
 	}
 }
+
+func TestCloneCustomFields(t *testing.T) {
+	if got := CloneCustomFields(nil); got != nil {
+		t.Fatalf("expected nil for empty input, got %#v", got)
+	}
+
+	orig := []CustomFieldValue{
+		{
+			ID:      "cf-1",
+			FieldID: "preset-priority",
+			Name:    "Priority",
+			Type:    FieldTypeDropdown,
+			Value:   "High",
+			Options: []CustomFieldOption{
+				{ID: "opt-1", Value: "High", Color: "#ef4444"},
+			},
+			Enabled: true,
+		},
+		{
+			ID:   "cf-2",
+			Name: "Checklist",
+			Type: FieldTypeChecklist,
+			Value: []any{
+				map[string]any{"id": "item-1", "text": "Step 1", "completed": true},
+			},
+			Enabled: true,
+		},
+	}
+
+	cloned := CloneCustomFields(orig)
+	if len(cloned) != len(orig) {
+		t.Fatalf("expected %d cloned fields, got %d", len(orig), len(cloned))
+	}
+
+	for i := range cloned {
+		if cloned[i].ID != "" {
+			t.Errorf("expected cloned[%d].ID to be cleared, got %q", i, cloned[i].ID)
+		}
+		if cloned[i].FieldID != orig[i].FieldID {
+			t.Errorf("expected FieldID %q, got %q", orig[i].FieldID, cloned[i].FieldID)
+		}
+		if cloned[i].Name != orig[i].Name ||
+			cloned[i].Type != orig[i].Type ||
+			cloned[i].Enabled != orig[i].Enabled {
+			t.Errorf("field metadata mismatch at index %d: %+v vs %+v", i, cloned[i], orig[i])
+		}
+	}
+
+	// Mutating cloned options and nested checklist map must not affect orig
+	cloned[0].Options[0].Value = "Low"
+	if orig[0].Options[0].Value != "High" {
+		t.Errorf("mutating cloned Options leaked into original: got %q", orig[0].Options[0].Value)
+	}
+
+	clonedList := cloned[1].Value.([]any)
+	clonedItem := clonedList[0].(map[string]any)
+	clonedItem["text"] = "Mutated"
+	clonedItem["completed"] = false
+
+	origList := orig[1].Value.([]any)
+	origItem := origList[0].(map[string]any)
+	if origItem["text"] != "Step 1" || origItem["completed"] != true {
+		t.Errorf("mutating cloned checklist leaked into original: %#v", origItem)
+	}
+}

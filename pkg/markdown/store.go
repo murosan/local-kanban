@@ -693,6 +693,54 @@ func (s *Store) SyncParentSubtaskLinks(
 	return nil
 }
 
+// InsertSubtaskLinkAfter inserts newSubtaskID into parentID's Subtasks slice immediately after
+// afterSubtaskID (or appends it if afterSubtaskID is not present).
+func (s *Store) InsertSubtaskLinkAfter(
+	parentID string,
+	afterSubtaskID string,
+	newSubtaskID string,
+	completed bool,
+) error {
+	if parentID == "" || newSubtaskID == "" {
+		return nil
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	parent, err := s.getTaskByIDUnlocked(parentID)
+	if err != nil || parent == nil {
+		return err
+	}
+
+	for _, ref := range parent.Subtasks {
+		if ref.ID == newSubtaskID {
+			return nil
+		}
+	}
+
+	newRef := model.SubtaskRef{
+		ID:        newSubtaskID,
+		Completed: completed,
+	}
+
+	inserted := false
+	updated := make([]model.SubtaskRef, 0, len(parent.Subtasks)+1)
+	for _, ref := range parent.Subtasks {
+		updated = append(updated, ref)
+		if !inserted && afterSubtaskID != "" && ref.ID == afterSubtaskID {
+			updated = append(updated, newRef)
+			inserted = true
+		}
+	}
+	if !inserted {
+		updated = append(updated, newRef)
+	}
+
+	parent.Subtasks = updated
+	return s.saveTaskUnlocked(parent)
+}
+
 // DeleteTask removes the task file with the given ID and any child subtasks.
 func (s *Store) DeleteTask(id string) error {
 	s.mu.Lock()

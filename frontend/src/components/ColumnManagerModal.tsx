@@ -1,6 +1,7 @@
 import {
 	closestCenter,
 	DndContext,
+	type DragCancelEvent,
 	type DragEndEvent,
 	KeyboardSensor,
 	PointerSensor,
@@ -15,6 +16,8 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
+	ChevronDown,
+	ChevronUp,
 	GripVertical,
 	Maximize2,
 	Minimize2,
@@ -40,6 +43,409 @@ import {
 	reorderItemsById,
 } from "../utils/reorder";
 
+interface SortableChecklistPresetOptionProps {
+	option: CustomFieldOption;
+	index: number;
+	total: number;
+	fieldIndex: number;
+	onOptionValueChange: (
+		fieldIndex: number,
+		optionId: string,
+		newValue: string,
+	) => void;
+	onOptionColorChange: (
+		fieldIndex: number,
+		optionId: string,
+		color: string,
+	) => void;
+	onRemoveOption: (fieldIndex: number, optionId: string) => void;
+	onMoveOption: (index: number, direction: "up" | "down") => void;
+	registerItemRef: (optionId: string, el: HTMLDivElement | null) => void;
+	registerMoveButtonRef: (
+		optionId: string,
+		dir: "up" | "down",
+		el: HTMLButtonElement | null,
+	) => void;
+}
+
+const SortableChecklistPresetOption: React.FC<
+	SortableChecklistPresetOptionProps
+> = ({
+	option,
+	index,
+	total,
+	fieldIndex,
+	onOptionValueChange,
+	onOptionColorChange,
+	onRemoveOption,
+	onMoveOption,
+	registerItemRef,
+	registerMoveButtonRef,
+}) => {
+	const { t } = useI18n();
+	const isReorderable = total > 1;
+	const {
+		attributes,
+		listeners,
+		setNodeRef,
+		transform,
+		transition,
+		isDragging,
+	} = useSortable({ id: option.id, disabled: !isReorderable });
+
+	const style: React.CSSProperties = {
+		transform: CSS.Transform.toString(transform),
+		transition: prefersReducedMotion() ? undefined : transition,
+	};
+
+	const setCombinedRef = useCallback(
+		(node: HTMLDivElement | null) => {
+			setNodeRef(node);
+			registerItemRef(option.id, node);
+		},
+		[option.id, registerItemRef, setNodeRef],
+	);
+
+	const optionDisplayName =
+		option.value.trim() ||
+		t("taskModal.checklistItemFallbackName", { index: index + 1 });
+
+	return (
+		<div
+			ref={setCombinedRef}
+			style={style}
+			onFocusCapture={(e) => {
+				if (
+					e.target instanceof HTMLElement &&
+					e.target.matches(":focus-visible")
+				) {
+					e.currentTarget.scrollIntoView({
+						block: "nearest",
+						inline: "nearest",
+					});
+				}
+			}}
+			className={`sortable-checklist-item flex flex-wrap sm:flex-nowrap items-center justify-between p-2 rounded-lg border border-[var(--border-color)] bg-[var(--bg-surface)] gap-2 transition-shadow ${
+				isDragging
+					? "relative z-50 bg-[var(--bg-card)] ring-2 ring-blue-500 shadow-lg border-transparent"
+					: ""
+			}`}
+		>
+			<div className="flex items-center space-x-1.5 flex-1 min-w-0">
+				<button
+					type="button"
+					disabled={!isReorderable}
+					{...(isReorderable ? attributes : undefined)}
+					{...(isReorderable ? listeners : undefined)}
+					className="drag-handle nested-drag-handle cursor-grab active:cursor-grabbing text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-input)] focus-visible:bg-[var(--bg-input)] disabled:opacity-30 disabled:cursor-not-allowed p-0.5 rounded transition-colors shrink-0"
+					aria-label={t("configModal.dragToReorderChecklistItem", {
+						name: optionDisplayName,
+					})}
+					title={t("configModal.dragToReorderChecklistItem", {
+						name: optionDisplayName,
+					})}
+				>
+					<GripVertical className="w-3.5 h-3.5" aria-hidden="true" />
+				</button>
+				<span
+					className="w-3.5 h-3.5 rounded-full border border-white/20 shrink-0"
+					style={{
+						backgroundColor: option.color || "#3b82f6",
+					}}
+				/>
+				<input
+					type="text"
+					value={option.value}
+					onChange={(e) =>
+						onOptionValueChange(fieldIndex, option.id, e.target.value)
+					}
+					className="bg-[var(--bg-input)] border border-[var(--border-color)] focus:border-blue-500 rounded px-2 py-0.5 text-xs font-medium text-[var(--text-primary)] flex-1 min-w-0 outline-none"
+				/>
+			</div>
+
+			{/* Color Swatch Picker & Reorder/Delete Controls */}
+			<div className="flex items-center space-x-1 justify-end shrink-0">
+				{COLOR_PRESETS.map((colorHex) => (
+					<button
+						key={colorHex}
+						type="button"
+						onClick={() => onOptionColorChange(fieldIndex, option.id, colorHex)}
+						className={`w-4 h-4 rounded-full transition-transform ${
+							option.color === colorHex
+								? "scale-125 ring-2 ring-white/60 shadow-md"
+								: "hover:scale-110 opacity-70 hover:opacity-100"
+						}`}
+						style={{ backgroundColor: colorHex }}
+					/>
+				))}
+				{isReorderable && (
+					<div className="flex items-center space-x-0.5 pl-1">
+						<button
+							ref={(el) => registerMoveButtonRef(option.id, "up", el)}
+							type="button"
+							disabled={index === 0}
+							onClick={() => onMoveOption(index, "up")}
+							className="p-0.5 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-input)] disabled:opacity-30 transition-colors cursor-pointer disabled:cursor-not-allowed"
+							aria-label={t("configModal.moveChecklistItemUp", {
+								name: optionDisplayName,
+							})}
+							title={t("configModal.moveChecklistItemUp", {
+								name: optionDisplayName,
+							})}
+						>
+							<ChevronUp className="w-3.5 h-3.5" aria-hidden="true" />
+						</button>
+						<button
+							ref={(el) => registerMoveButtonRef(option.id, "down", el)}
+							type="button"
+							disabled={index === total - 1}
+							onClick={() => onMoveOption(index, "down")}
+							className="p-0.5 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-input)] disabled:opacity-30 transition-colors cursor-pointer disabled:cursor-not-allowed"
+							aria-label={t("configModal.moveChecklistItemDown", {
+								name: optionDisplayName,
+							})}
+							title={t("configModal.moveChecklistItemDown", {
+								name: optionDisplayName,
+							})}
+						>
+							<ChevronDown className="w-3.5 h-3.5" aria-hidden="true" />
+						</button>
+					</div>
+				)}
+				<button
+					type="button"
+					onClick={() => onRemoveOption(fieldIndex, option.id)}
+					className="p-1 text-xs text-rose-500 hover:text-rose-600 font-bold ml-1 cursor-pointer"
+					title="項目を削除"
+				>
+					×
+				</button>
+			</div>
+		</div>
+	);
+};
+
+interface SortableChecklistPresetOptionsListProps {
+	options: CustomFieldOption[];
+	fieldIndex: number;
+	onOptionValueChange: (
+		fieldIndex: number,
+		optionId: string,
+		newValue: string,
+	) => void;
+	onOptionColorChange: (
+		fieldIndex: number,
+		optionId: string,
+		color: string,
+	) => void;
+	onRemoveOption: (fieldIndex: number, optionId: string) => void;
+	onReorderOptions: (
+		fieldIndex: number,
+		nextOptions: CustomFieldOption[],
+	) => void;
+	onDragStateChange: (isDragging: boolean) => void;
+	onAnnounce: (message: string) => void;
+}
+
+const SortableChecklistPresetOptionsList: React.FC<
+	SortableChecklistPresetOptionsListProps
+> = ({
+	options,
+	fieldIndex,
+	onOptionValueChange,
+	onOptionColorChange,
+	onRemoveOption,
+	onReorderOptions,
+	onDragStateChange,
+	onAnnounce,
+}) => {
+	const { t } = useI18n();
+	const isDraggingRef = useRef(false);
+	const onDragStateChangeRef = useRef(onDragStateChange);
+	onDragStateChangeRef.current = onDragStateChange;
+	const itemRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+	const moveButtonRefs = useRef<
+		Map<
+			string,
+			{ up?: HTMLButtonElement | null; down?: HTMLButtonElement | null }
+		>
+	>(new Map());
+
+	const optionSensors = useSensors(
+		useSensor(PointerSensor, {
+			activationConstraint: { distance: 5 },
+		}),
+		useSensor(KeyboardSensor, {
+			coordinateGetter: sortableKeyboardCoordinates,
+		}),
+	);
+
+	useEffect(() => {
+		return () => {
+			if (isDraggingRef.current) {
+				isDraggingRef.current = false;
+				onDragStateChangeRef.current(false);
+				document.documentElement.classList.remove("is-dragging-item");
+			}
+		};
+	}, []);
+
+	const registerItemRef = useCallback(
+		(optionId: string, el: HTMLDivElement | null) => {
+			if (el) {
+				itemRefs.current.set(optionId, el);
+			} else {
+				itemRefs.current.delete(optionId);
+			}
+		},
+		[],
+	);
+
+	const registerMoveButtonRef = useCallback(
+		(optionId: string, dir: "up" | "down", el: HTMLButtonElement | null) => {
+			const entry = moveButtonRefs.current.get(optionId) || {};
+			entry[dir] = el;
+			if (!entry.up && !entry.down) {
+				moveButtonRefs.current.delete(optionId);
+			} else {
+				moveButtonRefs.current.set(optionId, entry);
+			}
+		},
+		[],
+	);
+
+	const getOptionDisplayName = (opt: CustomFieldOption, index: number) =>
+		opt.value.trim() ||
+		t("taskModal.checklistItemFallbackName", { index: index + 1 });
+
+	const handleMoveOption = (index: number, direction: "up" | "down") => {
+		const delta = direction === "up" ? -1 : 1;
+		const reordered = moveItemByOffset(options, index, delta);
+		if (reordered === options) return;
+
+		const targetIndex = index + delta;
+		const movedOption = reordered[targetIndex];
+		onReorderOptions(fieldIndex, reordered);
+		onAnnounce(
+			t("configModal.checklistItemMovedAnnouncement", {
+				name: getOptionDisplayName(movedOption, targetIndex),
+				position: targetIndex + 1,
+				total: reordered.length,
+			}),
+		);
+
+		requestAnimationFrame(() => {
+			const itemEl = itemRefs.current.get(movedOption.id);
+			itemEl?.scrollIntoView({ block: "nearest", inline: "nearest" });
+			const buttons = moveButtonRefs.current.get(movedOption.id);
+			const hitStart = direction === "up" && targetIndex === 0;
+			const hitEnd =
+				direction === "down" && targetIndex === reordered.length - 1;
+			const targetBtn =
+				hitStart && buttons?.down
+					? buttons.down
+					: hitEnd && buttons?.up
+						? buttons.up
+						: buttons?.[direction];
+			targetBtn?.focus({ preventScroll: true });
+		});
+	};
+
+	const handleDragStart = () => {
+		isDraggingRef.current = true;
+		onDragStateChange(true);
+		document.documentElement.classList.add("is-dragging-item");
+	};
+
+	const handleDragEnd = (event: DragEndEvent) => {
+		isDraggingRef.current = false;
+		onDragStateChange(false);
+		document.documentElement.classList.remove("is-dragging-item");
+
+		const { active, over } = event;
+		if (!over || active.id === over.id) return;
+
+		const reordered = reorderItemsById(
+			options,
+			String(active.id),
+			String(over.id),
+		);
+		if (reordered === options) return;
+
+		const newIndex = reordered.findIndex((o) => o.id === String(active.id));
+		onReorderOptions(fieldIndex, reordered);
+		if (newIndex !== -1) {
+			const movedOption = reordered[newIndex];
+			onAnnounce(
+				t("configModal.checklistItemMovedAnnouncement", {
+					name: getOptionDisplayName(movedOption, newIndex),
+					position: newIndex + 1,
+					total: reordered.length,
+				}),
+			);
+			requestAnimationFrame(() => {
+				itemRefs.current
+					.get(movedOption.id)
+					?.scrollIntoView({ block: "nearest", inline: "nearest" });
+			});
+		}
+	};
+
+	const handleDragCancel = (event: DragCancelEvent) => {
+		isDraggingRef.current = false;
+		onDragStateChange(false);
+		document.documentElement.classList.remove("is-dragging-item");
+
+		const activeIndex = options.findIndex(
+			(o) => o.id === String(event.active.id),
+		);
+		if (activeIndex !== -1) {
+			const activeOption = options[activeIndex];
+			onAnnounce(
+				t("configModal.checklistItemMoveCancelled", {
+					name: getOptionDisplayName(activeOption, activeIndex),
+				}),
+			);
+			requestAnimationFrame(() => {
+				itemRefs.current
+					.get(activeOption.id)
+					?.scrollIntoView({ block: "nearest", inline: "nearest" });
+			});
+		}
+	};
+
+	return (
+		<DndContext
+			sensors={optionSensors}
+			collisionDetection={closestCenter}
+			onDragStart={handleDragStart}
+			onDragEnd={handleDragEnd}
+			onDragCancel={handleDragCancel}
+		>
+			<SortableContext
+				items={options.map((opt) => opt.id)}
+				strategy={verticalListSortingStrategy}
+			>
+				{options.map((opt, idx) => (
+					<SortableChecklistPresetOption
+						key={opt.id}
+						option={opt}
+						index={idx}
+						total={options.length}
+						fieldIndex={fieldIndex}
+						onOptionValueChange={onOptionValueChange}
+						onOptionColorChange={onOptionColorChange}
+						onRemoveOption={onRemoveOption}
+						onMoveOption={handleMoveOption}
+						registerItemRef={registerItemRef}
+						registerMoveButtonRef={registerMoveButtonRef}
+					/>
+				))}
+			</SortableContext>
+		</DndContext>
+	);
+};
+
 interface SortableCustomFieldCardProps {
 	field: CustomFieldDef;
 	index: number;
@@ -59,6 +465,12 @@ interface SortableCustomFieldCardProps {
 	) => void;
 	onRemoveOption: (fieldIndex: number, optionId: string) => void;
 	onAddOption: (fieldIndex: number, optionValue: string) => void;
+	onReorderOptions: (
+		fieldIndex: number,
+		nextOptions: CustomFieldOption[],
+	) => void;
+	onOptionDragStateChange: (isDragging: boolean) => void;
+	onAnnounceOptionMove: (message: string) => void;
 	registerItemRef: (fieldId: string, el: HTMLDivElement | null) => void;
 	registerMoveButtonRef: (
 		fieldId: string,
@@ -78,6 +490,9 @@ const SortableCustomFieldCard: React.FC<SortableCustomFieldCardProps> = ({
 	onOptionColorChange,
 	onRemoveOption,
 	onAddOption,
+	onReorderOptions,
+	onOptionDragStateChange,
+	onAnnounceOptionMove,
 	registerItemRef,
 	registerMoveButtonRef,
 }) => {
@@ -210,56 +625,69 @@ const SortableCustomFieldCard: React.FC<SortableCustomFieldCardProps> = ({
 					</span>
 					<div className="space-y-2">
 						{field.options && field.options.length > 0 ? (
-							field.options.map((opt) => (
-								<div
-									key={opt.id}
-									className="flex items-center justify-between p-2 rounded-lg border border-[var(--border-color)] bg-[var(--bg-surface)] gap-2"
-								>
-									<div className="flex items-center space-x-2 flex-1 min-w-0">
-										<span
-											className="w-3.5 h-3.5 rounded-full border border-white/20 shrink-0"
-											style={{
-												backgroundColor: opt.color || "#3b82f6",
-											}}
-										/>
-										<input
-											type="text"
-											value={opt.value}
-											onChange={(e) =>
-												onOptionValueChange(index, opt.id, e.target.value)
-											}
-											className="bg-[var(--bg-input)] border border-[var(--border-color)] focus:border-blue-500 rounded px-2 py-0.5 text-xs font-medium text-[var(--text-primary)] flex-1 min-w-0 outline-none"
-										/>
-									</div>
-
-									{/* Color Swatch Picker */}
-									<div className="flex items-center space-x-1 justify-end shrink-0">
-										{COLOR_PRESETS.map((colorHex) => (
-											<button
-												key={colorHex}
-												type="button"
-												onClick={() =>
-													onOptionColorChange(index, opt.id, colorHex)
-												}
-												className={`w-4 h-4 rounded-full transition-transform ${
-													opt.color === colorHex
-														? "scale-125 ring-2 ring-white/60 shadow-md"
-														: "hover:scale-110 opacity-70 hover:opacity-100"
-												}`}
-												style={{ backgroundColor: colorHex }}
+							field.type === "checklist" ? (
+								<SortableChecklistPresetOptionsList
+									options={field.options}
+									fieldIndex={index}
+									onOptionValueChange={onOptionValueChange}
+									onOptionColorChange={onOptionColorChange}
+									onRemoveOption={onRemoveOption}
+									onReorderOptions={onReorderOptions}
+									onDragStateChange={onOptionDragStateChange}
+									onAnnounce={onAnnounceOptionMove}
+								/>
+							) : (
+								field.options.map((opt) => (
+									<div
+										key={opt.id}
+										className="flex items-center justify-between p-2 rounded-lg border border-[var(--border-color)] bg-[var(--bg-surface)] gap-2"
+									>
+										<div className="flex items-center space-x-2 flex-1 min-w-0">
+											<span
+												className="w-3.5 h-3.5 rounded-full border border-white/20 shrink-0"
+												style={{
+													backgroundColor: opt.color || "#3b82f6",
+												}}
 											/>
-										))}
-										<button
-											type="button"
-											onClick={() => onRemoveOption(index, opt.id)}
-											className="p-1 text-xs text-rose-500 hover:text-rose-600 font-bold ml-1"
-											title="項目を削除"
-										>
-											×
-										</button>
+											<input
+												type="text"
+												value={opt.value}
+												onChange={(e) =>
+													onOptionValueChange(index, opt.id, e.target.value)
+												}
+												className="bg-[var(--bg-input)] border border-[var(--border-color)] focus:border-blue-500 rounded px-2 py-0.5 text-xs font-medium text-[var(--text-primary)] flex-1 min-w-0 outline-none"
+											/>
+										</div>
+
+										{/* Color Swatch Picker */}
+										<div className="flex items-center space-x-1 justify-end shrink-0">
+											{COLOR_PRESETS.map((colorHex) => (
+												<button
+													key={colorHex}
+													type="button"
+													onClick={() =>
+														onOptionColorChange(index, opt.id, colorHex)
+													}
+													className={`w-4 h-4 rounded-full transition-transform ${
+														opt.color === colorHex
+															? "scale-125 ring-2 ring-white/60 shadow-md"
+															: "hover:scale-110 opacity-70 hover:opacity-100"
+													}`}
+													style={{ backgroundColor: colorHex }}
+												/>
+											))}
+											<button
+												type="button"
+												onClick={() => onRemoveOption(index, opt.id)}
+												className="p-1 text-xs text-rose-500 hover:text-rose-600 font-bold ml-1"
+												title="項目を削除"
+											>
+												×
+											</button>
+										</div>
 									</div>
-								</div>
-							))
+								))
+							)
 						) : (
 							<span className="text-xs text-[var(--text-muted)] italic">
 								{field.type === "checklist"
@@ -325,7 +753,12 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
 		})),
 	);
 	const [localCustomFields, setLocalCustomFields] = useState<CustomFieldDef[]>(
-		() => ensureUniqueIds(customFields || [], "cf"),
+		() =>
+			ensureUniqueIds(customFields || [], "cf").map((field) =>
+				field.options
+					? { ...field, options: ensureUniqueIds(field.options, "opt") }
+					: field,
+			),
 	);
 
 	const [newColumnName, setNewColumnName] = useState("");
@@ -384,23 +817,27 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
 		[],
 	);
 
+	const announceMessage = useCallback((message: string) => {
+		if (announceTimerRef.current) {
+			clearTimeout(announceTimerRef.current);
+		}
+		setLiveAnnouncement("");
+		announceTimerRef.current = setTimeout(() => {
+			setLiveAnnouncement(message);
+		}, 500);
+	}, []);
+
 	const announceFieldMove = useCallback(
 		(fieldName: string, newIndex: number, total: number) => {
-			if (announceTimerRef.current) {
-				clearTimeout(announceTimerRef.current);
-			}
-			setLiveAnnouncement("");
-			announceTimerRef.current = setTimeout(() => {
-				setLiveAnnouncement(
-					t("configModal.fieldMovedAnnouncement", {
-						name: fieldName,
-						position: newIndex + 1,
-						total,
-					}),
-				);
-			}, 150);
+			announceMessage(
+				t("configModal.fieldMovedAnnouncement", {
+					name: fieldName,
+					position: newIndex + 1,
+					total,
+				}),
+			);
 		},
-		[t],
+		[announceMessage, t],
 	);
 
 	useEffect(() => {
@@ -630,6 +1067,17 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
 					],
 				};
 			}),
+		);
+	};
+
+	const handleReorderOptions = (
+		fieldIndex: number,
+		nextOptions: CustomFieldOption[],
+	) => {
+		setLocalCustomFields((prev) =>
+			prev.map((field, idx) =>
+				idx === fieldIndex ? { ...field, options: nextOptions } : field,
+			),
 		);
 	};
 
@@ -970,6 +1418,11 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
 												onOptionColorChange={handleOptionColorChange}
 												onRemoveOption={handleRemoveOptionFromCustomField}
 												onAddOption={handleAddOptionToField}
+												onReorderOptions={handleReorderOptions}
+												onOptionDragStateChange={(isDragging) => {
+													isDraggingFieldRef.current = isDragging;
+												}}
+												onAnnounceOptionMove={announceMessage}
 												registerItemRef={registerFieldItemRef}
 												registerMoveButtonRef={registerFieldMoveButtonRef}
 											/>

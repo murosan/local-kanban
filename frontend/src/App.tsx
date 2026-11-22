@@ -15,6 +15,7 @@ import { useI18n } from "./i18n/useI18n";
 import {
 	createTask,
 	deleteTask,
+	duplicateTask,
 	fetchBoardConfig,
 	fetchTags,
 	fetchTasks,
@@ -24,13 +25,14 @@ import {
 } from "./services/api";
 import type {
 	BoardConfig,
-	ChecklistItem,
 	Column,
 	CustomFieldDef,
 	SubtaskRef,
 	Task,
 	ThemeConfig,
 } from "./types/task";
+import { normalizeChecklistItems } from "./utils/checklistField";
+import { buildDuplicateTitle } from "./utils/duplicateTitle";
 
 export const App: React.FC = () => {
 	const { language, t } = useI18n();
@@ -303,9 +305,11 @@ export const App: React.FC = () => {
 			const match =
 				cf.id === fieldId || cf.field_id === fieldId || cf.name === fieldId;
 			if (match && cf.type === "checklist") {
-				const currentItems = Array.isArray(cf.value)
-					? (cf.value as ChecklistItem[])
-					: [];
+				const resolvedFieldId = cf.id || cf.field_id || cf.name;
+				const currentItems = normalizeChecklistItems(
+					cf.value,
+					`item-${resolvedFieldId}`,
+				);
 				const newItems = currentItems.map((item) =>
 					item.id === itemId ? { ...item, completed: !item.completed } : item,
 				);
@@ -328,6 +332,35 @@ export const App: React.FC = () => {
 			console.error("Failed to toggle checklist item:", err);
 			addToast("Failed to update checklist item", "error");
 			await loadData();
+		}
+	};
+
+	const handleDuplicateTask = async (
+		task: Task,
+		options?: { openAfterDuplicate?: boolean },
+	): Promise<Task | null> => {
+		try {
+			const duplicatedTitle = buildDuplicateTitle(
+				task.title,
+				t("taskModal.duplicateSuffix"),
+			);
+			const duplicated = await duplicateTask(task.id, {
+				title: duplicatedTitle,
+			});
+			addToast(t("common.duplicated") || "Card duplicated", "success");
+			await loadData();
+			if (options?.openAfterDuplicate) {
+				setSelectedTask(duplicated);
+				setIsTaskModalOpen(true);
+			}
+			return duplicated;
+		} catch (err) {
+			console.error("Error duplicating task:", err);
+			addToast(
+				t("common.duplicateFailed") || "Failed to duplicate card",
+				"error",
+			);
+			return null;
 		}
 	};
 
@@ -439,6 +472,7 @@ export const App: React.FC = () => {
 					onSubtaskToggle={handleSubtaskToggle}
 					onAddSubtask={handleAddSubtask}
 					onChecklistItemToggle={handleChecklistItemToggle}
+					onDuplicateTask={(task) => handleDuplicateTask(task)}
 					onAddCard={(columnId) => handleOpenNewCardModal(columnId)}
 				/>
 			</main>
@@ -467,6 +501,9 @@ export const App: React.FC = () => {
 					onClose={() => setIsTaskModalOpen(false)}
 					onSave={handleSaveTask}
 					onRefresh={loadData}
+					onDuplicate={(task) =>
+						handleDuplicateTask(task, { openAfterDuplicate: true })
+					}
 					onDelete={handleDeleteTask}
 					onOpenTask={(task) => setSelectedTask(task)}
 				/>

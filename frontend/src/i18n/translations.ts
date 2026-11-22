@@ -51,6 +51,13 @@ export const translations = {
 		"configModal.moveFieldDown": '"{name}" を下へ移動',
 		"configModal.fieldMovedAnnouncement":
 			'"{name}" を {position} / {total} 番目に移動しました',
+		"configModal.dragToReorderChecklistItem": '"{name}" をドラッグして並び替え',
+		"configModal.moveChecklistItemUp": '"{name}" を上へ移動',
+		"configModal.moveChecklistItemDown": '"{name}" を下へ移動',
+		"configModal.checklistItemMovedAnnouncement":
+			'"{name}" を {position} / {total} 番目に移動しました',
+		"configModal.checklistItemMoveCancelled":
+			'"{name}" の移動をキャンセルしました',
 		"configModal.columnsDesc":
 			"ボード上の表示順序・名前・表示/非表示を設定します。",
 		"configModal.addColumn": "新規カラムを追加",
@@ -91,6 +98,10 @@ export const translations = {
 		"taskModal.tagSuggestionsHint": "Enter または クリックで追加",
 		"taskModal.contentLabel": "カード詳細 (Markdown)",
 		"taskModal.contentPlaceholder": "カードの詳細説明やチェックリストを記入...",
+		"taskModal.actionsMenu": "操作メニュー",
+		"taskModal.duplicate": "複製",
+		"taskModal.duplicating": "複製中...",
+		"taskModal.duplicateSuffix": "コピー",
 		"taskModal.delete": "削除",
 		"taskModal.hideField": "非表示",
 		"taskModal.hideFieldTitle": "このカードでフィールドを非表示にする (OFF)",
@@ -119,6 +130,15 @@ export const translations = {
 		"taskModal.noChecklistItems":
 			"チェック項目がありません。「＋」から項目を追加できます。",
 		"taskModal.itemPlaceholder": "チェック項目の内容を入力...",
+		"taskModal.dragToReorderChecklistItem": '"{name}" をドラッグして並び替え',
+		"taskModal.moveChecklistItemUp": '"{name}" を上へ移動',
+		"taskModal.moveChecklistItemDown": '"{name}" を下へ移動',
+		"taskModal.checklistItemMovedAnnouncement":
+			'"{name}" を {position} / {total} 番目に移動しました',
+		"taskModal.checklistItemMoveCancelled":
+			'"{name}" の移動をキャンセルしました',
+		"taskModal.checklistItemFallbackName": "チェック項目 {index}",
+		"taskModal.removeChecklistItem": "項目を削除",
 		"taskModal.addLinkItem": "＋ リンクを追加",
 		"taskModal.noLinks": "リンクがありません。下のフォームから追加できます。",
 		"taskModal.linkLabelPlaceholder": "表示テキスト（任意）",
@@ -179,6 +199,7 @@ export const translations = {
 		"taskModal.subtasksProgress": "{completed}/{total} 完了 ({percent}%)",
 		"taskCard.subtasks": "サブタスク",
 		"taskCard.addSubtask": "＋ サブタスクを追加...",
+		"taskCard.duplicate": "カードを複製",
 		"taskCard.copyId": "IDをコピー",
 		"taskCard.copied": "コピー完了",
 		// Create Task Modal
@@ -235,6 +256,8 @@ export const translations = {
 		"common.error": "エラーが発生しました",
 		"common.saved": "カードを更新しました",
 		"common.created": "カードを作成しました",
+		"common.duplicated": "カードを複製しました",
+		"common.duplicateFailed": "カードの複製に失敗しました",
 		"common.deleted": "カードを削除しました",
 		"common.rebuilt": "データベースを再構築しました",
 	},
@@ -287,6 +310,12 @@ export const translations = {
 		"configModal.moveFieldDown": 'Move "{name}" down',
 		"configModal.fieldMovedAnnouncement":
 			'Moved "{name}" to position {position} of {total}',
+		"configModal.dragToReorderChecklistItem": 'Drag to reorder "{name}"',
+		"configModal.moveChecklistItemUp": 'Move "{name}" up',
+		"configModal.moveChecklistItemDown": 'Move "{name}" down',
+		"configModal.checklistItemMovedAnnouncement":
+			'Moved "{name}" to position {position} of {total}',
+		"configModal.checklistItemMoveCancelled": 'Cancelled moving "{name}"',
 		"configModal.columnsDesc":
 			"Configure display order, name, and visibility for board columns.",
 		"configModal.addColumn": "Add New Column",
@@ -328,6 +357,10 @@ export const translations = {
 		"taskModal.tagSuggestionsHint": "Press Enter or click to add",
 		"taskModal.contentLabel": "Card Content (Markdown)",
 		"taskModal.contentPlaceholder": "Card description or checklists...",
+		"taskModal.actionsMenu": "Actions menu",
+		"taskModal.duplicate": "Duplicate",
+		"taskModal.duplicating": "Duplicating...",
+		"taskModal.duplicateSuffix": "Copy",
 		"taskModal.delete": "Delete",
 		"taskModal.hideField": "Hide",
 		"taskModal.hideFieldTitle": "Hide field on this card (OFF)",
@@ -356,6 +389,14 @@ export const translations = {
 		"taskModal.noChecklistItems":
 			'No checklist items. You can add items using "+".',
 		"taskModal.itemPlaceholder": "Enter checklist item...",
+		"taskModal.dragToReorderChecklistItem": 'Drag to reorder "{name}"',
+		"taskModal.moveChecklistItemUp": 'Move "{name}" up',
+		"taskModal.moveChecklistItemDown": 'Move "{name}" down',
+		"taskModal.checklistItemMovedAnnouncement":
+			'Moved "{name}" to position {position} of {total}',
+		"taskModal.checklistItemMoveCancelled": 'Cancelled moving "{name}"',
+		"taskModal.checklistItemFallbackName": "Checklist item {index}",
+		"taskModal.removeChecklistItem": "Remove item",
 		"taskModal.addLinkItem": "+ Add link",
 		"taskModal.noLinks": "No links yet. Add one using the form below.",
 		"taskModal.linkLabelPlaceholder": "Display text (optional)",
@@ -415,6 +456,7 @@ export const translations = {
 		"taskModal.subtasksProgress": "{completed}/{total} completed ({percent}%)",
 		"taskCard.subtasks": "Subtasks",
 		"taskCard.addSubtask": "+ Add subtask...",
+		"taskCard.duplicate": "Duplicate card",
 		"taskCard.copyId": "Copy ID",
 		"taskCard.copied": "Copied",
 
@@ -473,6 +515,8 @@ export const translations = {
 		"common.error": "An error occurred",
 		"common.saved": "Task updated successfully",
 		"common.created": "Task created successfully",
+		"common.duplicated": "Card duplicated",
+		"common.duplicateFailed": "Failed to duplicate card",
 		"common.deleted": "Task deleted",
 		"common.rebuilt": "Database rebuilt successfully",
 	},

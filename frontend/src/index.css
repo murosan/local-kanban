@@ -551,11 +551,13 @@ html.is-dragging-item * {
 	cursor: grabbing;
 }
 
-.sortable-field-item {
+.sortable-field-item,
+.sortable-checklist-item {
 	scroll-margin: 1rem;
 }
 
-.sortable-field-item:has(.drag-handle:focus-visible) {
+.sortable-field-item:has(.drag-handle:not(.nested-drag-handle):focus-visible),
+.sortable-checklist-item:has(.nested-drag-handle:focus-visible) {
 	outline: 2px solid var(--accent-color);
 	outline-offset: 2px;
 }
@@ -650,8 +652,70 @@ html.is-dragging-item * {
 	rotate: 90deg;
 }
 
+/* Popup Action Menu (Popover + Focusgroup + Anchor Positioning) */
+.action-menu-trigger[aria-expanded="true"] {
+	background-color: var(--bg-input);
+	color: var(--text-primary);
+}
+
+.action-menu-popover[popover] {
+	padding-inline: 0;
+}
+
+@supports (position-area: block-end) {
+	.action-menu-popover[popover]:has(> [focusgroup~="menu"]) {
+		position-area: block-end span-inline-start;
+		position-try-fallbacks:
+			flip-block,
+			flip-inline,
+			flip-block flip-inline;
+		inset: auto;
+		margin: 0.375rem 0 0;
+	}
+}
+
+@supports not (position-area: block-end) {
+	.action-menu-popover[popover] {
+		position: fixed;
+		inset: auto;
+		margin: 0;
+	}
+}
+
+@supports not selector(:popover-open) {
+	.action-menu-popover[popover] {
+		display: none;
+		z-index: 60;
+	}
+
+	.action-menu-popover[popover].popover-fallback-open {
+		display: block;
+	}
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.action-menu-popover[popover]:has(> [focusgroup~="menu"]) {
+		opacity: 0;
+		translate: 0 -0.25rem;
+		transition: opacity, translate, display, overlay;
+		transition-duration: 0.15s;
+		transition-behavior: allow-discrete;
+	}
+
+	.action-menu-popover[popover]:has(> [focusgroup~="menu"]):popover-open {
+		opacity: 1;
+		translate: 0 0;
+		transition-duration: 0.1s;
+		@starting-style {
+			opacity: 0;
+			translate: 0 -0.25rem;
+		}
+	}
+}
+
 @media (prefers-reduced-motion: reduce) {
-	.sortable-field-item {
+	.sortable-field-item,
+	.sortable-checklist-item {
 		transition: none;
 	}
 
