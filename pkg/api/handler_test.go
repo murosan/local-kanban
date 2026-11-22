@@ -1290,3 +1290,87 @@ func TestGetTasksSearchCustomFields(t *testing.T) {
 		runSearchCases(t, "unavailable")
 	})
 }
+
+func TestPartialUpdateWithCachePreservesContentAndWhitespaceSearch(t *testing.T) {
+	tempDir := t.TempDir()
+	store, err := markdown.NewStore(tempDir)
+	if err != nil {
+		t.Fatalf("failed to create store: %v", err)
+	}
+
+	sqliteCache, err := cache.NewSQLiteCache(filepath.Join(tempDir, ".local_cache.db"))
+	if err != nil {
+		t.Fatalf("failed to create sqlite cache: %v", err)
+	}
+	defer func() { _ = sqliteCache.Close() }()
+	store.SetCache(sqliteCache)
+
+	task := &model.Task{
+		Title:    "Keep Body Card",
+		ColumnID: "col-todo",
+		Rank:     "0|i0000i",
+		Content:  "## Body\nDo not erase this content on drag-and-drop!",
+	}
+	if err := store.SaveTask(task); err != nil {
+		t.Fatalf("failed to save task: %v", err)
+	}
+
+	server := NewServer(store, search.NewEngine(sqliteCache))
+	mux := http.NewServeMux()
+	server.RegisterRoutes(mux)
+
+	// 1. GET /api/tasks/{id} must return full Content even with SQLite cache enabled
+	reqDetail := httptest.NewRequest("GET", "/api/tasks/"+task.ID, nil)
+	wDetail := httptest.NewRecorder()
+	mux.ServeHTTP(wDetail, reqDetail)
+	if wDetail.Code != http.StatusOK {
+		t.Fatalf("GET /api/tasks/{id} failed with %d", wDetail.Code)
+	}
+	var detail model.Task
+	if err := json.NewDecoder(wDetail.Body).Decode(&detail); err != nil {
+		t.Fatalf("failed to decode detail: %v", err)
+	}
+	if detail.Content != task.Content {
+		t.Fatalf(
+			"expected full content %q from GET /api/tasks/{id}, got %q",
+			task.Content,
+			detail.Content,
+		)
+	}
+
+	// 2. PUT /api/tasks/{id} with only column_id (like card drag) must preserve Content on disk
+	moveBody, _ := json.Marshal(map[string]any{"column_id": "col-done"})
+	reqMove := httptest.NewRequest("PUT", "/api/tasks/"+task.ID, bytes.NewReader(moveBody))
+	wMove := httptest.NewRecorder()
+	mux.ServeHTTP(wMove, reqMove)
+	if wMove.Code != http.StatusOK {
+		t.Fatalf("PUT /api/tasks/{id} failed with %d: %s", wMove.Code, wMove.Body.String())
+	}
+
+	reloaded, err := store.GetTaskByID(task.ID)
+	if err != nil {
+		t.Fatalf("GetTaskByID failed: %v", err)
+	}
+	if reloaded.Content != task.Content {
+		t.Fatalf(
+			"expected content preserved after column move: want %q, got %q",
+			task.Content,
+			reloaded.Content,
+		)
+	}
+
+	// 3. GET /api/tasks?q=%20%20%20 (whitespace only) must return all tasks
+	reqSpace := httptest.NewRequest("GET", "/api/tasks?q=%20%20%20", nil)
+	wSpace := httptest.NewRecorder()
+	mux.ServeHTTP(wSpace, reqSpace)
+	if wSpace.Code != http.StatusOK {
+		t.Fatalf("GET /api/tasks?q=spaces failed with %d", wSpace.Code)
+	}
+	var spaceResults []*model.Task
+	if err := json.NewDecoder(wSpace.Body).Decode(&spaceResults); err != nil {
+		t.Fatalf("failed to decode tasks: %v", err)
+	}
+	if len(spaceResults) != 1 || spaceResults[0].ID != task.ID {
+		t.Fatalf("expected whitespace-only query to return all tasks, got %+v", spaceResults)
+	}
+}

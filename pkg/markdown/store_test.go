@@ -635,3 +635,154 @@ func TestGetSubtasksByParentID_UnlistedSubtasks(t *testing.T) {
 		)
 	}
 }
+
+func TestGetTaskByIDPreservesContentWithCache(t *testing.T) {
+	tmpDir := t.TempDir()
+	store, err := NewStore(tmpDir)
+	if err != nil {
+		t.Fatalf("failed to init store: %v", err)
+	}
+
+	c, err := cache.NewSQLiteCache(filepath.Join(tmpDir, "cache.db"))
+	if err != nil {
+		t.Fatalf("failed to init cache: %v", err)
+	}
+	defer func() { _ = c.Close() }()
+	store.SetCache(c)
+
+	task := &model.Task{
+		Title:    "Body Preservation Task",
+		ColumnID: "col-todo",
+		Rank:     "0|i0000i",
+		Content:  "# Details\n\nImportant markdown body that must never be lost.",
+	}
+	if err := store.SaveTask(task); err != nil {
+		t.Fatalf("failed to save task: %v", err)
+	}
+
+	loaded, err := store.GetTaskByID(task.ID)
+	if err != nil {
+		t.Fatalf("GetTaskByID failed: %v", err)
+	}
+	if loaded.Content != task.Content {
+		t.Fatalf("expected content %q, got %q", task.Content, loaded.Content)
+	}
+
+	// Simulate partial update (e.g. moving column without touching Content)
+	loaded.ColumnID = "col-done"
+	if err := store.SaveTask(loaded); err != nil {
+		t.Fatalf("failed to save updated task: %v", err)
+	}
+
+	reloaded, err := store.GetTaskByID(task.ID)
+	if err != nil {
+		t.Fatalf("GetTaskByID after update failed: %v", err)
+	}
+	if reloaded.Content != task.Content {
+		t.Fatalf(
+			"expected content preserved after update %q, got %q",
+			task.Content,
+			reloaded.Content,
+		)
+	}
+
+	// Clearing content must also clear summary in cache
+	reloaded.Content = ""
+	if err := store.SaveTask(reloaded); err != nil {
+		t.Fatalf("failed to save cleared content: %v", err)
+	}
+	cachedTasks, err := store.GetVisibleTasks()
+	if err != nil {
+		t.Fatalf("GetVisibleTasks failed: %v", err)
+	}
+	if len(cachedTasks) != 1 || cachedTasks[0].Summary != "" {
+		t.Fatalf("expected cleared summary after clearing content, got %+v", cachedTasks)
+	}
+}
+
+func TestDeleteTaskCascadeWithoutCache(t *testing.T) {
+	tmpDir := t.TempDir()
+	store, err := NewStore(tmpDir)
+	if err != nil {
+		t.Fatalf("failed to init store: %v", err)
+	}
+
+	parent := &model.Task{Title: "Parent", ColumnID: "col-todo", Rank: "0|a"}
+	if err := store.SaveTask(parent); err != nil {
+		t.Fatalf("failed to save parent: %v", err)
+	}
+
+	// Subtask only linked via ParentID (not listed in parent.Subtasks)
+	unlistedChild := &model.Task{
+		ParentID: parent.ID,
+		Title:    "Unlisted Child",
+		ColumnID: "col-todo",
+		Rank:     "0|b",
+	}
+	if err := store.SaveTask(unlistedChild); err != nil {
+		t.Fatalf("failed to save child: %v", err)
+	}
+
+	if err := store.DeleteTask(parent.ID); err != nil {
+		t.Fatalf("DeleteTask failed: %v", err)
+	}
+
+	remaining, err := store.GetAllTasks()
+	if err != nil {
+		t.Fatalf("GetAllTasks failed: %v", err)
+	}
+	if len(remaining) != 0 {
+		t.Fatalf(
+			"expected 0 remaining tasks after cascade delete without cache, got %d",
+			len(remaining),
+		)
+	}
+}
+
+func TestParseTaskContentCRLFAndUnversionedSubtasks(t *testing.T) {
+	raw := "---\r\nid: task-unversioned\r\ntitle: Unversioned\r\ncolumn_id: col-todo\r\nrank: 0|a\r\nsubtasks:\r\n  - id: sub-1\r\n    completed: true\r\n---\r\n\r\nLine 1\r\nLine 2"
+	task, err := parseTaskContent(raw)
+	if err != nil {
+		t.Fatalf("parseTaskContent failed: %v", err)
+	}
+	if len(task.Subtasks) != 1 || task.Subtasks[0].ID != "sub-1" || !task.Subtasks[0].Completed {
+		t.Errorf("expected subtasks preserved on unversioned task, got %+v", task.Subtasks)
+	}
+	if task.Content != "Line 1\nLine 2" {
+		t.Errorf("expected normalized content 'Line 1\\nLine 2', got %q", task.Content)
+	}
+}
+
+func TestConcurrentGetVisibleColumnIDsWithLegacyConfig(t *testing.T) {
+	tmpDir := t.TempDir()
+	store, err := NewStore(tmpDir)
+	if err != nil {
+		t.Fatalf("failed to init store: %v", err)
+	}
+
+	legacyConfigJSON := `{"columns":[{"id":"col-todo","title":"Todo","visible":true}]}`
+	if err := os.WriteFile(
+		filepath.Join(tmpDir, ".kanban_config.json"),
+		[]byte(legacyConfigJSON),
+		0o644,
+	); err != nil {
+		t.Fatalf("failed to write legacy config: %v", err)
+	}
+
+	done := make(chan struct{})
+	for range 8 {
+		go func() {
+			defer func() { done <- struct{}{} }()
+			for range 20 {
+				ids, err := store.GetVisibleColumnIDs()
+				if err != nil || len(ids) != 1 || ids[0] != "col-todo" {
+					t.Errorf("unexpected visible column IDs: %v, err=%v", ids, err)
+					return
+				}
+			}
+		}()
+	}
+	for range 8 {
+		<-done
+	}
+}

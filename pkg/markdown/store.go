@@ -59,10 +59,20 @@ func (s *Store) SyncCache() error {
 func (s *Store) GetBoardConfig() (*model.BoardConfig, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.getBoardConfigUnlocked()
+
+	cfg, needsMigration, err := s.readBoardConfigUnlocked()
+	if err != nil {
+		return nil, err
+	}
+	if needsMigration {
+		if saveErr := s.saveBoardConfigLocked(cfg); saveErr != nil {
+			_ = saveErr
+		}
+	}
+	return cfg, nil
 }
 
-func (s *Store) getBoardConfigUnlocked() (*model.BoardConfig, error) {
+func (s *Store) readBoardConfigUnlocked() (*model.BoardConfig, bool, error) {
 	configPath := filepath.Clean(filepath.Join(s.dir, ".kanban_config.json"))
 	data, err := os.ReadFile(
 		configPath,
@@ -84,9 +94,9 @@ func (s *Store) getBoardConfigUnlocked() (*model.BoardConfig, error) {
 					{ID: "col-done", Name: "Done", Visible: true, Color: "#10b981", Order: 4},
 				},
 				Language: "ja",
-			}, nil
+			}, false, nil
 		}
-		return nil, err
+		return nil, false, err
 	}
 
 	type legacyColumn struct {
@@ -108,7 +118,7 @@ func (s *Store) getBoardConfigUnlocked() (*model.BoardConfig, error) {
 
 	var legCfg legacyBoardConfig
 	if err := json.Unmarshal(data, &legCfg); err != nil {
-		return nil, fmt.Errorf("failed to parse board config: %w", err)
+		return nil, false, fmt.Errorf("failed to parse board config: %w", err)
 	}
 
 	needsMigration := legCfg.Version < model.CurrentBoardConfigVersion
@@ -144,13 +154,7 @@ func (s *Store) getBoardConfigUnlocked() (*model.BoardConfig, error) {
 		cfg.Language = "ja"
 	}
 
-	if needsMigration {
-		if saveErr := s.saveBoardConfigLocked(cfg); saveErr != nil {
-			_ = saveErr
-		}
-	}
-
-	return cfg, nil
+	return cfg, needsMigration, nil
 }
 
 func (s *Store) saveBoardConfigLocked(cfg *model.BoardConfig) error {
@@ -176,7 +180,7 @@ func (s *Store) SaveBoardConfig(cfg *model.BoardConfig) error {
 }
 
 func (s *Store) getVisibleColumnIDsUnlocked() ([]string, error) {
-	cfg, err := s.getBoardConfigUnlocked()
+	cfg, _, err := s.readBoardConfigUnlocked()
 	if err != nil {
 		return nil, err
 	}
@@ -194,6 +198,41 @@ func (s *Store) GetVisibleColumnIDs() ([]string, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.getVisibleColumnIDsUnlocked()
+}
+
+func sortTasksByRank(tasks []*model.Task) {
+	sort.Slice(tasks, func(i, j int) bool {
+		if tasks[i].Rank == tasks[j].Rank {
+			return tasks[i].ID < tasks[j].ID
+		}
+		return tasks[i].Rank < tasks[j].Rank
+	})
+}
+
+func (s *Store) readTasksFromDirUnlocked(filter func(*model.Task) bool) ([]*model.Task, error) {
+	entries, err := os.ReadDir(s.dir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read directory: %w", err)
+	}
+
+	tasks := make([]*model.Task, 0)
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
+			continue
+		}
+		path := filepath.Join(s.dir, entry.Name())
+		task, err := s.readTaskFile(path)
+		if err != nil {
+			// Skip corrupted or invalid non-task md files safely
+			continue
+		}
+		if filter == nil || filter(task) {
+			tasks = append(tasks, task)
+		}
+	}
+
+	sortTasksByRank(tasks)
+	return tasks, nil
 }
 
 func (s *Store) getTasksByColumnIDsUnlocked(columnIDs []string) ([]*model.Task, error) {
@@ -235,45 +274,37 @@ func (s *Store) getTasksByColumnIDsUnlocked(columnIDs []string) ([]*model.Task, 
 					tasks = append(tasks, task)
 				}
 			}
-			sort.Slice(tasks, func(i, j int) bool {
-				if tasks[i].Rank == tasks[j].Rank {
-					return tasks[i].ID < tasks[j].ID
-				}
-				return tasks[i].Rank < tasks[j].Rank
-			})
+			sortTasksByRank(tasks)
 			return tasks, nil
 		}
 	}
 
 	// Fallback when cache is disabled or empty
-	entries, err := os.ReadDir(s.dir)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read directory: %w", err)
-	}
-
-	tasks := make([]*model.Task, 0)
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
-			continue
-		}
-		path := filepath.Join(s.dir, entry.Name())
-		task, err := s.readTaskFile(path)
-		if err != nil {
-			continue
-		}
-		if colMap[task.ColumnID] {
-			tasks = append(tasks, task)
-		}
-	}
-
-	sort.Slice(tasks, func(i, j int) bool {
-		if tasks[i].Rank == tasks[j].Rank {
-			return tasks[i].ID < tasks[j].ID
-		}
-		return tasks[i].Rank < tasks[j].Rank
+	return s.readTasksFromDirUnlocked(func(task *model.Task) bool {
+		return colMap[task.ColumnID]
 	})
+}
 
-	return tasks, nil
+// GetColumnTasks returns all tasks belonging to a column ID regardless of column visibility,
+// sorted by rank ascending. Intended for internal rank calculation and column rebalancing.
+func (s *Store) GetColumnTasks(columnID string) ([]*model.Task, error) {
+	if columnID == "" {
+		return []*model.Task{}, nil
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.cache != nil {
+		cachedTasks, err := s.cache.GetTasksByColumnIDs([]string{columnID})
+		if err == nil && len(cachedTasks) > 0 {
+			sortTasksByRank(cachedTasks)
+			return cachedTasks, nil
+		}
+	}
+
+	return s.readTasksFromDirUnlocked(func(task *model.Task) bool {
+		return task.ColumnID == columnID
+	})
 }
 
 // GetTasksByColumnIDs reads and parses task markdown files matching the specified column IDs.
@@ -308,42 +339,18 @@ func (s *Store) GetAllTasks() ([]*model.Task, error) {
 }
 
 func (s *Store) getAllTasksUnlocked() ([]*model.Task, error) {
-	entries, err := os.ReadDir(s.dir)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read directory: %w", err)
-	}
-
-	tasks := make([]*model.Task, 0)
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
-			continue
-		}
-		path := filepath.Join(s.dir, entry.Name())
-		task, err := s.readTaskFile(path)
-		if err != nil {
-			// Skip corrupted or invalid non-task md files safely
-			continue
-		}
-		tasks = append(tasks, task)
-	}
-
-	// Sort tasks by Rank ascending
-	sort.Slice(tasks, func(i, j int) bool {
-		if tasks[i].Rank == tasks[j].Rank {
-			return tasks[i].ID < tasks[j].ID
-		}
-		return tasks[i].Rank < tasks[j].Rank
-	})
-
-	return tasks, nil
+	return s.readTasksFromDirUnlocked(nil)
 }
 
 // GetSubtasksByParentID returns all subtasks belonging to the given parent task ID.
 func (s *Store) GetSubtasksByParentID(parentID string) ([]*model.Task, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	return s.getSubtasksByParentIDUnlocked(parentID)
+}
 
-	parentTask, err := s.getTaskByIDUnlocked(parentID)
+func (s *Store) getSubtasksByParentIDUnlocked(parentID string) ([]*model.Task, error) {
+	parentTask, err := s.getTaskMetaByIDUnlocked(parentID)
 	if err != nil {
 		return nil, err
 	}
@@ -354,7 +361,7 @@ func (s *Store) GetSubtasksByParentID(parentID string) ([]*model.Task, error) {
 	// 1. If parent task has Subtasks defined (SSOT), retrieve each subtask directly
 	if len(parentTask.Subtasks) > 0 {
 		for _, ref := range parentTask.Subtasks {
-			sub, err := s.getTaskByIDUnlocked(ref.ID)
+			sub, err := s.getTaskMetaByIDUnlocked(ref.ID)
 			if err == nil && sub != nil {
 				subCopy := *sub
 				subCopy.Completed = ref.Completed
@@ -375,9 +382,7 @@ func (s *Store) GetSubtasksByParentID(parentID string) ([]*model.Task, error) {
 				}
 			}
 		}
-	}
-
-	if len(subtasks) == 0 || s.cache == nil {
+	} else {
 		allTasks, err := s.getAllTasksUnlocked()
 		if err == nil {
 			for _, t := range allTasks {
@@ -402,7 +407,10 @@ func (s *Store) ValidateParentID(taskID string, parentID string) error {
 		return fmt.Errorf("task cannot be its own parent")
 	}
 
-	parentTask, err := s.GetTaskByID(parentID)
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	parentTask, err := s.getTaskMetaByIDUnlocked(parentID)
 	if err != nil || parentTask == nil {
 		return fmt.Errorf("parent task with ID %q not found", parentID)
 	}
@@ -414,11 +422,11 @@ func (s *Store) ValidateParentID(taskID string, parentID string) error {
 	}
 
 	if taskID != "" {
-		task, err := s.GetTaskByID(taskID)
+		task, err := s.getTaskMetaByIDUnlocked(taskID)
 		if err == nil && task != nil && len(task.Subtasks) > 0 {
 			return fmt.Errorf("task already has subtasks and cannot become a subtask")
 		}
-		subs, err := s.GetSubtasksByParentID(taskID)
+		subs, err := s.getSubtasksByParentIDUnlocked(taskID)
 		if err == nil && len(subs) > 0 {
 			return fmt.Errorf("task already has subtasks and cannot become a subtask")
 		}
@@ -435,7 +443,7 @@ func (s *Store) ValidateParentID(taskID string, parentID string) error {
 			}
 			visited[currID] = true
 
-			p, err := s.GetTaskByID(currID)
+			p, err := s.getTaskMetaByIDUnlocked(currID)
 			if err != nil || p == nil {
 				break
 			}
@@ -508,16 +516,6 @@ func (s *Store) UpdateTaskRanks(ranks map[string]string) error {
 		task, err := s.getTaskByIDUnlocked(taskID)
 		if err != nil || task == nil {
 			continue
-		}
-
-		// Always reload from the Markdown file so body content is preserved even when cache is enabled.
-		if task.FilePath != "" {
-			if diskTask, readErr := s.readTaskFile(
-				task.FilePath,
-			); readErr == nil &&
-				diskTask != nil {
-				task = diskTask
-			}
 		}
 
 		if task.Rank == newRank {
@@ -594,6 +592,7 @@ func (s *Store) saveTaskUnlocked(task *model.Task) error {
 		task.CreatedAt = now
 	}
 	task.UpdatedAt = now
+	task.Summary = model.GenerateSummary(task.Content)
 
 	if task.ID == "" {
 		task.ID = generateUUID()
@@ -635,6 +634,65 @@ func (s *Store) saveTaskUnlocked(task *model.Task) error {
 	return nil
 }
 
+// SyncParentSubtaskLinks removes taskID from oldParentID's Subtasks (if changed)
+// and appends taskID to newParentID's Subtasks (if non-empty and not already present).
+func (s *Store) SyncParentSubtaskLinks(
+	taskID string,
+	oldParentID string,
+	newParentID string,
+	completed bool,
+) error {
+	if oldParentID == newParentID {
+		return nil
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if oldParentID != "" {
+		if oldParent, err := s.getTaskByIDUnlocked(oldParentID); err == nil && oldParent != nil {
+			var newSubs []model.SubtaskRef
+			modified := false
+			for _, ref := range oldParent.Subtasks {
+				if ref.ID == taskID {
+					modified = true
+				} else {
+					newSubs = append(newSubs, ref)
+				}
+			}
+			if modified {
+				oldParent.Subtasks = newSubs
+				if err := s.saveTaskUnlocked(oldParent); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	if newParentID != "" {
+		if newParent, err := s.getTaskByIDUnlocked(newParentID); err == nil && newParent != nil {
+			alreadyExists := false
+			for _, ref := range newParent.Subtasks {
+				if ref.ID == taskID {
+					alreadyExists = true
+					break
+				}
+			}
+			if !alreadyExists {
+				newParent.Subtasks = append(newParent.Subtasks, model.SubtaskRef{
+					ID:        taskID,
+					Completed: completed,
+				})
+				if err := s.saveTaskUnlocked(newParent); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
 // DeleteTask removes the task file with the given ID and any child subtasks.
 func (s *Store) DeleteTask(id string) error {
 	s.mu.Lock()
@@ -649,7 +707,7 @@ func (s *Store) DeleteTask(id string) error {
 
 	// 1. If this task has subtasks, delete child subtasks directly
 	for _, ref := range task.Subtasks {
-		if child, err := s.getTaskByIDUnlocked(ref.ID); err == nil && child != nil {
+		if child, err := s.getTaskMetaByIDUnlocked(ref.ID); err == nil && child != nil {
 			_ = os.Remove(child.FilePath)
 			if s.cache != nil {
 				_ = s.cache.DeleteTask(child.ID)
@@ -664,6 +722,15 @@ func (s *Store) DeleteTask(id string) error {
 				if !deletedChildIDs[sub.ID] {
 					_ = os.Remove(sub.FilePath)
 					_ = s.cache.DeleteTask(sub.ID)
+					deletedChildIDs[sub.ID] = true
+				}
+			}
+		}
+	} else {
+		if allTasks, err := s.getAllTasksUnlocked(); err == nil {
+			for _, sub := range allTasks {
+				if sub.ParentID == id && !deletedChildIDs[sub.ID] {
+					_ = os.Remove(sub.FilePath)
 					deletedChildIDs[sub.ID] = true
 				}
 			}
@@ -700,14 +767,37 @@ func (s *Store) DeleteTask(id string) error {
 	return nil
 }
 
-func (s *Store) getTaskByIDUnlocked(id string) (*model.Task, error) {
+// getTaskMetaByIDUnlocked returns task metadata from SQLite cache when available (without reading
+// Markdown body content from disk), falling back to a directory scan when cache is disabled or missed.
+func (s *Store) getTaskMetaByIDUnlocked(id string) (*model.Task, error) {
 	if s.cache != nil {
 		task, err := s.cache.GetTaskByID(id)
 		if err == nil && task != nil {
 			return task, nil
 		}
 	}
+	return s.findTaskInDirUnlocked(id)
+}
 
+// getTaskByIDUnlocked returns the full task including Markdown body content from disk.
+// When SQLite cache is enabled, it uses the cached FilePath for O(1) file lookup.
+func (s *Store) getTaskByIDUnlocked(id string) (*model.Task, error) {
+	if s.cache != nil {
+		cachedTask, err := s.cache.GetTaskByID(id)
+		if err == nil && cachedTask != nil && cachedTask.FilePath != "" {
+			if diskTask, readErr := s.readTaskFile(
+				cachedTask.FilePath,
+			); readErr == nil &&
+				diskTask != nil &&
+				diskTask.ID == id {
+				return diskTask, nil
+			}
+		}
+	}
+	return s.findTaskInDirUnlocked(id)
+}
+
+func (s *Store) findTaskInDirUnlocked(id string) (*model.Task, error) {
 	entries, err := os.ReadDir(s.dir)
 	if err != nil {
 		return nil, err
@@ -754,7 +844,8 @@ type legacyTaskV1 struct {
 }
 
 func parseTaskContent(raw string) (*model.Task, error) {
-	lines := strings.Split(raw, "\n")
+	normalized := strings.ReplaceAll(raw, "\r\n", "\n")
+	lines := strings.Split(normalized, "\n")
 	if len(lines) < 3 || strings.TrimSpace(lines[0]) != "---" {
 		return nil, fmt.Errorf("invalid markdown header: missing frontmatter start '---'")
 	}
@@ -776,8 +867,8 @@ func parseTaskContent(raw string) (*model.Task, error) {
 
 	var task model.Task
 	err := yaml.Unmarshal([]byte(yamlContent), &task)
-	if err != nil || task.Version < model.CurrentTaskVersion {
-		// Attempt parsing as legacy v1 (map-based custom fields or unversioned)
+	if err != nil {
+		// Attempt parsing as legacy v1 (map-based custom fields)
 		var legTask legacyTaskV1
 		if legErr := yaml.Unmarshal(
 			[]byte(yamlContent),
@@ -822,7 +913,7 @@ func parseTaskContent(raw string) (*model.Task, error) {
 					Enabled: cf.Enabled,
 				})
 			}
-		} else if err != nil {
+		} else {
 			return nil, fmt.Errorf("failed to unmarshal yaml frontmatter: %w", err)
 		}
 	}

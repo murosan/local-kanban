@@ -503,24 +503,32 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
 		isDraggingFieldRef.current = false;
 		document.documentElement.classList.remove("is-dragging-item");
 	};
+	const createUniqueId = (prefix: string): string =>
+		`${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+
+	const parseOptionsInput = (
+		type: CustomFieldType,
+		rawInput: string,
+	): CustomFieldOption[] | undefined => {
+		if (type !== "dropdown" && type !== "checklist") return undefined;
+		const optionValues = rawInput
+			.split(",")
+			.map((s) => s.trim())
+			.filter(Boolean);
+		return optionValues.map((val, idx) => ({
+			id: `${createUniqueId("opt")}-${idx}`,
+			value: val,
+			color: COLOR_PRESETS[idx % COLOR_PRESETS.length],
+		}));
+	};
+
 	const handleAddCustomField = () => {
 		if (!newFieldName.trim()) return;
 
-		let options: CustomFieldOption[] | undefined;
-		if (newFieldType === "dropdown" || newFieldType === "checklist") {
-			const optionValues = newFieldOptionsInput
-				.split(",")
-				.map((s) => s.trim())
-				.filter(Boolean);
-			options = optionValues.map((val, idx) => ({
-				id: `opt-${Date.now()}-${idx}`,
-				value: val,
-				color: COLOR_PRESETS[idx % COLOR_PRESETS.length],
-			}));
-		}
+		const options = parseOptionsInput(newFieldType, newFieldOptionsInput);
 
 		const newField: CustomFieldDef = {
-			id: `cf-${Date.now()}`,
+			id: createUniqueId("cf"),
 			name: newFieldName.trim(),
 			type: newFieldType,
 			options,
@@ -540,26 +548,27 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
 	};
 
 	const handleFieldNameChange = (fieldIndex: number, newName: string) => {
-		const updated = [...localCustomFields];
-		updated[fieldIndex] = {
-			...updated[fieldIndex],
-			name: newName,
-		};
-		setLocalCustomFields(updated);
+		setLocalCustomFields((prev) =>
+			prev.map((field, idx) =>
+				idx === fieldIndex ? { ...field, name: newName } : field,
+			),
+		);
 	};
 
 	const handleRemoveOptionFromCustomField = (
 		fieldIndex: number,
 		optionId: string,
 	) => {
-		const updated = [...localCustomFields];
-		const targetField = updated[fieldIndex];
-		if (targetField.options) {
-			targetField.options = targetField.options.filter(
-				(opt) => opt.id !== optionId,
-			);
-			setLocalCustomFields(updated);
-		}
+		setLocalCustomFields((prev) =>
+			prev.map((field, idx) =>
+				idx === fieldIndex && field.options
+					? {
+							...field,
+							options: field.options.filter((opt) => opt.id !== optionId),
+						}
+					: field,
+			),
+		);
 	};
 
 	const handleOptionColorChange = (
@@ -567,14 +576,18 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
 		optionId: string,
 		color: string,
 	) => {
-		const updated = [...localCustomFields];
-		const targetField = updated[fieldIndex];
-		if (targetField.options) {
-			targetField.options = targetField.options.map((opt) =>
-				opt.id === optionId ? { ...opt, color } : opt,
-			);
-			setLocalCustomFields(updated);
-		}
+		setLocalCustomFields((prev) =>
+			prev.map((field, idx) =>
+				idx === fieldIndex && field.options
+					? {
+							...field,
+							options: field.options.map((opt) =>
+								opt.id === optionId ? { ...opt, color } : opt,
+							),
+						}
+					: field,
+			),
+		);
 	};
 
 	const handleOptionValueChange = (
@@ -582,31 +595,42 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
 		optionId: string,
 		newValue: string,
 	) => {
-		const updated = [...localCustomFields];
-		const targetField = updated[fieldIndex];
-		if (targetField.options) {
-			targetField.options = targetField.options.map((opt) =>
-				opt.id === optionId ? { ...opt, value: newValue } : opt,
-			);
-			setLocalCustomFields(updated);
-		}
+		setLocalCustomFields((prev) =>
+			prev.map((field, idx) =>
+				idx === fieldIndex && field.options
+					? {
+							...field,
+							options: field.options.map((opt) =>
+								opt.id === optionId ? { ...opt, value: newValue } : opt,
+							),
+						}
+					: field,
+			),
+		);
 	};
 
 	const handleAddOptionToField = (fieldIndex: number, optionValue: string) => {
-		if (!optionValue.trim()) return;
-		const updated = [...localCustomFields];
-		const targetField = updated[fieldIndex];
-		if (!targetField.options) {
-			targetField.options = [];
-		}
-		const color =
-			COLOR_PRESETS[targetField.options.length % COLOR_PRESETS.length];
-		targetField.options.push({
-			id: `opt-${Date.now()}`,
-			value: optionValue.trim(),
-			color,
-		});
-		setLocalCustomFields(updated);
+		const trimmed = optionValue.trim();
+		if (!trimmed) return;
+		setLocalCustomFields((prev) =>
+			prev.map((field, idx) => {
+				if (idx !== fieldIndex) return field;
+				const currentOptions = field.options || [];
+				const color =
+					COLOR_PRESETS[currentOptions.length % COLOR_PRESETS.length];
+				return {
+					...field,
+					options: [
+						...currentOptions,
+						{
+							id: createUniqueId("opt"),
+							value: trimmed,
+							color,
+						},
+					],
+				};
+			}),
+		);
 	};
 
 	// --- Column Actions ---
@@ -658,7 +682,7 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
 	const handleAddColumn = () => {
 		if (!newColumnName.trim()) return;
 		const name = newColumnName.trim();
-		const id = `col-${Date.now()}`;
+		const id = createUniqueId("col");
 		const color = COLOR_PRESETS[localColumns.length % COLOR_PRESETS.length];
 		const newCol: Column = {
 			id,
@@ -676,23 +700,11 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
 		try {
 			const finalCustomFields = [...localCustomFields];
 			if (newFieldName.trim()) {
-				let options: CustomFieldOption[] | undefined;
-				if (newFieldType === "dropdown" || newFieldType === "checklist") {
-					const optionValues = newFieldOptionsInput
-						.split(",")
-						.map((s) => s.trim())
-						.filter(Boolean);
-					options = optionValues.map((val, idx) => ({
-						id: `opt-${Date.now()}-${idx}`,
-						value: val,
-						color: COLOR_PRESETS[idx % COLOR_PRESETS.length],
-					}));
-				}
 				const pendingField: CustomFieldDef = {
-					id: `cf-${Date.now()}`,
+					id: createUniqueId("cf"),
 					name: newFieldName.trim(),
 					type: newFieldType,
-					options,
+					options: parseOptionsInput(newFieldType, newFieldOptionsInput),
 				};
 				finalCustomFields.push(pendingField);
 			}
@@ -899,7 +911,11 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
 										placeholder={t("configModal.columnNamePlaceholder")}
 										value={newColumnName}
 										onChange={(e) => setNewColumnName(e.target.value)}
-										onKeyDown={(e) => e.key === "Enter" && handleAddColumn()}
+										onKeyDown={(e) => {
+											if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+												handleAddColumn();
+											}
+										}}
 										className="flex-1 bg-[var(--bg-input)] border border-[var(--border-color)] focus:border-blue-500 rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] outline-none"
 									/>
 									<button

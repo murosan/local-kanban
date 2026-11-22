@@ -613,3 +613,68 @@ func TestLegacyTasksFTSMigration(t *testing.T) {
 		t.Errorf("expected ['legacy-1'] for content after migration, got %v", idsContent)
 	}
 }
+
+func TestPruneUnusedTagsOnUpdateAndDelete(t *testing.T) {
+	tmpDir := t.TempDir()
+	c, err := NewSQLiteCache(filepath.Join(tmpDir, "tags_prune.db"))
+	if err != nil {
+		t.Fatalf("failed to init SQLiteCache: %v", err)
+	}
+	defer func() { _ = c.Close() }()
+
+	now := time.Now().UTC()
+	task1 := &model.Task{
+		ID:        "task-1",
+		Title:     "Task 1",
+		ColumnID:  "col-todo",
+		Rank:      "0|a",
+		Tags:      []string{"keep", "remove-me"},
+		CreatedAt: now,
+		UpdatedAt: now,
+		FilePath:  "/tmp/task-1.md",
+	}
+	task2 := &model.Task{
+		ID:        "task-2",
+		Title:     "Task 2",
+		ColumnID:  "col-todo",
+		Rank:      "0|b",
+		Tags:      []string{"keep", "only-task2"},
+		CreatedAt: now,
+		UpdatedAt: now,
+		FilePath:  "/tmp/task-2.md",
+	}
+	if err := c.UpsertTask(task1); err != nil {
+		t.Fatalf("UpsertTask task1 failed: %v", err)
+	}
+	if err := c.UpsertTask(task2); err != nil {
+		t.Fatalf("UpsertTask task2 failed: %v", err)
+	}
+
+	// Remove "remove-me" from task1
+	task1.Tags = []string{"keep"}
+	if err := c.UpsertTask(task1); err != nil {
+		t.Fatalf("UpsertTask task1 update failed: %v", err)
+	}
+
+	tags, err := c.GetAllTags()
+	if err != nil {
+		t.Fatalf("GetAllTags failed: %v", err)
+	}
+	for _, tag := range tags {
+		if tag == "remove-me" {
+			t.Errorf("expected 'remove-me' to be pruned after update, got %v", tags)
+		}
+	}
+
+	// Delete task2 -> "only-task2" should be pruned, "keep" should remain
+	if err := c.DeleteTask("task-2"); err != nil {
+		t.Fatalf("DeleteTask task2 failed: %v", err)
+	}
+	tagsAfterDelete, err := c.GetAllTags()
+	if err != nil {
+		t.Fatalf("GetAllTags after delete failed: %v", err)
+	}
+	if len(tagsAfterDelete) != 1 || tagsAfterDelete[0] != "keep" {
+		t.Errorf("expected only ['keep'] remaining after delete, got %v", tagsAfterDelete)
+	}
+}

@@ -385,3 +385,110 @@ func TestMCPSearchTasksCustomFields(t *testing.T) {
 		t.Errorf("expected task %s from search_tasks_fts, got %+v", task.ID, output.Tasks)
 	}
 }
+
+func TestMCPSubtaskSyncAndContentPreservationWithCache(t *testing.T) {
+	tempDir := t.TempDir()
+	store, err := markdown.NewStore(tempDir)
+	if err != nil {
+		t.Fatalf("failed to create store: %v", err)
+	}
+
+	sqliteCache, err := cache.NewSQLiteCache(filepath.Join(tempDir, ".local_cache.db"))
+	if err != nil {
+		t.Fatalf("failed to create sqlite cache: %v", err)
+	}
+	defer func() { _ = sqliteCache.Close() }()
+	store.SetCache(sqliteCache)
+
+	mcpSrv, err := NewMCPServer(store, search.NewEngine(sqliteCache))
+	if err != nil {
+		t.Fatalf("failed to create MCP server: %v", err)
+	}
+
+	clientTransport, serverTransport := mcpSDK.NewInMemoryTransports()
+	ctx := t.Context()
+
+	go func() {
+		_ = mcpSrv.MCPServer().Run(ctx, serverTransport)
+	}()
+
+	client := mcpSDK.NewClient(&mcpSDK.Implementation{
+		Name:    "TestClient",
+		Version: "1.0.0",
+	}, nil)
+
+	session, err := client.Connect(ctx, clientTransport, nil)
+	if err != nil {
+		t.Fatalf("failed to connect client: %v", err)
+	}
+	defer func() { _ = session.Close() }()
+
+	// 1. Create parent with description
+	resParent, err := session.CallTool(ctx, &mcpSDK.CallToolParams{
+		Name: "create_task",
+		Arguments: map[string]any{
+			"title":       "Parent With Body",
+			"description": "Parent body content must stay intact",
+			"status":      "col-todo",
+		},
+	})
+	if err != nil {
+		t.Fatalf("create_task parent failed: %v", err)
+	}
+	var parent model.Task
+	pBytes, _ := json.Marshal(resParent.StructuredContent)
+	_ = json.Unmarshal(pBytes, &parent)
+
+	// 2. Create subtask via MCP -> parent.Subtasks must be synced AND parent.Content preserved
+	resSub, err := session.CallTool(ctx, &mcpSDK.CallToolParams{
+		Name: "create_task",
+		Arguments: map[string]any{
+			"title":     "Child Via MCP",
+			"parent_id": parent.ID,
+			"status":    "col-todo",
+		},
+	})
+	if err != nil {
+		t.Fatalf("create_task child failed: %v", err)
+	}
+	var child model.Task
+	cBytes, _ := json.Marshal(resSub.StructuredContent)
+	_ = json.Unmarshal(cBytes, &child)
+
+	reloadedParent, err := store.GetTaskByID(parent.ID)
+	if err != nil {
+		t.Fatalf("GetTaskByID parent failed: %v", err)
+	}
+	if len(reloadedParent.Subtasks) != 1 || reloadedParent.Subtasks[0].ID != child.ID {
+		t.Fatalf(
+			"expected parent.Subtasks to include child %s, got %+v",
+			child.ID,
+			reloadedParent.Subtasks,
+		)
+	}
+	if reloadedParent.Content != "Parent body content must stay intact" {
+		t.Fatalf("expected parent content preserved, got %q", reloadedParent.Content)
+	}
+
+	// 3. update_task_status on parent must preserve parent.Content
+	_, err = session.CallTool(ctx, &mcpSDK.CallToolParams{
+		Name: "update_task_status",
+		Arguments: map[string]any{
+			"task_id":    parent.ID,
+			"new_status": "col-in-progress",
+		},
+	})
+	if err != nil {
+		t.Fatalf("update_task_status failed: %v", err)
+	}
+	reloadedParentAfterMove, err := store.GetTaskByID(parent.ID)
+	if err != nil {
+		t.Fatalf("GetTaskByID parent after move failed: %v", err)
+	}
+	if reloadedParentAfterMove.Content != "Parent body content must stay intact" {
+		t.Fatalf(
+			"expected parent content preserved after status update, got %q",
+			reloadedParentAfterMove.Content,
+		)
+	}
+}

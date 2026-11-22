@@ -85,6 +85,36 @@ Options for 'mcp':
 `, version)
 }
 
+func getDefaultTasksDir() string {
+	if dir := os.Getenv("TASKS_DIR"); dir != "" {
+		return dir
+	}
+	return "./tasks"
+}
+
+func initStoreWithCache(
+	tasksDir string,
+	logCacheWarning bool,
+) (*markdown.Store, *cache.SQLiteCache, func()) {
+	store, err := markdown.NewStore(tasksDir)
+	if err != nil {
+		log.Fatalf("Failed to initialize store: %v", err)
+	}
+
+	dbPath := filepath.Join(tasksDir, ".local_cache.db")
+	sqliteCache, err := cache.NewSQLiteCache(dbPath)
+	if err != nil {
+		if logCacheWarning {
+			log.Printf("Warning: Failed to initialize SQLite Cache: %v", err)
+		}
+		return store, nil, func() {}
+	}
+
+	store.SetCache(sqliteCache)
+	cleanup := func() { _ = sqliteCache.Close() }
+	return store, sqliteCache, cleanup
+}
+
 func runStart(args []string) {
 	fs := flag.NewFlagSet("start", flag.ExitOnError)
 
@@ -96,30 +126,19 @@ func runStart(args []string) {
 	if defaultPort == "" {
 		defaultPort = "3737"
 	}
-	defaultTasksDir := os.Getenv("TASKS_DIR")
-	if defaultTasksDir == "" {
-		defaultTasksDir = "./tasks"
-	}
 
 	host := fs.String("host", defaultHost, "Host address to listen on")
 	port := fs.String("port", defaultPort, "Port number to listen on")
-	tasksDir := fs.String("tasks-dir", defaultTasksDir, "Directory to store task markdown files")
+	tasksDir := fs.String(
+		"tasks-dir",
+		getDefaultTasksDir(),
+		"Directory to store task markdown files",
+	)
 
 	_ = fs.Parse(args)
 
-	store, err := markdown.NewStore(*tasksDir)
-	if err != nil {
-		log.Fatalf("Failed to initialize store: %v", err)
-	}
-
-	dbPath := filepath.Join(*tasksDir, ".local_cache.db")
-	sqliteCache, err := cache.NewSQLiteCache(dbPath)
-	if err != nil {
-		log.Printf("Warning: Failed to initialize SQLite Cache: %v", err)
-	} else {
-		defer func() { _ = sqliteCache.Close() }()
-		store.SetCache(sqliteCache)
-	}
+	store, sqliteCache, cleanup := initStoreWithCache(*tasksDir, true)
+	defer cleanup()
 
 	tasks, err := store.GetAllTasks()
 	if err == nil && len(tasks) == 0 {
@@ -160,12 +179,12 @@ func runStart(args []string) {
 		cleanDir,
 	) // #nosec G706 -- CLI startup configuration log
 
+	// Note: WriteTimeout is intentionally omitted (0) so long-lived MCP SSE streams are not terminated.
 	srv := &http.Server{
 		Addr:              addr,
 		Handler:           corsMiddleware(mux),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      30 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}
 	if err := srv.ListenAndServe(); err != nil {
@@ -183,15 +202,15 @@ func runAdd(args []string) {
 	}
 
 	fs := flag.NewFlagSet("add", flag.ExitOnError)
-	defaultTasksDir := os.Getenv("TASKS_DIR")
-	if defaultTasksDir == "" {
-		defaultTasksDir = "./tasks"
-	}
 
 	status := fs.String("status", "col-todo", "Status column ID")
 	tagsStr := fs.String("tags", "", "Comma separated tags")
 	desc := fs.String("desc", "", "Task description")
-	tasksDir := fs.String("tasks-dir", defaultTasksDir, "Directory to store task markdown files")
+	tasksDir := fs.String(
+		"tasks-dir",
+		getDefaultTasksDir(),
+		"Directory to store task markdown files",
+	)
 
 	var titleParts []string
 	var flagArgs []string
@@ -213,17 +232,8 @@ func runAdd(args []string) {
 		os.Exit(1)
 	}
 
-	store, err := markdown.NewStore(*tasksDir)
-	if err != nil {
-		log.Fatalf("Failed to initialize store: %v", err)
-	}
-
-	dbPath := filepath.Join(*tasksDir, ".local_cache.db")
-	sqliteCache, err := cache.NewSQLiteCache(dbPath)
-	if err == nil {
-		defer func() { _ = sqliteCache.Close() }()
-		store.SetCache(sqliteCache)
-	}
+	store, _, cleanup := initStoreWithCache(*tasksDir, false)
+	defer cleanup()
 
 	allTasks, _ := store.GetAllTasks()
 	var colTasks []*model.Task
@@ -272,24 +282,19 @@ func runAdd(args []string) {
 
 func runMCP(args []string) {
 	fs := flag.NewFlagSet("mcp", flag.ExitOnError)
-	defaultTasksDir := os.Getenv("TASKS_DIR")
-	if defaultTasksDir == "" {
-		defaultTasksDir = "./tasks"
-	}
 
-	tasksDir := fs.String("tasks-dir", defaultTasksDir, "Directory to store task markdown files")
+	tasksDir := fs.String(
+		"tasks-dir",
+		getDefaultTasksDir(),
+		"Directory to store task markdown files",
+	)
 	_ = fs.Parse(args)
 
-	store, err := markdown.NewStore(*tasksDir)
-	if err != nil {
-		log.Fatalf("Failed to initialize store: %v", err)
-	}
+	store, sqliteCache, cleanup := initStoreWithCache(*tasksDir, false)
+	defer cleanup()
 
-	dbPath := filepath.Join(*tasksDir, ".local_cache.db")
-	sqliteCache, err := cache.NewSQLiteCache(dbPath)
-	if err == nil {
-		defer func() { _ = sqliteCache.Close() }()
-		store.SetCache(sqliteCache)
+	if sqliteCache != nil {
+		_ = store.SyncCache()
 	}
 
 	searchEngine := search.NewEngine(sqliteCache)

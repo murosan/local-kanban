@@ -172,7 +172,7 @@ func (s *Server) registerTools() {
 			}
 		}
 
-		colTasks, _ := s.store.GetTasksByColumnID(status)
+		colTasks, _ := s.store.GetColumnTasks(status)
 
 		var newRank string
 		if len(colTasks) == 0 {
@@ -195,6 +195,10 @@ func (s *Server) registerTools() {
 			return nil, nil, fmt.Errorf("failed to save task: %w", err)
 		}
 
+		if input.ParentID != "" {
+			_ = s.store.SyncParentSubtaskLinks(newTask.ID, "", input.ParentID, false)
+		}
+
 		return nil, newTask, nil
 	})
 
@@ -215,9 +219,17 @@ func (s *Server) registerTools() {
 			return nil, nil, fmt.Errorf("task not found: %w", err)
 		}
 
+		columnChanged := task.ColumnID != input.NewStatus
 		task.ColumnID = input.NewStatus
 		if input.TargetRank != "" {
 			task.Rank = input.TargetRank
+		} else if columnChanged {
+			colTasks, _ := s.store.GetColumnTasks(input.NewStatus)
+			if len(colTasks) == 0 {
+				task.Rank = lexorank.Between("", "")
+			} else {
+				task.Rank = lexorank.Between(colTasks[len(colTasks)-1].Rank, "")
+			}
 		}
 
 		if err := s.store.SaveTask(task); err != nil {
@@ -275,11 +287,18 @@ func (s *Server) registerTools() {
 			return nil, nil, fmt.Errorf("task not found: %w", err)
 		}
 
+		var oldParentID, newParentID string
+		parentChanged := false
 		if input.ParentID != nil {
 			if err := s.store.ValidateParentID(task.ID, *input.ParentID); err != nil {
 				return nil, nil, fmt.Errorf("invalid parent_id: %w", err)
 			}
-			task.ParentID = *input.ParentID
+			oldParentID = task.ParentID
+			newParentID = *input.ParentID
+			if oldParentID != newParentID {
+				parentChanged = true
+				task.ParentID = newParentID
+			}
 		}
 		if strings.TrimSpace(input.Title) != "" {
 			task.Title = strings.TrimSpace(input.Title)
@@ -302,6 +321,10 @@ func (s *Server) registerTools() {
 
 		if err := s.store.SaveTask(task); err != nil {
 			return nil, nil, fmt.Errorf("failed to update task: %w", err)
+		}
+
+		if parentChanged {
+			_ = s.store.SyncParentSubtaskLinks(task.ID, oldParentID, newParentID, task.Completed)
 		}
 
 		return nil, task, nil
