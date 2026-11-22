@@ -538,3 +538,30 @@
 .markdown-preview h6 {
 	scroll-margin-top: 1rem;
 }
+
+/* Accessible drag-and-drop reordering */
+.drag-handle {
+	touch-action: none;
+	-webkit-user-select: none;
+	user-select: none;
+}
+
+html.is-dragging-item,
+html.is-dragging-item * {
+	cursor: grabbing;
+}
+
+.sortable-field-item {
+	scroll-margin: 1rem;
+}
+
+.sortable-field-item:has(.drag-handle:focus-visible) {
+	outline: 2px solid var(--accent-color);
+	outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.sortable-field-item {
+		transition: none;
+	}
+}

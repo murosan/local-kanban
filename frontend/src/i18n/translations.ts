@@ -45,6 +45,11 @@ export const translations = {
 		"configModal.checklistItems": "チェックリスト初期項目（色付け設定）:",
 		"configModal.deleteFieldConfirm":
 			'カスタムフィールド "{name}" を削除してもよろしいですか？',
+		"configModal.dragToReorderField": '"{name}" をドラッグして並び替え',
+		"configModal.moveFieldUp": '"{name}" を上へ移動',
+		"configModal.moveFieldDown": '"{name}" を下へ移動',
+		"configModal.fieldMovedAnnouncement":
+			'"{name}" を {position} / {total} 番目に移動しました',
 		"configModal.columnsDesc":
 			"ボード上の表示順序・名前・表示/非表示を設定します。",
 		"configModal.addColumn": "新規カラムを追加",
@@ -95,6 +100,11 @@ export const translations = {
 		"taskModal.removeField": "削除",
 		"taskModal.removeFieldConfirm":
 			'カスタムフィールド "{name}" を削除してもよろしいですか？',
+		"taskModal.dragToReorderField": '"{name}" をドラッグして並び替え',
+		"taskModal.moveFieldUp": '"{name}" を上へ移動',
+		"taskModal.moveFieldDown": '"{name}" を下へ移動',
+		"taskModal.fieldMovedAnnouncement":
+			'"{name}" を {position} / {total} 番目に移動しました',
 		"taskModal.cancel": "キャンセル",
 		"taskModal.save": "保存",
 		"taskModal.saving": "保存中...",
@@ -250,6 +260,11 @@ export const translations = {
 		"configModal.checklistItems": "Checklist Default Items (Color settings):",
 		"configModal.deleteFieldConfirm":
 			'Are you sure you want to delete custom field "{name}"?',
+		"configModal.dragToReorderField": 'Drag to reorder "{name}"',
+		"configModal.moveFieldUp": 'Move "{name}" up',
+		"configModal.moveFieldDown": 'Move "{name}" down',
+		"configModal.fieldMovedAnnouncement":
+			'Moved "{name}" to position {position} of {total}',
 		"configModal.columnsDesc":
 			"Configure display order, name, and visibility for board columns.",
 		"configModal.addColumn": "Add New Column",
@@ -301,6 +316,11 @@ export const translations = {
 		"taskModal.removeField": "Remove",
 		"taskModal.removeFieldConfirm":
 			'Are you sure you want to remove custom field "{name}"?',
+		"taskModal.dragToReorderField": 'Drag to reorder "{name}"',
+		"taskModal.moveFieldUp": 'Move "{name}" up',
+		"taskModal.moveFieldDown": 'Move "{name}" down',
+		"taskModal.fieldMovedAnnouncement":
+			'Moved "{name}" to position {position} of {total}',
 		"taskModal.cancel": "Cancel",
 		"taskModal.save": "Save",
 		"taskModal.saving": "Saving...",

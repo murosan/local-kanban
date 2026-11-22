@@ -939,3 +939,199 @@ func TestRebuildCacheRebalancesAllRanks(t *testing.T) {
 		t.Fatalf("expected t5 at index 0 before t1, got %v", afterMove)
 	}
 }
+
+func TestCustomFieldsReorderPersistence(t *testing.T) {
+	tempDir := t.TempDir()
+	store, err := markdown.NewStore(tempDir)
+	if err != nil {
+		t.Fatalf("failed to create store: %v", err)
+	}
+
+	sqliteCache, err := cache.NewSQLiteCache(filepath.Join(tempDir, ".local_cache.db"))
+	if err != nil {
+		t.Fatalf("failed to create sqlite cache: %v", err)
+	}
+	defer func() { _ = sqliteCache.Close() }()
+	store.SetCache(sqliteCache)
+
+	server := NewServer(store, nil)
+	mux := http.NewServeMux()
+	server.RegisterRoutes(mux)
+
+	// 1. Reorder preset custom fields via PUT /api/config
+	cfg, err := store.GetBoardConfig()
+	if err != nil {
+		t.Fatalf("GetBoardConfig failed: %v", err)
+	}
+	cfg.CustomFields = []model.CustomFieldDef{
+		{ID: "preset-1", Name: "Priority", Type: model.FieldTypeDropdown},
+		{ID: "preset-2", Name: "Assignee", Type: model.FieldTypeText},
+		{ID: "preset-3", Name: "Due Date", Type: model.FieldTypeDate},
+	}
+	cfgBytes, _ := json.Marshal(cfg)
+	reqPutCfg := httptest.NewRequest("PUT", "/api/config", bytes.NewReader(cfgBytes))
+	wPutCfg := httptest.NewRecorder()
+	mux.ServeHTTP(wPutCfg, reqPutCfg)
+	if wPutCfg.Code != http.StatusOK {
+		t.Fatalf("expected 200 PUT /api/config, got %d", wPutCfg.Code)
+	}
+
+	cfg.CustomFields = []model.CustomFieldDef{
+		cfg.CustomFields[2],
+		cfg.CustomFields[0],
+		cfg.CustomFields[1],
+	}
+	reorderedCfgBytes, _ := json.Marshal(cfg)
+	reqPutCfg2 := httptest.NewRequest("PUT", "/api/config", bytes.NewReader(reorderedCfgBytes))
+	wPutCfg2 := httptest.NewRecorder()
+	mux.ServeHTTP(wPutCfg2, reqPutCfg2)
+	if wPutCfg2.Code != http.StatusOK {
+		t.Fatalf("expected 200 PUT /api/config reorder, got %d", wPutCfg2.Code)
+	}
+
+	reqGetCfg := httptest.NewRequest("GET", "/api/config", nil)
+	wGetCfg := httptest.NewRecorder()
+	mux.ServeHTTP(wGetCfg, reqGetCfg)
+	var loadedCfg model.BoardConfig
+	if err := json.NewDecoder(wGetCfg.Body).Decode(&loadedCfg); err != nil {
+		t.Fatalf("failed to decode config: %v", err)
+	}
+	expectedPresetOrder := []string{"preset-3", "preset-1", "preset-2"}
+	if len(loadedCfg.CustomFields) != len(expectedPresetOrder) {
+		t.Fatalf(
+			"expected %d preset custom fields, got %d",
+			len(expectedPresetOrder),
+			len(loadedCfg.CustomFields),
+		)
+	}
+	for i, wantID := range expectedPresetOrder {
+		if loadedCfg.CustomFields[i].ID != wantID {
+			t.Errorf(
+				"config custom_fields[%d]: want %q, got %q",
+				i,
+				wantID,
+				loadedCfg.CustomFields[i].ID,
+			)
+		}
+	}
+
+	// 2. Create task with 3 custom fields, then reorder them via PUT /api/tasks/{id}
+	initialFields := []model.CustomFieldValue{
+		{ID: "cf-1", Name: "Priority", Type: model.FieldTypeText, Value: "High", Enabled: true},
+		{ID: "cf-2", Name: "Assignee", Type: model.FieldTypeText, Value: "Alice", Enabled: true},
+		{
+			ID:      "cf-3",
+			Name:    "Due Date",
+			Type:    model.FieldTypeDate,
+			Value:   "2026-12-01",
+			Enabled: true,
+		},
+	}
+	createPayload, _ := json.Marshal(map[string]any{
+		"title":         "Reorder Fields Task",
+		"column_id":     "col-todo",
+		"custom_fields": initialFields,
+	})
+	reqCreate := httptest.NewRequest("POST", "/api/tasks", bytes.NewReader(createPayload))
+	wCreate := httptest.NewRecorder()
+	mux.ServeHTTP(wCreate, reqCreate)
+	if wCreate.Code != http.StatusCreated {
+		t.Fatalf("expected 201 POST /api/tasks, got %d", wCreate.Code)
+	}
+	var createdTask model.Task
+	if err := json.NewDecoder(wCreate.Body).Decode(&createdTask); err != nil {
+		t.Fatalf("failed to decode created task: %v", err)
+	}
+
+	reorderedFields := []model.CustomFieldValue{
+		initialFields[2],
+		initialFields[0],
+		initialFields[1],
+	}
+	updatePayload, _ := json.Marshal(map[string]any{
+		"custom_fields": reorderedFields,
+	})
+	reqUpdate := httptest.NewRequest(
+		"PUT",
+		"/api/tasks/"+createdTask.ID,
+		bytes.NewReader(updatePayload),
+	)
+	wUpdate := httptest.NewRecorder()
+	mux.ServeHTTP(wUpdate, reqUpdate)
+	if wUpdate.Code != http.StatusOK {
+		t.Fatalf("expected 200 PUT /api/tasks/{id}, got %d", wUpdate.Code)
+	}
+
+	expectedFieldOrder := []string{"cf-3", "cf-1", "cf-2"}
+
+	// Verify via GET /api/tasks/{id} (SQLite cache)
+	reqGetOne := httptest.NewRequest("GET", "/api/tasks/"+createdTask.ID, nil)
+	wGetOne := httptest.NewRecorder()
+	mux.ServeHTTP(wGetOne, reqGetOne)
+	var loadedTask model.Task
+	if err := json.NewDecoder(wGetOne.Body).Decode(&loadedTask); err != nil {
+		t.Fatalf("failed to decode task: %v", err)
+	}
+	if len(loadedTask.CustomFields) != len(expectedFieldOrder) {
+		t.Fatalf(
+			"expected %d task custom fields, got %d",
+			len(expectedFieldOrder),
+			len(loadedTask.CustomFields),
+		)
+	}
+	for i, wantID := range expectedFieldOrder {
+		if loadedTask.CustomFields[i].ID != wantID {
+			t.Errorf(
+				"GET /api/tasks/{id} custom_fields[%d]: want %q, got %q",
+				i,
+				wantID,
+				loadedTask.CustomFields[i].ID,
+			)
+		}
+	}
+
+	// Verify via GET /api/tasks (board list)
+	reqGetAll := httptest.NewRequest("GET", "/api/tasks", nil)
+	wGetAll := httptest.NewRecorder()
+	mux.ServeHTTP(wGetAll, reqGetAll)
+	var listTasks []*model.Task
+	if err := json.NewDecoder(wGetAll.Body).Decode(&listTasks); err != nil {
+		t.Fatalf("failed to decode task list: %v", err)
+	}
+	if len(listTasks) != 1 || len(listTasks[0].CustomFields) != len(expectedFieldOrder) {
+		t.Fatalf(
+			"expected 1 task with %d custom fields, got %+v",
+			len(expectedFieldOrder),
+			listTasks,
+		)
+	}
+	for i, wantID := range expectedFieldOrder {
+		if listTasks[0].CustomFields[i].ID != wantID {
+			t.Errorf(
+				"GET /api/tasks custom_fields[%d]: want %q, got %q",
+				i,
+				wantID,
+				listTasks[0].CustomFields[i].ID,
+			)
+		}
+	}
+
+	// Verify directly from Markdown file on disk
+	diskTasks, err := store.GetAllTasks()
+	if err != nil {
+		t.Fatalf("GetAllTasks failed: %v", err)
+	}
+	if len(diskTasks) != 1 || len(diskTasks[0].CustomFields) != len(expectedFieldOrder) {
+		t.Fatalf("expected 1 disk task with %d custom fields", len(expectedFieldOrder))
+	}
+	for i, wantID := range expectedFieldOrder {
+		if diskTasks[0].CustomFields[i].ID != wantID {
+			t.Errorf(
+				"disk custom_fields[%d]: want %q, got %q",
+				i,
+				wantID,
+				diskTasks[0].CustomFields[i].ID,
+			)
+		}
+	}
+}

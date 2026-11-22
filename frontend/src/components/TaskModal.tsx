@@ -22,6 +22,7 @@ import {
 	CheckSquare,
 	ChevronDown,
 	ChevronRight,
+	ChevronUp,
 	Clock,
 	Columns,
 	Copy,
@@ -63,6 +64,12 @@ import type {
 	CustomFieldValue,
 	Task,
 } from "../types/task";
+import {
+	ensureUniqueIds,
+	moveItemByOffset,
+	prefersReducedMotion,
+	reorderItemsById,
+} from "../utils/reorder";
 import { getSafeUrl } from "../utils/url";
 import { type ChangeOptions, MarkdownEditor } from "./MarkdownEditor";
 import { TagInput } from "./TagInput";
@@ -168,6 +175,180 @@ const SortableSubtaskItem: React.FC<SortableSubtaskItemProps> = ({
 	);
 };
 
+interface SortableCustomFieldRowProps {
+	field: CustomFieldValue;
+	index: number;
+	total: number;
+	isEditingOptions: boolean;
+	onMove: (index: number, direction: "up" | "down") => void;
+	onUpdateName: (id: string, name: string) => void;
+	onToggleEditOptions: (id: string) => void;
+	onRemove: (id: string, name?: string) => void;
+	registerItemRef: (fieldId: string, el: HTMLDivElement | null) => void;
+	registerMoveButtonRef: (
+		fieldId: string,
+		dir: "up" | "down",
+		el: HTMLButtonElement | null,
+	) => void;
+	children: React.ReactNode;
+}
+
+const SortableCustomFieldRow: React.FC<SortableCustomFieldRowProps> = ({
+	field,
+	index,
+	total,
+	isEditingOptions,
+	onMove,
+	onUpdateName,
+	onToggleEditOptions,
+	onRemove,
+	registerItemRef,
+	registerMoveButtonRef,
+	children,
+}) => {
+	const { t } = useI18n();
+	const {
+		attributes,
+		listeners,
+		setNodeRef,
+		transform,
+		transition,
+		isDragging,
+	} = useSortable({ id: field.id });
+
+	const style: React.CSSProperties = {
+		transform: CSS.Transform.toString(transform),
+		transition: prefersReducedMotion() ? undefined : transition,
+	};
+
+	const setCombinedRef = useCallback(
+		(node: HTMLDivElement | null) => {
+			setNodeRef(node);
+			registerItemRef(field.id, node);
+		},
+		[field.id, registerItemRef, setNodeRef],
+	);
+
+	const fieldDisplayName = field.name || field.id;
+
+	return (
+		<div
+			ref={setCombinedRef}
+			style={style}
+			onFocusCapture={(e) => {
+				if (
+					e.target instanceof HTMLElement &&
+					e.target.matches(":focus-visible")
+				) {
+					e.currentTarget.scrollIntoView({
+						block: "nearest",
+						inline: "nearest",
+					});
+				}
+			}}
+			className={`sortable-field-item flex flex-col space-y-2 border-b border-[var(--border-color)] pb-3.5 last:border-b-0 last:pb-0 rounded-lg transition-shadow ${
+				isDragging
+					? "relative z-50 bg-[var(--bg-card)] px-2.5 py-2 -mx-2.5 ring-2 ring-blue-500 shadow-xl border-transparent"
+					: ""
+			}`}
+		>
+			<div className="flex items-center justify-between gap-2">
+				<div className="flex items-center space-x-1.5 flex-1 min-w-0">
+					<button
+						type="button"
+						{...attributes}
+						{...listeners}
+						className="drag-handle cursor-grab active:cursor-grabbing text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-input)] focus-visible:bg-[var(--bg-input)] p-1 rounded transition-colors shrink-0"
+						aria-label={t("taskModal.dragToReorderField", {
+							name: fieldDisplayName,
+						})}
+						title={t("taskModal.dragToReorderField", {
+							name: fieldDisplayName,
+						})}
+					>
+						<GripVertical className="w-3.5 h-3.5" />
+					</button>
+					{/* Field Name Input (Editable on card) */}
+					<input
+						type="text"
+						value={field.name}
+						onChange={(e) => onUpdateName(field.id, e.target.value)}
+						className="text-xs font-bold text-[var(--text-primary)] bg-transparent border-b border-transparent hover:border-[var(--border-color)] focus:border-blue-500 focus:bg-[var(--bg-input)] px-1.5 py-0.5 rounded-md transition-all outline-none truncate flex-1 max-w-[220px]"
+						placeholder="フィールド名"
+					/>
+					<span className="text-[10px] uppercase font-mono text-[var(--text-muted)] bg-[var(--bg-input)] px-1.5 py-0.5 rounded border border-[var(--border-color)] shrink-0">
+						{field.type}
+					</span>
+				</div>
+
+				{/* Action Buttons */}
+				<div className="flex items-center space-x-1 shrink-0">
+					{total > 1 && (
+						<>
+							<button
+								ref={(el) => registerMoveButtonRef(field.id, "up", el)}
+								type="button"
+								disabled={index === 0}
+								onClick={() => onMove(index, "up")}
+								className="p-1 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-input)] disabled:opacity-30 transition-colors cursor-pointer disabled:cursor-not-allowed"
+								aria-label={t("taskModal.moveFieldUp", {
+									name: fieldDisplayName,
+								})}
+								title={t("taskModal.moveFieldUp", {
+									name: fieldDisplayName,
+								})}
+							>
+								<ChevronUp className="w-3.5 h-3.5" />
+							</button>
+							<button
+								ref={(el) => registerMoveButtonRef(field.id, "down", el)}
+								type="button"
+								disabled={index === total - 1}
+								onClick={() => onMove(index, "down")}
+								className="p-1 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-input)] disabled:opacity-30 transition-colors cursor-pointer disabled:cursor-not-allowed"
+								aria-label={t("taskModal.moveFieldDown", {
+									name: fieldDisplayName,
+								})}
+								title={t("taskModal.moveFieldDown", {
+									name: fieldDisplayName,
+								})}
+							>
+								<ChevronDown className="w-3.5 h-3.5" />
+							</button>
+						</>
+					)}
+					{field.type === "dropdown" && (
+						<button
+							type="button"
+							onClick={() => onToggleEditOptions(field.id)}
+							className={`flex items-center space-x-1 text-xs px-2 py-1 rounded-lg transition-all font-medium ${
+								isEditingOptions
+									? "bg-blue-600/10 text-blue-500 border border-blue-500/30 font-bold"
+									: "text-[var(--text-secondary)] hover:text-blue-500 hover:bg-[var(--bg-input)]"
+							}`}
+							title="選択肢・色を編集"
+						>
+							<Settings className="w-3.5 h-3.5" />
+							<span>選択肢編集</span>
+						</button>
+					)}
+					<button
+						type="button"
+						onClick={() => onRemove(field.id, field.name)}
+						className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-rose-500 hover:bg-rose-500/10 transition-colors"
+						title={t("taskModal.removeField")}
+					>
+						<Trash2 className="w-4 h-4" />
+					</button>
+				</div>
+			</div>
+
+			{/* Field Control */}
+			<div>{children}</div>
+		</div>
+	);
+};
+
 interface TaskModalProps {
 	isOpen: boolean;
 	task: Task | null; // Null means create mode
@@ -230,36 +411,42 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 		(taskData: Task | null): CustomFieldValue[] => {
 			if (!taskData?.custom_fields) return [];
 			if (Array.isArray(taskData.custom_fields)) {
-				return taskData.custom_fields.map((cf) => ({
-					id:
-						cf.id ||
-						cf.field_id ||
-						`cf-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-					field_id: cf.field_id,
-					name: cf.name || cf.field_id || "Field",
-					type: cf.type || "text",
-					value: cf.value,
-					options: cf.options,
-					enabled: cf.enabled ?? true,
-				}));
+				return ensureUniqueIds(
+					taskData.custom_fields.map((cf) => ({
+						id:
+							cf.id ||
+							cf.field_id ||
+							`cf-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+						field_id: cf.field_id,
+						name: cf.name || cf.field_id || "Field",
+						type: cf.type || "text",
+						value: cf.value,
+						options: cf.options,
+						enabled: cf.enabled ?? true,
+					})),
+					"cf",
+				);
 			}
 			// Legacy Record<string, CustomFieldValue> fallback
 			const legacyMap = taskData.custom_fields as unknown as Record<
 				string,
 				Partial<CustomFieldValue> | undefined
 			>;
-			return Object.entries(legacyMap).map(([key, cf]) => {
-				const fieldDef = customFields.find((f) => f.id === key);
-				return {
-					id: key,
-					field_id: key,
-					name: fieldDef ? fieldDef.name : key.replace("cf-", ""),
-					type: fieldDef ? fieldDef.type : "text",
-					options: fieldDef?.options,
-					value: cf?.value ?? "",
-					enabled: cf?.enabled ?? true,
-				};
-			});
+			return ensureUniqueIds(
+				Object.entries(legacyMap).map(([key, cf]) => {
+					const fieldDef = customFields.find((f) => f.id === key);
+					return {
+						id: key,
+						field_id: key,
+						name: fieldDef ? fieldDef.name : key.replace("cf-", ""),
+						type: fieldDef ? fieldDef.type : "text",
+						options: fieldDef?.options,
+						value: cf?.value ?? "",
+						enabled: cf?.enabled ?? true,
+					};
+				}),
+				"cf",
+			);
 		},
 		[customFields],
 	);
@@ -267,6 +454,62 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 	const [customFieldsState, setCustomFieldsState] = useState<
 		CustomFieldValue[]
 	>(() => parseInitialCustomFields(task));
+	const [customFieldLiveAnnouncement, setCustomFieldLiveAnnouncement] =
+		useState("");
+	const isDraggingCustomFieldRef = useRef(false);
+	const customFieldAnnounceTimerRef = useRef<ReturnType<
+		typeof setTimeout
+	> | null>(null);
+	const customFieldItemRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+	const customFieldMoveButtonRefs = useRef<
+		Map<
+			string,
+			{ up?: HTMLButtonElement | null; down?: HTMLButtonElement | null }
+		>
+	>(new Map());
+
+	const registerCustomFieldItemRef = useCallback(
+		(fieldId: string, el: HTMLDivElement | null) => {
+			if (el) {
+				customFieldItemRefs.current.set(fieldId, el);
+			} else {
+				customFieldItemRefs.current.delete(fieldId);
+			}
+		},
+		[],
+	);
+
+	const registerCustomFieldMoveButtonRef = useCallback(
+		(fieldId: string, dir: "up" | "down", el: HTMLButtonElement | null) => {
+			const entry = customFieldMoveButtonRefs.current.get(fieldId) || {};
+			entry[dir] = el;
+			if (!entry.up && !entry.down) {
+				customFieldMoveButtonRefs.current.delete(fieldId);
+			} else {
+				customFieldMoveButtonRefs.current.set(fieldId, entry);
+			}
+		},
+		[],
+	);
+
+	const announceCustomFieldMove = useCallback(
+		(fieldName: string, newIndex: number, total: number) => {
+			if (customFieldAnnounceTimerRef.current) {
+				clearTimeout(customFieldAnnounceTimerRef.current);
+			}
+			setCustomFieldLiveAnnouncement("");
+			customFieldAnnounceTimerRef.current = setTimeout(() => {
+				setCustomFieldLiveAnnouncement(
+					t("taskModal.fieldMovedAnnouncement", {
+						name: fieldName,
+						position: newIndex + 1,
+						total,
+					}),
+				);
+			}, 150);
+		},
+		[t],
+	);
 
 	const [isAddFieldOpen, setIsAddFieldOpen] = useState(false);
 	const [addFieldMode, setAddFieldMode] = useState<"preset" | "custom">(
@@ -767,6 +1010,10 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 			if (autoSaveTimerRef.current) {
 				clearTimeout(autoSaveTimerRef.current);
 			}
+			if (customFieldAnnounceTimerRef.current) {
+				clearTimeout(customFieldAnnounceTimerRef.current);
+			}
+			document.documentElement.classList.remove("is-dragging-item");
 		};
 	}, []);
 
@@ -841,6 +1088,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 	useEffect(() => {
 		const handleKeyDown = (e: KeyboardEvent) => {
 			if (e.key === "Escape") {
+				if (isDraggingCustomFieldRef.current) return;
 				e.preventDefault();
 				handleCloseWithSave();
 				return;
@@ -935,6 +1183,91 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 			triggerAutoSave(newState, isImmediate);
 			return nextCustomFields;
 		});
+	};
+
+	const commitReorderedCustomFields = (reordered: CustomFieldValue[]) => {
+		setCustomFieldsState(reordered);
+		const newState = {
+			title: latestStateRef.current.title,
+			columnId: latestStateRef.current.columnId,
+			tags: latestStateRef.current.tags,
+			content: latestStateRef.current.content,
+			customFieldsState: reordered,
+		};
+		recordHistory(newState, { immediate: true });
+		triggerAutoSave(newState, true);
+	};
+
+	const handleMoveCustomField = (index: number, direction: "up" | "down") => {
+		const delta = direction === "up" ? -1 : 1;
+		const reordered = moveItemByOffset(customFieldsState, index, delta);
+		if (reordered === customFieldsState) return;
+
+		const targetIndex = index + delta;
+		const movedField = reordered[targetIndex];
+		commitReorderedCustomFields(reordered);
+		announceCustomFieldMove(
+			movedField.name || movedField.id,
+			targetIndex,
+			reordered.length,
+		);
+
+		requestAnimationFrame(() => {
+			const itemEl = customFieldItemRefs.current.get(movedField.id);
+			itemEl?.scrollIntoView({ block: "nearest", inline: "nearest" });
+			const buttons = customFieldMoveButtonRefs.current.get(movedField.id);
+			const hitStart = direction === "up" && targetIndex === 0;
+			const hitEnd =
+				direction === "down" && targetIndex === reordered.length - 1;
+			const targetBtn =
+				hitStart && buttons?.down
+					? buttons.down
+					: hitEnd && buttons?.up
+						? buttons.up
+						: buttons?.[direction];
+			targetBtn?.focus({ preventScroll: true });
+		});
+	};
+
+	const handleCustomFieldDragStart = () => {
+		isDraggingCustomFieldRef.current = true;
+		document.documentElement.classList.add("is-dragging-item");
+	};
+
+	const handleCustomFieldDragEnd = (event: DragEndEvent) => {
+		isDraggingCustomFieldRef.current = false;
+		document.documentElement.classList.remove("is-dragging-item");
+
+		const { active, over } = event;
+		if (!over || active.id === over.id) return;
+
+		const reordered = reorderItemsById(
+			customFieldsState,
+			String(active.id),
+			String(over.id),
+		);
+		if (reordered === customFieldsState) return;
+
+		const newIndex = reordered.findIndex((f) => f.id === String(active.id));
+		commitReorderedCustomFields(reordered);
+		if (newIndex !== -1) {
+			const movedField = reordered[newIndex];
+			announceCustomFieldMove(
+				movedField.name || movedField.id,
+				newIndex,
+				reordered.length,
+			);
+			requestAnimationFrame(() => {
+				customFieldItemRefs.current
+					.get(movedField.id)
+					?.scrollIntoView({ block: "nearest", inline: "nearest" });
+			});
+		}
+	};
+
+	const handleCustomFieldDragCancel = () => {
+		isDraggingCustomFieldRef.current = false;
+		document.documentElement.classList.remove("is-dragging-item");
 	};
 
 	const handleRemoveCustomField = (id: string, name?: string) => {
@@ -1746,497 +2079,475 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 							</div>
 
 							{/* Custom Fields List */}
+							<div className="sr-only" aria-live="polite" aria-atomic="true">
+								{customFieldLiveAnnouncement}
+							</div>
 							{customFieldsState.length > 0 ? (
-								<div className="flex flex-col space-y-3 pt-1">
-									{customFieldsState.map((field) => {
-										const resolvedOptions =
-											field.options ||
-											(field.field_id
-												? customFields.find((f) => f.id === field.field_id)
-														?.options
-												: undefined) ||
-											[];
+								<DndContext
+									sensors={subtaskSensors}
+									collisionDetection={closestCenter}
+									onDragStart={handleCustomFieldDragStart}
+									onDragEnd={handleCustomFieldDragEnd}
+									onDragCancel={handleCustomFieldDragCancel}
+								>
+									<SortableContext
+										items={customFieldsState.map((f) => f.id)}
+										strategy={verticalListSortingStrategy}
+									>
+										<div className="flex flex-col space-y-3 pt-1">
+											{customFieldsState.map((field, fieldIndex) => {
+												const resolvedOptions =
+													field.options ||
+													(field.field_id
+														? customFields.find((f) => f.id === field.field_id)
+																?.options
+														: undefined) ||
+													[];
 
-										return (
-											<div
-												key={field.id}
-												className="flex flex-col space-y-2 border-b border-[var(--border-color)] pb-3.5 last:border-b-0 last:pb-0"
-											>
-												<div className="flex items-center justify-between gap-2">
-													<div className="flex items-center space-x-1.5 flex-1 min-w-0">
-														{/* Field Name Input (Editable on card) */}
-														<input
-															type="text"
-															value={field.name}
-															onChange={(e) =>
-																handleUpdateCustomField(field.id, {
-																	name: e.target.value,
-																})
-															}
-															className="text-xs font-bold text-[var(--text-primary)] bg-transparent border-b border-transparent hover:border-[var(--border-color)] focus:border-blue-500 focus:bg-[var(--bg-input)] px-1.5 py-0.5 rounded-md transition-all outline-none truncate flex-1 max-w-[220px]"
-															placeholder="フィールド名"
-														/>
-														<span className="text-[10px] uppercase font-mono text-[var(--text-muted)] bg-[var(--bg-input)] px-1.5 py-0.5 rounded border border-[var(--border-color)] shrink-0">
-															{field.type}
-														</span>
-													</div>
-
-													{/* Action Buttons */}
-													<div className="flex items-center space-x-1 shrink-0">
+												return (
+													<SortableCustomFieldRow
+														key={field.id}
+														field={field}
+														index={fieldIndex}
+														total={customFieldsState.length}
+														isEditingOptions={editingOptionFieldId === field.id}
+														onMove={handleMoveCustomField}
+														onUpdateName={(id, name) =>
+															handleUpdateCustomField(id, { name })
+														}
+														onToggleEditOptions={(id) =>
+															setEditingOptionFieldId(
+																editingOptionFieldId === id ? null : id,
+															)
+														}
+														onRemove={handleRemoveCustomField}
+														registerItemRef={registerCustomFieldItemRef}
+														registerMoveButtonRef={
+															registerCustomFieldMoveButtonRef
+														}
+													>
 														{field.type === "dropdown" && (
-															<button
-																type="button"
-																onClick={() =>
-																	setEditingOptionFieldId(
-																		editingOptionFieldId === field.id
-																			? null
-																			: field.id,
-																	)
-																}
-																className={`flex items-center space-x-1 text-xs px-2 py-1 rounded-lg transition-all font-medium ${
-																	editingOptionFieldId === field.id
-																		? "bg-blue-600/10 text-blue-500 border border-blue-500/30 font-bold"
-																		: "text-[var(--text-secondary)] hover:text-blue-500 hover:bg-[var(--bg-input)]"
-																}`}
-																title="選択肢・色を編集"
-															>
-																<Settings className="w-3.5 h-3.5" />
-																<span>選択肢編集</span>
-															</button>
-														)}
-														<button
-															type="button"
-															onClick={() =>
-																handleRemoveCustomField(field.id, field.name)
-															}
-															className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-rose-500 hover:bg-rose-500/10 transition-colors"
-															title={t("taskModal.removeField")}
-														>
-															<Trash2 className="w-4 h-4" />
-														</button>
-													</div>
-												</div>
-
-												{/* Field Control */}
-												<div>
-													{field.type === "dropdown" && (
-														<div className="space-y-2">
-															<div className="relative flex items-center">
-																{(() => {
-																	const selectedOpt = resolvedOptions.find(
-																		(opt) => opt.value === field.value,
-																	);
-																	const optionColor = selectedOpt?.color;
-																	return (
-																		<>
-																			{optionColor && (
-																				<span
-																					className="absolute left-3.5 w-3 h-3 rounded-full pointer-events-none transition-colors shadow-sm"
-																					style={{
-																						backgroundColor: optionColor,
-																					}}
-																				/>
-																			)}
-																			<select
-																				value={String(field.value ?? "")}
-																				onChange={(e) =>
-																					handleUpdateCustomField(field.id, {
-																						value: e.target.value,
-																					})
-																				}
-																				className={`w-full py-2 text-sm bg-[var(--bg-input)] border border-[var(--border-color)] rounded-xl text-[var(--text-primary)] focus:outline-none focus:border-blue-500 appearance-none cursor-pointer ${
-																					optionColor
-																						? "pl-9 pr-9 font-medium"
-																						: "px-3 pr-9"
-																				}`}
-																			>
-																				<option value="">
-																					-- {t("configModal.typeDropdown")} --
-																				</option>
-																				{resolvedOptions.map((opt) => (
-																					<option
-																						key={opt.id}
-																						value={opt.value}
-																						className="bg-[var(--modal-bg)] text-[var(--text-primary)]"
-																					>
-																						{opt.value}
-																					</option>
-																				))}
-																			</select>
-																			<ChevronDown className="absolute right-3 w-4 h-4 text-[var(--text-secondary)] pointer-events-none" />
-																		</>
-																	);
-																})()}
-															</div>
-
-															{/* Hidden by default: Options Management Panel */}
-															{editingOptionFieldId === field.id && (
-																<div className="bg-[var(--bg-input)] p-3 rounded-xl border border-[var(--border-color)] space-y-2.5 animate-in fade-in duration-150">
-																	<div className="flex items-center justify-between text-[11px] font-semibold text-[var(--text-secondary)]">
-																		<span>プルダウン選択肢（色付け設定）:</span>
-																	</div>
-
-																	{/* Options List with Color Picker and Label Edit */}
-																	<div className="space-y-2">
-																		{resolvedOptions.length > 0 ? (
-																			resolvedOptions.map((opt) => (
-																				<div
-																					key={opt.id}
-																					className="flex items-center justify-between p-2 rounded-lg border border-[var(--border-color)] bg-[var(--bg-surface)] gap-2"
+															<div className="space-y-2">
+																<div className="relative flex items-center">
+																	{(() => {
+																		const selectedOpt = resolvedOptions.find(
+																			(opt) => opt.value === field.value,
+																		);
+																		const optionColor = selectedOpt?.color;
+																		return (
+																			<>
+																				{optionColor && (
+																					<span
+																						className="absolute left-3.5 w-3 h-3 rounded-full pointer-events-none transition-colors shadow-sm"
+																						style={{
+																							backgroundColor: optionColor,
+																						}}
+																					/>
+																				)}
+																				<select
+																					value={String(field.value ?? "")}
+																					onChange={(e) =>
+																						handleUpdateCustomField(field.id, {
+																							value: e.target.value,
+																						})
+																					}
+																					className={`w-full py-2 text-sm bg-[var(--bg-input)] border border-[var(--border-color)] rounded-xl text-[var(--text-primary)] focus:outline-none focus:border-blue-500 appearance-none cursor-pointer ${
+																						optionColor
+																							? "pl-9 pr-9 font-medium"
+																							: "px-3 pr-9"
+																					}`}
 																				>
-																					<div className="flex items-center space-x-2 flex-1 min-w-0">
-																						<span
-																							className="w-3.5 h-3.5 rounded-full border border-white/20 shrink-0"
-																							style={{
-																								backgroundColor:
-																									opt.color || "#3b82f6",
-																							}}
-																						/>
-																						<input
-																							type="text"
+																					<option value="">
+																						-- {t("configModal.typeDropdown")}{" "}
+																						--
+																					</option>
+																					{resolvedOptions.map((opt) => (
+																						<option
+																							key={opt.id}
 																							value={opt.value}
-																							onChange={(e) =>
-																								handleOptionValueChange(
-																									field.id,
-																									opt.id,
-																									e.target.value,
-																								)
-																							}
-																							className="bg-[var(--bg-input)] border border-[var(--border-color)] focus:border-blue-500 rounded px-2 py-0.5 text-xs font-medium text-[var(--text-primary)] flex-1 outline-none truncate"
-																							placeholder="選択肢名"
-																						/>
-																					</div>
+																							className="bg-[var(--modal-bg)] text-[var(--text-primary)]"
+																						>
+																							{opt.value}
+																						</option>
+																					))}
+																				</select>
+																				<ChevronDown className="absolute right-3 w-4 h-4 text-[var(--text-secondary)] pointer-events-none" />
+																			</>
+																		);
+																	})()}
+																</div>
 
-																					{/* Color Swatch Picker */}
-																					<div className="flex items-center space-x-1 justify-end shrink-0">
-																						{COLOR_PRESETS.map((colorHex) => (
-																							<button
-																								key={colorHex}
-																								type="button"
-																								onClick={() =>
-																									handleOptionColorChange(
-																										field.id,
-																										opt.id,
-																										colorHex,
-																									)
-																								}
-																								className={`w-3.5 h-3.5 rounded-full transition-transform ${
-																									opt.color === colorHex
-																										? "scale-125 ring-2 ring-white/60 shadow-md"
-																										: "hover:scale-110 opacity-70 hover:opacity-100"
-																								}`}
+																{/* Hidden by default: Options Management Panel */}
+																{editingOptionFieldId === field.id && (
+																	<div className="bg-[var(--bg-input)] p-3 rounded-xl border border-[var(--border-color)] space-y-2.5 animate-in fade-in duration-150">
+																		<div className="flex items-center justify-between text-[11px] font-semibold text-[var(--text-secondary)]">
+																			<span>
+																				プルダウン選択肢（色付け設定）:
+																			</span>
+																		</div>
+
+																		{/* Options List with Color Picker and Label Edit */}
+																		<div className="space-y-2">
+																			{resolvedOptions.length > 0 ? (
+																				resolvedOptions.map((opt) => (
+																					<div
+																						key={opt.id}
+																						className="flex items-center justify-between p-2 rounded-lg border border-[var(--border-color)] bg-[var(--bg-surface)] gap-2"
+																					>
+																						<div className="flex items-center space-x-2 flex-1 min-w-0">
+																							<span
+																								className="w-3.5 h-3.5 rounded-full border border-white/20 shrink-0"
 																								style={{
-																									backgroundColor: colorHex,
+																									backgroundColor:
+																										opt.color || "#3b82f6",
 																								}}
 																							/>
-																						))}
-																						<button
-																							type="button"
-																							onClick={() =>
-																								handleRemoveOptionFromField(
-																									field.id,
-																									opt.id,
-																								)
-																							}
-																							className="p-1 text-xs text-rose-500 hover:text-rose-600 font-bold ml-1"
-																							title="選択肢を削除"
-																						>
-																							×
-																						</button>
-																					</div>
-																				</div>
-																			))
-																		) : (
-																			<span className="text-xs text-[var(--text-muted)] italic block">
-																				選択肢が設定されていません
-																			</span>
-																		)}
-																	</div>
+																							<input
+																								type="text"
+																								value={opt.value}
+																								onChange={(e) =>
+																									handleOptionValueChange(
+																										field.id,
+																										opt.id,
+																										e.target.value,
+																									)
+																								}
+																								className="bg-[var(--bg-input)] border border-[var(--border-color)] focus:border-blue-500 rounded px-2 py-0.5 text-xs font-medium text-[var(--text-primary)] flex-1 outline-none truncate"
+																								placeholder="選択肢名"
+																							/>
+																						</div>
 
-																	{/* Add Option Input Form */}
-																	<div className="flex items-center gap-1.5 pt-1">
-																		<input
-																			type="text"
-																			value={addOptionInput}
-																			onChange={(e) =>
-																				setAddOptionInput(e.target.value)
-																			}
-																			placeholder="＋ 選択肢を追加（例: 高, 中, 低）"
-																			className="flex-1 px-2.5 py-1 text-xs bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-lg text-[var(--text-primary)] focus:outline-none focus:border-blue-500"
-																			onKeyDown={(e) => {
-																				if (e.key === "Enter") {
-																					e.preventDefault();
+																						{/* Color Swatch Picker */}
+																						<div className="flex items-center space-x-1 justify-end shrink-0">
+																							{COLOR_PRESETS.map((colorHex) => (
+																								<button
+																									key={colorHex}
+																									type="button"
+																									onClick={() =>
+																										handleOptionColorChange(
+																											field.id,
+																											opt.id,
+																											colorHex,
+																										)
+																									}
+																									className={`w-3.5 h-3.5 rounded-full transition-transform ${
+																										opt.color === colorHex
+																											? "scale-125 ring-2 ring-white/60 shadow-md"
+																											: "hover:scale-110 opacity-70 hover:opacity-100"
+																									}`}
+																									style={{
+																										backgroundColor: colorHex,
+																									}}
+																								/>
+																							))}
+																							<button
+																								type="button"
+																								onClick={() =>
+																									handleRemoveOptionFromField(
+																										field.id,
+																										opt.id,
+																									)
+																								}
+																								className="p-1 text-xs text-rose-500 hover:text-rose-600 font-bold ml-1"
+																								title="選択肢を削除"
+																							>
+																								×
+																							</button>
+																						</div>
+																					</div>
+																				))
+																			) : (
+																				<span className="text-xs text-[var(--text-muted)] italic block">
+																					選択肢が設定されていません
+																				</span>
+																			)}
+																		</div>
+
+																		{/* Add Option Input Form */}
+																		<div className="flex items-center gap-1.5 pt-1">
+																			<input
+																				type="text"
+																				value={addOptionInput}
+																				onChange={(e) =>
+																					setAddOptionInput(e.target.value)
+																				}
+																				placeholder="＋ 選択肢を追加（例: 高, 中, 低）"
+																				className="flex-1 px-2.5 py-1 text-xs bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-lg text-[var(--text-primary)] focus:outline-none focus:border-blue-500"
+																				onKeyDown={(e) => {
+																					if (e.key === "Enter") {
+																						e.preventDefault();
+																						handleAddOptionToField(
+																							field.id,
+																							addOptionInput,
+																						);
+																						setAddOptionInput("");
+																					}
+																				}}
+																			/>
+																			<button
+																				type="button"
+																				onClick={() => {
 																					handleAddOptionToField(
 																						field.id,
 																						addOptionInput,
 																					);
 																					setAddOptionInput("");
-																				}
-																			}}
-																		/>
-																		<button
-																			type="button"
-																			onClick={() => {
-																				handleAddOptionToField(
-																					field.id,
-																					addOptionInput,
-																				);
-																				setAddOptionInput("");
-																			}}
-																			disabled={!addOptionInput.trim()}
-																			className="px-3 py-1 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-500 rounded-lg shrink-0 disabled:opacity-50"
-																		>
-																			追加
-																		</button>
+																				}}
+																				disabled={!addOptionInput.trim()}
+																				className="px-3 py-1 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-500 rounded-lg shrink-0 disabled:opacity-50"
+																			>
+																				追加
+																			</button>
+																		</div>
 																	</div>
-																</div>
-															)}
-														</div>
-													)}
+																)}
+															</div>
+														)}
 
-													{field.type === "text" && (
-														<input
-															type="text"
-															value={String(field.value ?? "")}
-															onChange={(e) =>
-																handleUpdateCustomField(field.id, {
-																	value: e.target.value,
-																})
-															}
-															placeholder={field.name}
-															className="w-full px-3 py-2 text-sm bg-[var(--bg-input)] border border-[var(--border-color)] rounded-xl text-[var(--text-primary)] focus:outline-none focus:border-blue-500"
-														/>
-													)}
-
-													{field.type === "number" && (
-														<input
-															type="number"
-															value={String(field.value ?? "")}
-															onChange={(e) =>
-																handleUpdateCustomField(field.id, {
-																	value: e.target.value,
-																})
-															}
-															placeholder="0"
-															className="w-full px-3 py-2 text-sm bg-[var(--bg-input)] border border-[var(--border-color)] rounded-xl text-[var(--text-primary)] focus:outline-none focus:border-blue-500"
-														/>
-													)}
-
-													{field.type === "date" && (
-														<input
-															type="date"
-															value={String(field.value ?? "")}
-															onChange={(e) =>
-																handleUpdateCustomField(field.id, {
-																	value: e.target.value,
-																})
-															}
-															className="w-full px-3 py-2 text-sm bg-[var(--bg-input)] border border-[var(--border-color)] rounded-xl text-[var(--text-primary)] focus:outline-none focus:border-blue-500"
-														/>
-													)}
-
-													{field.type === "checkbox" && (
-														<label className="flex items-center space-x-2 p-2 bg-[var(--bg-input)] border border-[var(--border-color)] rounded-xl cursor-pointer">
+														{field.type === "text" && (
 															<input
-																type="checkbox"
-																checked={!!field.value}
+																type="text"
+																value={String(field.value ?? "")}
 																onChange={(e) =>
 																	handleUpdateCustomField(field.id, {
-																		value: e.target.checked,
+																		value: e.target.value,
 																	})
 																}
-																className="w-4 h-4 text-blue-600 rounded border border-[var(--border-color)] focus:ring-blue-500"
+																placeholder={field.name}
+																className="w-full px-3 py-2 text-sm bg-[var(--bg-input)] border border-[var(--border-color)] rounded-xl text-[var(--text-primary)] focus:outline-none focus:border-blue-500"
 															/>
-															<span className="text-xs text-[var(--text-primary)] font-medium">
-																{field.name}
-															</span>
-														</label>
-													)}
+														)}
 
-													{field.type === "link" &&
-														(() => {
-															const safeUrl = getSafeUrl(field.value);
-															return (
-																<div className="relative flex items-center">
-																	<input
-																		type="text"
-																		value={String(field.value ?? "")}
-																		onChange={(e) =>
-																			handleUpdateCustomField(field.id, {
-																				value: e.target.value,
-																			})
-																		}
-																		placeholder="https://... または vscode://..."
-																		className="w-full px-3 py-2 text-sm bg-[var(--bg-input)] border border-[var(--border-color)] rounded-xl text-[var(--text-primary)] focus:outline-none focus:border-blue-500 pr-9"
-																	/>
-																	{safeUrl && (
-																		<a
-																			href={safeUrl}
-																			target="_blank"
-																			rel="noopener noreferrer"
-																			className="absolute right-3 text-[var(--text-secondary)] hover:text-blue-500 transition-colors"
-																			title="リンクを開く"
-																		>
-																			<ExternalLink className="w-4 h-4" />
-																		</a>
-																	)}
-																</div>
-															);
-														})()}
+														{field.type === "number" && (
+															<input
+																type="number"
+																value={String(field.value ?? "")}
+																onChange={(e) =>
+																	handleUpdateCustomField(field.id, {
+																		value: e.target.value,
+																	})
+																}
+																placeholder="0"
+																className="w-full px-3 py-2 text-sm bg-[var(--bg-input)] border border-[var(--border-color)] rounded-xl text-[var(--text-primary)] focus:outline-none focus:border-blue-500"
+															/>
+														)}
 
-													{field.type === "checklist" &&
-														(() => {
-															const items = Array.isArray(field.value)
-																? (field.value as ChecklistItem[])
-																: [];
-															const completedCount = items.filter(
-																(i) => i.completed,
-															).length;
-															const totalCount = items.length;
-															const progressPercent =
-																totalCount > 0
-																	? Math.round(
-																			(completedCount / totalCount) * 100,
-																		)
-																	: 0;
-															const currentInput =
-																newChecklistItemInputs[field.id] || "";
+														{field.type === "date" && (
+															<input
+																type="date"
+																value={String(field.value ?? "")}
+																onChange={(e) =>
+																	handleUpdateCustomField(field.id, {
+																		value: e.target.value,
+																	})
+																}
+																className="w-full px-3 py-2 text-sm bg-[var(--bg-input)] border border-[var(--border-color)] rounded-xl text-[var(--text-primary)] focus:outline-none focus:border-blue-500"
+															/>
+														)}
 
-															return (
-																<div className="space-y-2.5 bg-[var(--bg-input)] p-3 rounded-xl border border-[var(--border-color)]">
-																	{/* Progress Header */}
-																	<div className="flex items-center justify-between text-xs">
-																		<span className="font-semibold text-[var(--text-secondary)] flex items-center gap-1.5">
-																			<CheckSquare className="w-3.5 h-3.5 text-blue-500" />
-																			<span>進捗状況</span>
-																		</span>
-																		<span className="font-bold text-[11px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-500 border border-blue-500/20">
-																			{t("taskModal.checklistCompleted", {
-																				completed: completedCount,
-																				total: totalCount,
-																			}) ||
-																				`${completedCount}/${totalCount} 完了`}{" "}
-																			({progressPercent}%)
-																		</span>
-																	</div>
+														{field.type === "checkbox" && (
+															<label className="flex items-center space-x-2 p-2 bg-[var(--bg-input)] border border-[var(--border-color)] rounded-xl cursor-pointer">
+																<input
+																	type="checkbox"
+																	checked={!!field.value}
+																	onChange={(e) =>
+																		handleUpdateCustomField(field.id, {
+																			value: e.target.checked,
+																		})
+																	}
+																	className="w-4 h-4 text-blue-600 rounded border border-[var(--border-color)] focus:ring-blue-500"
+																/>
+																<span className="text-xs text-[var(--text-primary)] font-medium">
+																	{field.name}
+																</span>
+															</label>
+														)}
 
-																	{/* Progress Bar */}
-																	<div className="w-full h-1.5 bg-[var(--bg-surface)] rounded-full overflow-hidden border border-[var(--border-color)]">
-																		<div
-																			className="h-full bg-emerald-500 transition-all duration-300 rounded-full"
-																			style={{ width: `${progressPercent}%` }}
-																		/>
-																	</div>
-
-																	{/* Items List */}
-																	<div className="space-y-1.5 pt-1">
-																		{items.length > 0 ? (
-																			items.map((item) => (
-																				<div
-																					key={item.id}
-																					className="flex items-center justify-between gap-2 p-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-color)] hover:border-[var(--border-color)]/80 transition-all"
-																				>
-																					<label className="flex items-center space-x-2 flex-1 min-w-0 cursor-pointer">
-																						<input
-																							type="checkbox"
-																							checked={item.completed}
-																							onChange={() =>
-																								handleToggleChecklistItem(
-																									field.id,
-																									item.id,
-																								)
-																							}
-																							className="w-4 h-4 text-blue-600 rounded border border-[var(--border-color)] focus:ring-blue-500 shrink-0 cursor-pointer"
-																						/>
-																						<input
-																							type="text"
-																							value={item.text}
-																							onChange={(e) =>
-																								handleUpdateChecklistItemText(
-																									field.id,
-																									item.id,
-																									e.target.value,
-																								)
-																							}
-																							className={`text-xs bg-transparent border-b border-transparent hover:border-[var(--border-color)] focus:border-blue-500 focus:bg-[var(--bg-input)] px-1 py-0.5 rounded outline-none flex-1 truncate transition-all ${
-																								item.completed
-																									? "line-through text-[var(--text-muted)] opacity-70"
-																									: "text-[var(--text-primary)] font-medium"
-																							}`}
-																						/>
-																					</label>
-																					<button
-																						type="button"
-																						onClick={() =>
-																							handleRemoveChecklistItem(
-																								field.id,
-																								item.id,
-																							)
-																						}
-																						className="p-1 text-[var(--text-muted)] hover:text-rose-500 rounded transition-colors shrink-0 opacity-80 hover:opacity-100"
-																						title="項目を削除"
-																					>
-																						<X className="w-3.5 h-3.5" />
-																					</button>
-																				</div>
-																			))
-																		) : (
-																			<p className="text-xs text-[var(--text-muted)] italic py-1 text-center">
-																				{t("taskModal.noChecklistItems") ||
-																					"チェック項目がありません"}
-																			</p>
-																		)}
-																	</div>
-
-																	{/* Add Item Input Form */}
-																	<div className="flex items-center gap-1.5 pt-1">
+														{field.type === "link" &&
+															(() => {
+																const safeUrl = getSafeUrl(field.value);
+																return (
+																	<div className="relative flex items-center">
 																		<input
 																			type="text"
-																			value={currentInput}
+																			value={String(field.value ?? "")}
 																			onChange={(e) =>
-																				setNewChecklistItemInputs((prev) => ({
-																					...prev,
-																					[field.id]: e.target.value,
-																				}))
+																				handleUpdateCustomField(field.id, {
+																					value: e.target.value,
+																				})
 																			}
-																			onKeyDown={(e) => {
-																				if (e.key === "Enter") {
-																					e.preventDefault();
+																			placeholder="https://... または vscode://..."
+																			className="w-full px-3 py-2 text-sm bg-[var(--bg-input)] border border-[var(--border-color)] rounded-xl text-[var(--text-primary)] focus:outline-none focus:border-blue-500 pr-9"
+																		/>
+																		{safeUrl && (
+																			<a
+																				href={safeUrl}
+																				target="_blank"
+																				rel="noopener noreferrer"
+																				className="absolute right-3 text-[var(--text-secondary)] hover:text-blue-500 transition-colors"
+																				title="リンクを開く"
+																			>
+																				<ExternalLink className="w-4 h-4" />
+																			</a>
+																		)}
+																	</div>
+																);
+															})()}
+
+														{field.type === "checklist" &&
+															(() => {
+																const items = Array.isArray(field.value)
+																	? (field.value as ChecklistItem[])
+																	: [];
+																const completedCount = items.filter(
+																	(i) => i.completed,
+																).length;
+																const totalCount = items.length;
+																const progressPercent =
+																	totalCount > 0
+																		? Math.round(
+																				(completedCount / totalCount) * 100,
+																			)
+																		: 0;
+																const currentInput =
+																	newChecklistItemInputs[field.id] || "";
+
+																return (
+																	<div className="space-y-2.5 bg-[var(--bg-input)] p-3 rounded-xl border border-[var(--border-color)]">
+																		{/* Progress Header */}
+																		<div className="flex items-center justify-between text-xs">
+																			<span className="font-semibold text-[var(--text-secondary)] flex items-center gap-1.5">
+																				<CheckSquare className="w-3.5 h-3.5 text-blue-500" />
+																				<span>進捗状況</span>
+																			</span>
+																			<span className="font-bold text-[11px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-500 border border-blue-500/20">
+																				{t("taskModal.checklistCompleted", {
+																					completed: completedCount,
+																					total: totalCount,
+																				}) ||
+																					`${completedCount}/${totalCount} 完了`}{" "}
+																				({progressPercent}%)
+																			</span>
+																		</div>
+
+																		{/* Progress Bar */}
+																		<div className="w-full h-1.5 bg-[var(--bg-surface)] rounded-full overflow-hidden border border-[var(--border-color)]">
+																			<div
+																				className="h-full bg-emerald-500 transition-all duration-300 rounded-full"
+																				style={{ width: `${progressPercent}%` }}
+																			/>
+																		</div>
+
+																		{/* Items List */}
+																		<div className="space-y-1.5 pt-1">
+																			{items.length > 0 ? (
+																				items.map((item) => (
+																					<div
+																						key={item.id}
+																						className="flex items-center justify-between gap-2 p-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-color)] hover:border-[var(--border-color)]/80 transition-all"
+																					>
+																						<label className="flex items-center space-x-2 flex-1 min-w-0 cursor-pointer">
+																							<input
+																								type="checkbox"
+																								checked={item.completed}
+																								onChange={() =>
+																									handleToggleChecklistItem(
+																										field.id,
+																										item.id,
+																									)
+																								}
+																								className="w-4 h-4 text-blue-600 rounded border border-[var(--border-color)] focus:ring-blue-500 shrink-0 cursor-pointer"
+																							/>
+																							<input
+																								type="text"
+																								value={item.text}
+																								onChange={(e) =>
+																									handleUpdateChecklistItemText(
+																										field.id,
+																										item.id,
+																										e.target.value,
+																									)
+																								}
+																								className={`text-xs bg-transparent border-b border-transparent hover:border-[var(--border-color)] focus:border-blue-500 focus:bg-[var(--bg-input)] px-1 py-0.5 rounded outline-none flex-1 truncate transition-all ${
+																									item.completed
+																										? "line-through text-[var(--text-muted)] opacity-70"
+																										: "text-[var(--text-primary)] font-medium"
+																								}`}
+																							/>
+																						</label>
+																						<button
+																							type="button"
+																							onClick={() =>
+																								handleRemoveChecklistItem(
+																									field.id,
+																									item.id,
+																								)
+																							}
+																							className="p-1 text-[var(--text-muted)] hover:text-rose-500 rounded transition-colors shrink-0 opacity-80 hover:opacity-100"
+																							title="項目を削除"
+																						>
+																							<X className="w-3.5 h-3.5" />
+																						</button>
+																					</div>
+																				))
+																			) : (
+																				<p className="text-xs text-[var(--text-muted)] italic py-1 text-center">
+																					{t("taskModal.noChecklistItems") ||
+																						"チェック項目がありません"}
+																				</p>
+																			)}
+																		</div>
+
+																		{/* Add Item Input Form */}
+																		<div className="flex items-center gap-1.5 pt-1">
+																			<input
+																				type="text"
+																				value={currentInput}
+																				onChange={(e) =>
+																					setNewChecklistItemInputs((prev) => ({
+																						...prev,
+																						[field.id]: e.target.value,
+																					}))
+																				}
+																				onKeyDown={(e) => {
+																					if (e.key === "Enter") {
+																						e.preventDefault();
+																						handleAddChecklistItem(
+																							field.id,
+																							currentInput,
+																						);
+																					}
+																				}}
+																				placeholder={
+																					t("taskModal.itemPlaceholder") ||
+																					"新しい項目を入力..."
+																				}
+																				className="flex-1 px-2.5 py-1 text-xs bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-lg text-[var(--text-primary)] focus:outline-none focus:border-blue-500"
+																			/>
+																			<button
+																				type="button"
+																				onClick={() =>
 																					handleAddChecklistItem(
 																						field.id,
 																						currentInput,
-																					);
+																					)
 																				}
-																			}}
-																			placeholder={
-																				t("taskModal.itemPlaceholder") ||
-																				"新しい項目を入力..."
-																			}
-																			className="flex-1 px-2.5 py-1 text-xs bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-lg text-[var(--text-primary)] focus:outline-none focus:border-blue-500"
-																		/>
-																		<button
-																			type="button"
-																			onClick={() =>
-																				handleAddChecklistItem(
-																					field.id,
-																					currentInput,
-																				)
-																			}
-																			disabled={!currentInput.trim()}
-																			className="px-3 py-1 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-500 rounded-lg shrink-0 disabled:opacity-50 transition-colors"
-																		>
-																			{t("taskModal.addChecklistItem") ||
-																				"追加"}
-																		</button>
+																				disabled={!currentInput.trim()}
+																				className="px-3 py-1 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-500 rounded-lg shrink-0 disabled:opacity-50 transition-colors"
+																			>
+																				{t("taskModal.addChecklistItem") ||
+																					"追加"}
+																			</button>
+																		</div>
 																	</div>
-																</div>
-															);
-														})()}
-												</div>
-											</div>
-										);
-									})}
-								</div>
+																);
+															})()}
+													</SortableCustomFieldRow>
+												);
+											})}
+										</div>
+									</SortableContext>
+								</DndContext>
 							) : (
 								<p className="text-xs text-[var(--text-muted)] text-center py-2 font-medium">
 									カスタムフィールドがありません。「＋

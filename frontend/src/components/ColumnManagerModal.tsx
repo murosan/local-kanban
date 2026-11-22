@@ -1,6 +1,30 @@
-import { Maximize2, Minimize2, Plus, Sliders, Trash2, X } from "lucide-react";
+import {
+	closestCenter,
+	DndContext,
+	type DragEndEvent,
+	KeyboardSensor,
+	PointerSensor,
+	useSensor,
+	useSensors,
+} from "@dnd-kit/core";
+import {
+	SortableContext,
+	sortableKeyboardCoordinates,
+	useSortable,
+	verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import {
+	GripVertical,
+	Maximize2,
+	Minimize2,
+	Plus,
+	Sliders,
+	Trash2,
+	X,
+} from "lucide-react";
 import type React from "react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { COLOR_PRESETS } from "../constants/colors";
 import { useI18n } from "../i18n/useI18n";
 import type {
@@ -9,6 +33,265 @@ import type {
 	CustomFieldOption,
 	CustomFieldType,
 } from "../types/task";
+import {
+	ensureUniqueIds,
+	moveItemByOffset,
+	prefersReducedMotion,
+	reorderItemsById,
+} from "../utils/reorder";
+
+interface SortableCustomFieldCardProps {
+	field: CustomFieldDef;
+	index: number;
+	total: number;
+	onMove: (index: number, direction: "up" | "down") => void;
+	onNameChange: (index: number, newName: string) => void;
+	onDelete: (index: number) => void;
+	onOptionValueChange: (
+		fieldIndex: number,
+		optionId: string,
+		newValue: string,
+	) => void;
+	onOptionColorChange: (
+		fieldIndex: number,
+		optionId: string,
+		color: string,
+	) => void;
+	onRemoveOption: (fieldIndex: number, optionId: string) => void;
+	onAddOption: (fieldIndex: number, optionValue: string) => void;
+	registerItemRef: (fieldId: string, el: HTMLDivElement | null) => void;
+	registerMoveButtonRef: (
+		fieldId: string,
+		dir: "up" | "down",
+		el: HTMLButtonElement | null,
+	) => void;
+}
+
+const SortableCustomFieldCard: React.FC<SortableCustomFieldCardProps> = ({
+	field,
+	index,
+	total,
+	onMove,
+	onNameChange,
+	onDelete,
+	onOptionValueChange,
+	onOptionColorChange,
+	onRemoveOption,
+	onAddOption,
+	registerItemRef,
+	registerMoveButtonRef,
+}) => {
+	const { t } = useI18n();
+	const {
+		attributes,
+		listeners,
+		setNodeRef,
+		transform,
+		transition,
+		isDragging,
+	} = useSortable({ id: field.id });
+
+	const style: React.CSSProperties = {
+		transform: CSS.Transform.toString(transform),
+		transition: prefersReducedMotion() ? undefined : transition,
+	};
+
+	const setCombinedRef = useCallback(
+		(node: HTMLDivElement | null) => {
+			setNodeRef(node);
+			registerItemRef(field.id, node);
+		},
+		[field.id, registerItemRef, setNodeRef],
+	);
+
+	const fieldDisplayName = field.name || field.id;
+
+	return (
+		<div
+			ref={setCombinedRef}
+			style={style}
+			onFocusCapture={(e) => {
+				if (
+					e.target instanceof HTMLElement &&
+					e.target.matches(":focus-visible")
+				) {
+					e.currentTarget.scrollIntoView({
+						block: "nearest",
+						inline: "nearest",
+					});
+				}
+			}}
+			className={`sortable-field-item p-4 rounded-xl border border-[var(--border-color)] bg-[var(--bg-card)] space-y-3 shadow-xs transition-shadow ${
+				isDragging ? "relative z-50 ring-2 ring-blue-500 shadow-xl" : ""
+			}`}
+		>
+			{/* Header with Drag Handle, Field Name Input, Type, Reorder Buttons, and Delete Button */}
+			<div className="flex items-center justify-between border-b border-[var(--border-color)]/60 pb-2.5 gap-2">
+				<div className="flex items-center space-x-2 flex-1 min-w-0">
+					<button
+						type="button"
+						{...attributes}
+						{...listeners}
+						className="drag-handle cursor-grab active:cursor-grabbing text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface)] focus-visible:bg-[var(--bg-surface)] p-1 rounded transition-colors shrink-0"
+						aria-label={t("configModal.dragToReorderField", {
+							name: fieldDisplayName,
+						})}
+						title={t("configModal.dragToReorderField", {
+							name: fieldDisplayName,
+						})}
+					>
+						<GripVertical className="w-4 h-4" />
+					</button>
+					<input
+						type="text"
+						value={field.name}
+						onChange={(e) => onNameChange(index, e.target.value)}
+						className="bg-[var(--bg-input)] border border-[var(--border-color)] focus:border-blue-500 rounded px-2.5 py-1 text-sm font-bold text-[var(--text-primary)] flex-1 min-w-0 outline-none"
+						placeholder="フィールド名"
+					/>
+					<span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-500 border border-blue-500/20 shrink-0">
+						{field.type}
+					</span>
+				</div>
+
+				<div className="flex items-center space-x-1.5 shrink-0">
+					<button
+						ref={(el) => registerMoveButtonRef(field.id, "up", el)}
+						type="button"
+						disabled={index === 0}
+						onClick={() => onMove(index, "up")}
+						className="p-1.5 text-xs bg-[var(--bg-surface)] hover:opacity-80 disabled:opacity-30 border border-[var(--border-color)] rounded text-[var(--text-primary)] transition-colors cursor-pointer disabled:cursor-not-allowed"
+						aria-label={t("configModal.moveFieldUp", {
+							name: fieldDisplayName,
+						})}
+						title={t("configModal.moveFieldUp", {
+							name: fieldDisplayName,
+						})}
+					>
+						▲
+					</button>
+					<button
+						ref={(el) => registerMoveButtonRef(field.id, "down", el)}
+						type="button"
+						disabled={index === total - 1}
+						onClick={() => onMove(index, "down")}
+						className="p-1.5 text-xs bg-[var(--bg-surface)] hover:opacity-80 disabled:opacity-30 border border-[var(--border-color)] rounded text-[var(--text-primary)] transition-colors cursor-pointer disabled:cursor-not-allowed"
+						aria-label={t("configModal.moveFieldDown", {
+							name: fieldDisplayName,
+						})}
+						title={t("configModal.moveFieldDown", {
+							name: fieldDisplayName,
+						})}
+					>
+						▼
+					</button>
+
+					{/* Explicit FIELD DELETE Button */}
+					<button
+						type="button"
+						onClick={() => onDelete(index)}
+						className="flex items-center space-x-1.5 px-3 py-1.5 text-xs bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 rounded-lg text-rose-500 font-bold transition-all shadow-2xs cursor-pointer shrink-0"
+						title="このカスタムフィールド自体を削除"
+					>
+						<Trash2 className="w-3.5 h-3.5" />
+						<span>フィールド自体を削除</span>
+					</button>
+				</div>
+			</div>
+
+			{/* Options List with color picker and individual Option Delete buttons for dropdown and checklist */}
+			{(field.type === "dropdown" || field.type === "checklist") && (
+				<div className="space-y-2 pt-1">
+					<span className="text-[11px] font-semibold text-[var(--text-secondary)] block">
+						{field.type === "checklist"
+							? t("configModal.checklistItems") ||
+								"チェックリスト初期項目（色付け設定）:"
+							: "プルダウン選択肢（色付け設定）:"}
+					</span>
+					<div className="space-y-2">
+						{field.options && field.options.length > 0 ? (
+							field.options.map((opt) => (
+								<div
+									key={opt.id}
+									className="flex items-center justify-between p-2 rounded-lg border border-[var(--border-color)] bg-[var(--bg-surface)] gap-2"
+								>
+									<div className="flex items-center space-x-2 flex-1 min-w-0">
+										<span
+											className="w-3.5 h-3.5 rounded-full border border-white/20 shrink-0"
+											style={{
+												backgroundColor: opt.color || "#3b82f6",
+											}}
+										/>
+										<input
+											type="text"
+											value={opt.value}
+											onChange={(e) =>
+												onOptionValueChange(index, opt.id, e.target.value)
+											}
+											className="bg-[var(--bg-input)] border border-[var(--border-color)] focus:border-blue-500 rounded px-2 py-0.5 text-xs font-medium text-[var(--text-primary)] flex-1 min-w-0 outline-none"
+										/>
+									</div>
+
+									{/* Color Swatch Picker */}
+									<div className="flex items-center space-x-1 justify-end shrink-0">
+										{COLOR_PRESETS.map((colorHex) => (
+											<button
+												key={colorHex}
+												type="button"
+												onClick={() =>
+													onOptionColorChange(index, opt.id, colorHex)
+												}
+												className={`w-4 h-4 rounded-full transition-transform ${
+													opt.color === colorHex
+														? "scale-125 ring-2 ring-white/60 shadow-md"
+														: "hover:scale-110 opacity-70 hover:opacity-100"
+												}`}
+												style={{ backgroundColor: colorHex }}
+											/>
+										))}
+										<button
+											type="button"
+											onClick={() => onRemoveOption(index, opt.id)}
+											className="p-1 text-xs text-rose-500 hover:text-rose-600 font-bold ml-1"
+											title="項目を削除"
+										>
+											×
+										</button>
+									</div>
+								</div>
+							))
+						) : (
+							<span className="text-xs text-[var(--text-muted)] italic">
+								{field.type === "checklist"
+									? "初期項目が設定されていません"
+									: "選択肢が設定されていません"}
+							</span>
+						)}
+					</div>
+
+					<button
+						type="button"
+						onClick={() => {
+							const val = prompt(
+								field.type === "checklist"
+									? "新しいチェック項目の名前を入力してください:"
+									: "新しい選択肢の名前を入力してください:",
+							);
+							if (val?.trim()) {
+								onAddOption(index, val.trim());
+							}
+						}}
+						className="mt-2 px-3 py-1 bg-[var(--bg-surface)] hover:opacity-80 border border-[var(--border-color)] text-[var(--text-primary)] rounded-lg text-xs font-medium transition-colors"
+					>
+						{field.type === "checklist"
+							? "＋ 初期項目を追加"
+							: "＋ 選択肢を追加"}
+					</button>
+				</div>
+			)}
+		</div>
+	);
+};
 
 interface ColumnManagerModalProps {
 	isOpen: boolean;
@@ -42,7 +325,7 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
 		})),
 	);
 	const [localCustomFields, setLocalCustomFields] = useState<CustomFieldDef[]>(
-		() => customFields || [],
+		() => ensureUniqueIds(customFields || [], "cf"),
 	);
 
 	const [newColumnName, setNewColumnName] = useState("");
@@ -54,10 +337,85 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
 
 	const [isSaving, setIsSaving] = useState(false);
 	const [isMaximized, setIsMaximized] = useState(false);
+	const [liveAnnouncement, setLiveAnnouncement] = useState("");
+
+	const isDraggingFieldRef = useRef(false);
+	const announceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const fieldItemRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+	const fieldMoveButtonRefs = useRef<
+		Map<
+			string,
+			{ up?: HTMLButtonElement | null; down?: HTMLButtonElement | null }
+		>
+	>(new Map());
+
+	const fieldSensors = useSensors(
+		useSensor(PointerSensor, {
+			activationConstraint: {
+				distance: 5,
+			},
+		}),
+		useSensor(KeyboardSensor, {
+			coordinateGetter: sortableKeyboardCoordinates,
+		}),
+	);
+
+	const registerFieldItemRef = useCallback(
+		(fieldId: string, el: HTMLDivElement | null) => {
+			if (el) {
+				fieldItemRefs.current.set(fieldId, el);
+			} else {
+				fieldItemRefs.current.delete(fieldId);
+			}
+		},
+		[],
+	);
+
+	const registerFieldMoveButtonRef = useCallback(
+		(fieldId: string, dir: "up" | "down", el: HTMLButtonElement | null) => {
+			const entry = fieldMoveButtonRefs.current.get(fieldId) || {};
+			entry[dir] = el;
+			if (!entry.up && !entry.down) {
+				fieldMoveButtonRefs.current.delete(fieldId);
+			} else {
+				fieldMoveButtonRefs.current.set(fieldId, entry);
+			}
+		},
+		[],
+	);
+
+	const announceFieldMove = useCallback(
+		(fieldName: string, newIndex: number, total: number) => {
+			if (announceTimerRef.current) {
+				clearTimeout(announceTimerRef.current);
+			}
+			setLiveAnnouncement("");
+			announceTimerRef.current = setTimeout(() => {
+				setLiveAnnouncement(
+					t("configModal.fieldMovedAnnouncement", {
+						name: fieldName,
+						position: newIndex + 1,
+						total,
+					}),
+				);
+			}, 150);
+		},
+		[t],
+	);
+
+	useEffect(() => {
+		return () => {
+			document.documentElement.classList.remove("is-dragging-item");
+			if (announceTimerRef.current) {
+				clearTimeout(announceTimerRef.current);
+			}
+		};
+	}, []);
 
 	useEffect(() => {
 		const handleKeyDown = (e: KeyboardEvent) => {
 			if (e.key === "Escape") {
+				if (isDraggingFieldRef.current) return;
 				onClose();
 			}
 		};
@@ -74,6 +432,77 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
 	if (!isOpen) return null;
 
 	// --- Custom Field Actions ---
+	const handleMoveCustomField = (index: number, direction: "up" | "down") => {
+		const delta = direction === "up" ? -1 : 1;
+		const reordered = moveItemByOffset(localCustomFields, index, delta);
+		if (reordered === localCustomFields) return;
+
+		const targetIndex = index + delta;
+		const movedField = reordered[targetIndex];
+		setLocalCustomFields(reordered);
+		announceFieldMove(
+			movedField.name || movedField.id,
+			targetIndex,
+			reordered.length,
+		);
+
+		requestAnimationFrame(() => {
+			const itemEl = fieldItemRefs.current.get(movedField.id);
+			itemEl?.scrollIntoView({ block: "nearest", inline: "nearest" });
+			const buttons = fieldMoveButtonRefs.current.get(movedField.id);
+			const hitStart = direction === "up" && targetIndex === 0;
+			const hitEnd =
+				direction === "down" && targetIndex === reordered.length - 1;
+			const targetBtn =
+				hitStart && buttons?.down
+					? buttons.down
+					: hitEnd && buttons?.up
+						? buttons.up
+						: buttons?.[direction];
+			targetBtn?.focus({ preventScroll: true });
+		});
+	};
+
+	const handleFieldDragStart = () => {
+		isDraggingFieldRef.current = true;
+		document.documentElement.classList.add("is-dragging-item");
+	};
+
+	const handleFieldDragEnd = (event: DragEndEvent) => {
+		isDraggingFieldRef.current = false;
+		document.documentElement.classList.remove("is-dragging-item");
+
+		const { active, over } = event;
+		if (!over || active.id === over.id) return;
+
+		const reordered = reorderItemsById(
+			localCustomFields,
+			String(active.id),
+			String(over.id),
+		);
+		if (reordered === localCustomFields) return;
+
+		const newIndex = reordered.findIndex((f) => f.id === String(active.id));
+		setLocalCustomFields(reordered);
+		if (newIndex !== -1) {
+			const movedField = reordered[newIndex];
+			announceFieldMove(
+				movedField.name || movedField.id,
+				newIndex,
+				reordered.length,
+			);
+			requestAnimationFrame(() => {
+				fieldItemRefs.current
+					.get(movedField.id)
+					?.scrollIntoView({ block: "nearest", inline: "nearest" });
+			});
+		}
+	};
+
+	const handleFieldDragCancel = () => {
+		isDraggingFieldRef.current = false;
+		document.documentElement.classList.remove("is-dragging-item");
+	};
 	const handleAddCustomField = () => {
 		if (!newFieldName.trim()) return;
 
@@ -497,148 +926,41 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
 							</div>
 
 							{/* List of custom fields */}
-							<div className="space-y-3">
-								{localCustomFields.map((field, idx) => (
-									<div
-										key={field.id}
-										className="p-4 rounded-xl border border-[var(--border-color)] bg-[var(--bg-card)] space-y-3 shadow-xs"
-									>
-										{/* Header with Field Name Input, Type, and Explicit FIELD DELETE Button */}
-										<div className="flex items-center justify-between border-b border-[var(--border-color)]/60 pb-2.5 gap-2">
-											<div className="flex items-center space-x-2 flex-1">
-												<input
-													type="text"
-													value={field.name}
-													onChange={(e) =>
-														handleFieldNameChange(idx, e.target.value)
-													}
-													className="bg-[var(--bg-input)] border border-[var(--border-color)] focus:border-blue-500 rounded px-2.5 py-1 text-sm font-bold text-[var(--text-primary)] flex-1 outline-none"
-													placeholder="フィールド名"
-												/>
-												<span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-500 border border-blue-500/20 shrink-0">
-													{field.type}
-												</span>
-											</div>
-
-											{/* Explicit FIELD DELETE Button */}
-											<button
-												type="button"
-												onClick={() => handleDeleteCustomField(idx)}
-												className="flex items-center space-x-1.5 px-3 py-1.5 text-xs bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 rounded-lg text-rose-500 font-bold transition-all shadow-2xs cursor-pointer shrink-0"
-												title="このカスタムフィールド自体を削除"
-											>
-												<Trash2 className="w-3.5 h-3.5" />
-												<span>フィールド自体を削除</span>
-											</button>
-										</div>
-
-										{/* Options List with color picker and individual Option Delete buttons for dropdown and checklist */}
-										{(field.type === "dropdown" ||
-											field.type === "checklist") && (
-											<div className="space-y-2 pt-1">
-												<span className="text-[11px] font-semibold text-[var(--text-secondary)] block">
-													{field.type === "checklist"
-														? t("configModal.checklistItems") ||
-															"チェックリスト初期項目（色付け設定）:"
-														: "プルダウン選択肢（色付け設定）:"}
-												</span>
-												<div className="space-y-2">
-													{field.options && field.options.length > 0 ? (
-														field.options.map((opt) => (
-															<div
-																key={opt.id}
-																className="flex items-center justify-between p-2 rounded-lg border border-[var(--border-color)] bg-[var(--bg-surface)] gap-2"
-															>
-																<div className="flex items-center space-x-2 flex-1">
-																	<span
-																		className="w-3.5 h-3.5 rounded-full border border-white/20 shrink-0"
-																		style={{
-																			backgroundColor: opt.color || "#3b82f6",
-																		}}
-																	/>
-																	<input
-																		type="text"
-																		value={opt.value}
-																		onChange={(e) =>
-																			handleOptionValueChange(
-																				idx,
-																				opt.id,
-																				e.target.value,
-																			)
-																		}
-																		className="bg-[var(--bg-input)] border border-[var(--border-color)] focus:border-blue-500 rounded px-2 py-0.5 text-xs font-medium text-[var(--text-primary)] flex-1 outline-none"
-																	/>
-																</div>
-
-																{/* Color Swatch Picker */}
-																<div className="flex items-center space-x-1 justify-end">
-																	{COLOR_PRESETS.map((colorHex) => (
-																		<button
-																			key={colorHex}
-																			type="button"
-																			onClick={() =>
-																				handleOptionColorChange(
-																					idx,
-																					opt.id,
-																					colorHex,
-																				)
-																			}
-																			className={`w-4 h-4 rounded-full transition-transform ${
-																				opt.color === colorHex
-																					? "scale-125 ring-2 ring-white/60 shadow-md"
-																					: "hover:scale-110 opacity-70 hover:opacity-100"
-																			}`}
-																			style={{ backgroundColor: colorHex }}
-																		/>
-																	))}
-																	<button
-																		type="button"
-																		onClick={() =>
-																			handleRemoveOptionFromCustomField(
-																				idx,
-																				opt.id,
-																			)
-																		}
-																		className="p-1 text-xs text-rose-500 hover:text-rose-600 font-bold ml-1"
-																		title="項目を削除"
-																	>
-																		×
-																	</button>
-																</div>
-															</div>
-														))
-													) : (
-														<span className="text-xs text-[var(--text-muted)] italic">
-															{field.type === "checklist"
-																? "初期項目が設定されていません"
-																: "選択肢が設定されていません"}
-														</span>
-													)}
-												</div>
-
-												<button
-													type="button"
-													onClick={() => {
-														const val = prompt(
-															field.type === "checklist"
-																? "新しいチェック項目の名前を入力してください:"
-																: "新しい選択肢の名前を入力してください:",
-														);
-														if (val?.trim()) {
-															handleAddOptionToField(idx, val.trim());
-														}
-													}}
-													className="mt-2 px-3 py-1 bg-[var(--bg-surface)] hover:opacity-80 border border-[var(--border-color)] text-[var(--text-primary)] rounded-lg text-xs font-medium transition-colors"
-												>
-													{field.type === "checklist"
-														? "＋ 初期項目を追加"
-														: "＋ 選択肢を追加"}
-												</button>
-											</div>
-										)}
-									</div>
-								))}
+							<div className="sr-only" aria-live="polite" aria-atomic="true">
+								{liveAnnouncement}
 							</div>
+							<DndContext
+								sensors={fieldSensors}
+								collisionDetection={closestCenter}
+								onDragStart={handleFieldDragStart}
+								onDragEnd={handleFieldDragEnd}
+								onDragCancel={handleFieldDragCancel}
+							>
+								<SortableContext
+									items={localCustomFields.map((f) => f.id)}
+									strategy={verticalListSortingStrategy}
+								>
+									<div className="space-y-3">
+										{localCustomFields.map((field, idx) => (
+											<SortableCustomFieldCard
+												key={field.id}
+												field={field}
+												index={idx}
+												total={localCustomFields.length}
+												onMove={handleMoveCustomField}
+												onNameChange={handleFieldNameChange}
+												onDelete={handleDeleteCustomField}
+												onOptionValueChange={handleOptionValueChange}
+												onOptionColorChange={handleOptionColorChange}
+												onRemoveOption={handleRemoveOptionFromCustomField}
+												onAddOption={handleAddOptionToField}
+												registerItemRef={registerFieldItemRef}
+												registerMoveButtonRef={registerFieldMoveButtonRef}
+											/>
+										))}
+									</div>
+								</SortableContext>
+							</DndContext>
 
 							{/* Create Custom Field Form */}
 							<div className="bg-[var(--bg-surface)] p-4 rounded-xl border border-[var(--border-color)]/80 space-y-3">
