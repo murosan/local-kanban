@@ -2,6 +2,8 @@
 @config "../tailwind.config.js";
 
 :root {
+	color-scheme: dark;
+	accent-color: var(--accent-color);
 	--bg-primary: #0b0f19;
 	--bg-surface: #111827;
 	--bg-card: #1f293d;
@@ -16,6 +18,7 @@
 }
 
 [data-theme="midnight"] {
+	color-scheme: dark;
 	--bg-primary: #0a0e1a;
 	--bg-surface: #0f172a;
 	--bg-card: #1e293b;
@@ -30,6 +33,7 @@
 }
 
 [data-theme="nord"] {
+	color-scheme: dark;
 	--bg-primary: #2e3440;
 	--bg-surface: #3b4252;
 	--bg-card: #434c5e;
@@ -44,6 +48,7 @@
 }
 
 [data-theme="dracula"] {
+	color-scheme: dark;
 	--bg-primary: #282a36;
 	--bg-surface: #343746;
 	--bg-card: #44475a;
@@ -58,6 +63,7 @@
 }
 
 [data-theme="monokai"] {
+	color-scheme: dark;
 	--bg-primary: #272822;
 	--bg-surface: #3e3d32;
 	--bg-card: #49483e;
@@ -72,6 +78,7 @@
 }
 
 [data-theme="cyberpunk"] {
+	color-scheme: dark;
 	--bg-primary: #120024;
 	--bg-surface: #1a0033;
 	--bg-card: #2a004f;
@@ -86,6 +93,7 @@
 }
 
 [data-theme="forest"] {
+	color-scheme: dark;
 	--bg-primary: #061712;
 	--bg-surface: #0b231c;
 	--bg-card: #14352b;
@@ -101,6 +109,7 @@
 
 [data-theme="light-clean"],
 [data-theme="light"] {
+	color-scheme: light;
 	--bg-primary: #f8fafc;
 	--bg-surface: #ffffff;
 	--bg-card: #ffffff;
@@ -116,6 +125,7 @@
 }
 
 [data-theme="warm-paper"] {
+	color-scheme: light;
 	--bg-primary: #fbf9f5;
 	--bg-surface: #f7f3eb;
 	--bg-card: #f3efe6;
@@ -130,6 +140,7 @@
 }
 
 [data-theme="dim-light"] {
+	color-scheme: light;
 	--bg-primary: #94a3b8;
 	--bg-surface: #cbd5e1;
 	--bg-card: #bfcbda;
@@ -144,6 +155,7 @@
 }
 
 [data-theme="dim-dark"] {
+	color-scheme: dark;
 	--bg-primary: #1f2937;
 	--bg-surface: #374151;
 	--bg-card: #252e3d;
@@ -162,6 +174,10 @@
 		background-color: var(--bg-primary);
 		color: var(--text-primary);
 		@apply font-sans antialiased min-h-screen selection:bg-blue-600 selection:text-white transition-colors duration-300;
+	}
+
+	input[type="date"]::-webkit-calendar-picker-indicator {
+		cursor: pointer;
 	}
 }
 
