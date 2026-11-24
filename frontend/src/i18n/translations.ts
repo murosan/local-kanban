@@ -1,5 +1,26 @@
 export type Language = "ja" | "en";
 
+export const getCustomFieldTypeKey = (type: string): string => {
+	switch (type) {
+		case "dropdown":
+			return "configModal.typeDropdown";
+		case "text":
+			return "configModal.typeText";
+		case "number":
+			return "configModal.typeNumber";
+		case "date":
+			return "configModal.typeDate";
+		case "checkbox":
+			return "configModal.typeCheckbox";
+		case "link":
+			return "configModal.typeLink";
+		case "checklist":
+			return "configModal.typeChecklist";
+		default:
+			return type;
+	}
+};
+
 export const translations = {
 	ja: {
 		// Header
@@ -7,6 +28,7 @@ export const translations = {
 		"header.subtitle": "ローカルファースト カンバン",
 		"header.searchPlaceholder":
 			"カード、タグ、本文、カスタムフィールドを検索...",
+		"header.switchLanguage": "言語を切り替え (日本語 / English)",
 		"header.theme": "テーマ",
 		"header.columns": "設定",
 		"header.sync": "同期",
@@ -24,9 +46,12 @@ export const translations = {
 		// Column & Status Manager Modal
 		"configModal.title": "ボード＆プリセットフィールド設定",
 		"configModal.tabColumns": "カラム設定",
+		"configModal.tabCustomFields": "カスタムフィールド設定",
 		"configModal.tabStatuses": "プリセットカスタムフィールド",
 		"configModal.statusesDesc":
 			"カード作成・編集時に選択して追加できる「事前定義（プリセット）カスタムフィールド」を登録・管理します。",
+		"configModal.configuredCustomFields":
+			"設定済みカスタムフィールド ({count})",
 		"configModal.fieldTitle": "フィールド名",
 		"configModal.typeDropdown": "プルダウン",
 		"configModal.typeText": "テキスト",
@@ -44,6 +69,17 @@ export const translations = {
 		"configModal.checklistItemsPlaceholder":
 			"デフォルト項目（カンマ区切り、例: 要件定義, 実装, テスト）",
 		"configModal.checklistItems": "チェックリスト初期項目（色付け設定）:",
+		"configModal.dropdownOptions": "プルダウン選択肢（色付け設定）:",
+		"configModal.noChecklistItems": "初期項目が設定されていません",
+		"configModal.noDropdownOptions": "選択肢が設定されていません",
+		"configModal.promptNewChecklistItem":
+			"新しいチェック項目の名前を入力してください:",
+		"configModal.promptNewOption": "新しい選択肢の名前を入力してください:",
+		"configModal.addChecklistItemButton": "＋ 初期項目を追加",
+		"configModal.addOptionButton": "＋ 選択肢を追加",
+		"configModal.removeItem": "項目を削除",
+		"configModal.deleteField": "フィールド自体を削除",
+		"configModal.deleteFieldTooltip": "このカスタムフィールド自体を削除",
 		"configModal.deleteFieldConfirm":
 			'カスタムフィールド "{name}" を削除してもよろしいですか？',
 		"configModal.dragToReorderField": '"{name}" をドラッグして並び替え',
@@ -60,6 +96,11 @@ export const translations = {
 			'"{name}" の移動をキャンセルしました',
 		"configModal.columnsDesc":
 			"ボード上の表示順序・名前・表示/非表示を設定します。",
+		"configModal.selectCustomColor": "カスタムカラー選択",
+		"configModal.colorLabel": "カラー:",
+		"configModal.moveColumnUp": "上 / 左へ移動",
+		"configModal.moveColumnDown": "下 / 右へ移動",
+		"configModal.deleteColumn": "カラムを削除",
 		"configModal.addColumn": "新規カラムを追加",
 		"configModal.columnTitlePlaceholder": "カラム名（例: To Do）",
 		"configModal.columnNamePlaceholder": "カラム名（例: To Do）",
@@ -89,13 +130,29 @@ export const translations = {
 		"taskModal.createTitle": "新規カード作成",
 		"taskModal.editTitle": "カードの編集",
 		"taskModal.titleLabel": "タイトル",
+		"taskModal.titlePlaceholder": "例: 認証ロジックを実装する",
+		"taskModal.manualSaveTooltip": "クリックで手動即時保存",
 		"taskModal.customFieldsLabel": "カスタムフィールド",
+		"taskModal.noCustomFields":
+			"カスタムフィールドがありません。「＋ フィールドを追加」から追加できます。",
+		"taskModal.dropdownOptionsLabel": "選択肢（カンマ区切り）",
+		"taskModal.dropdownOptionsPlaceholder": "高, 中, 低",
+		"taskModal.optionNamePlaceholder": "選択肢名",
+		"taskModal.removeOption": "選択肢を削除",
+		"taskModal.addOptionPlaceholder": "＋ 選択肢を追加（例: 高, 中, 低）",
+		"taskModal.editOptions": "選択肢編集",
+		"taskModal.editOptionsTooltip": "選択肢・色を編集",
+		"taskModal.checklistProgress": "進捗状況",
+		"taskModal.dragToReorderSubtask": "ドラッグして並び替え",
+		"taskModal.subtaskActionsTooltip": "サブタスクの削除・解除",
 		"taskModal.fieldEnabled": "ON",
 		"taskModal.fieldDisabled": "非表示 (OFF)",
 		"taskModal.tagsLabel": "タグ",
 		"taskModal.tagsPlaceholder": "タグを入力してEnterまたはカンマで追加...",
 		"taskModal.tagSuggestions": "タグ候補",
 		"taskModal.tagSuggestionsHint": "Enter または クリックで追加",
+		"taskModal.tagAddHint": "+ 追加",
+		"taskModal.removeTag": 'タグ "{tag}" を削除',
 		"taskModal.contentLabel": "カード詳細 (Markdown)",
 		"taskModal.contentPlaceholder": "カードの詳細説明やチェックリストを記入...",
 		"taskModal.actionsMenu": "操作メニュー",
@@ -143,6 +200,13 @@ export const translations = {
 		"taskModal.noLinks": "リンクがありません。下のフォームから追加できます。",
 		"taskModal.linkLabelPlaceholder": "表示テキスト（任意）",
 		"taskModal.linkUrlPlaceholder": "URL（https://..., vscode://...）",
+		"taskModal.dragToReorderLinkItem": '"{name}" をドラッグして並び替え',
+		"taskModal.moveLinkItemUp": '"{name}" を上へ移動',
+		"taskModal.moveLinkItemDown": '"{name}" を下へ移動',
+		"taskModal.linkItemMovedAnnouncement":
+			'"{name}" を {position} / {total} 番目に移動しました',
+		"taskModal.linkItemMoveCancelled": '"{name}" の移動をキャンセルしました',
+		"taskModal.linkItemFallbackName": "リンク {index}",
 		"taskModal.editLink": "リンクを編集",
 		"taskModal.doneEditLink": "完了",
 		"taskModal.removeLink": "リンクを削除",
@@ -216,6 +280,8 @@ export const translations = {
 		"editor.modeEdit": "編集",
 		"editor.modeSplit": "分割表示",
 		"editor.modePreview": "リッチ表示",
+		"editor.undo": "元に戻す (Cmd+Z / Ctrl+Z)",
+		"editor.redo": "やり直す (Cmd+Shift+Z / Ctrl+Y)",
 		"editor.bold": "太字",
 		"editor.italic": "斜体",
 		"editor.strikethrough": "打ち消し線",
@@ -235,6 +301,22 @@ export const translations = {
 		"editor.tocEmpty": "見出し（# 見出し）を追加すると自動で目次が作成されます",
 		"editor.tocToggle": "目次の表示切り替え",
 		"editor.tocClose": "目次を閉じる",
+		"editor.focusEnter": "全画面拡大",
+		"editor.focusExit": "戻す",
+		"editor.focusEnterTooltip": "編集画面いっぱいに拡大 (フォーカス表示)",
+		"editor.focusExitTooltip": "フォーカス表示解除",
+		"editor.copyMarkdown": "Markdownをコピー",
+		"editor.copyCode": "コードをコピー",
+		"editor.placeholder": "Markdown形式で入力...",
+		"editor.anchorLink": "アンカーリンク",
+		"editor.emptyPreview": "プレビューする内容がありません",
+		"editor.sampleBold": "太字",
+		"editor.sampleItalic": "斜体",
+		"editor.sampleStrikethrough": "打ち消し",
+		"editor.sampleLinkText": "リンクテキスト",
+		"editor.sampleCode": "// コードを入力",
+		"editor.sampleTable":
+			"\n| ヘッダー 1 | ヘッダー 2 |\n| --- | --- |\n| セル 1 | セル 2 |\n",
 
 		// Presets Names
 		"preset.dark": "標準ダーク",
@@ -253,19 +335,35 @@ export const translations = {
 		"modal.maximize": "全画面表示",
 		"modal.minimize": "元のサイズに戻す",
 		"common.close": "閉じる",
+		"common.loading": "読み込み中...",
+		"common.loadingApp": "LocalKanban を読み込み中...",
+		"common.untitled": "無題",
+		"common.defaultFieldName": "フィールド",
 		"common.error": "エラーが発生しました",
 		"common.saved": "カードを更新しました",
+		"common.saveFailed": "カードの保存に失敗しました",
 		"common.created": "カードを作成しました",
+		"common.createFailed": "カードの作成に失敗しました",
 		"common.duplicated": "カードを複製しました",
 		"common.duplicateFailed": "カードの複製に失敗しました",
 		"common.deleted": "カードを削除しました",
+		"common.deleteFailed": "カードの削除に失敗しました",
+		"common.subtaskUpdateFailed": "サブタスクの更新に失敗しました",
+		"common.subtaskCreateFailed": "サブタスクの作成に失敗しました",
+		"common.checklistUpdateFailed": "チェック項目の更新に失敗しました",
+		"common.configSaved": "ボード設定を保存しました",
+		"common.configSaveFailed": "ボード設定の保存に失敗しました",
+		"common.themeApplied": "テーマを適用しました",
 		"common.rebuilt": "データベースを再構築しました",
+		"common.rebuiltWithCount": "データベースを再構築しました（{count} 件）",
+		"common.rebuildFailed": "データベースの再構築に失敗しました",
 	},
 	en: {
 		// Header
 		"header.title": "LocalKanban",
 		"header.subtitle": "Local-First Kanban",
 		"header.searchPlaceholder": "Search cards, tags, content, custom fields...",
+		"header.switchLanguage": "Switch Language (日本語 / English)",
 		"header.theme": "Theme",
 		"header.columns": "Config",
 		"header.sync": "Sync",
@@ -283,9 +381,11 @@ export const translations = {
 		// Column & Status Manager Modal
 		"configModal.title": "Board & Field Presets Settings",
 		"configModal.tabColumns": "Columns",
+		"configModal.tabCustomFields": "Custom Fields",
 		"configModal.tabStatuses": "Preset Custom Fields",
 		"configModal.statusesDesc":
 			"Define preset custom fields that cards can select from.",
+		"configModal.configuredCustomFields": "Configured Custom Fields ({count})",
 		"configModal.fieldTitle": "Field Name",
 		"configModal.typeDropdown": "Dropdown",
 		"configModal.typeText": "Text",
@@ -303,6 +403,16 @@ export const translations = {
 		"configModal.checklistItemsPlaceholder":
 			"Default items (comma separated, e.g. Design, Code, Test)",
 		"configModal.checklistItems": "Checklist Default Items (Color settings):",
+		"configModal.dropdownOptions": "Dropdown Options (Color settings):",
+		"configModal.noChecklistItems": "No default items configured",
+		"configModal.noDropdownOptions": "No options configured",
+		"configModal.promptNewChecklistItem": "Enter new checklist item name:",
+		"configModal.promptNewOption": "Enter new option name:",
+		"configModal.addChecklistItemButton": "+ Add Default Item",
+		"configModal.addOptionButton": "+ Add Option",
+		"configModal.removeItem": "Remove item",
+		"configModal.deleteField": "Delete Field",
+		"configModal.deleteFieldTooltip": "Delete this custom field",
 		"configModal.deleteFieldConfirm":
 			'Are you sure you want to delete custom field "{name}"?',
 		"configModal.dragToReorderField": 'Drag to reorder "{name}"',
@@ -318,6 +428,11 @@ export const translations = {
 		"configModal.checklistItemMoveCancelled": 'Cancelled moving "{name}"',
 		"configModal.columnsDesc":
 			"Configure display order, name, and visibility for board columns.",
+		"configModal.selectCustomColor": "Select custom color",
+		"configModal.colorLabel": "Color:",
+		"configModal.moveColumnUp": "Move Up / Left",
+		"configModal.moveColumnDown": "Move Down / Right",
+		"configModal.deleteColumn": "Delete Column",
 		"configModal.addColumn": "Add New Column",
 		"configModal.columnTitlePlaceholder": "Column Name (e.g. To Do)",
 		"configModal.columnNamePlaceholder": "Column Name (e.g. To Do)",
@@ -348,13 +463,29 @@ export const translations = {
 		"taskModal.createTitle": "Create New Card",
 		"taskModal.editTitle": "Edit Card",
 		"taskModal.titleLabel": "Title",
+		"taskModal.titlePlaceholder": "e.g. Implement authentication logic",
+		"taskModal.manualSaveTooltip": "Click to save immediately",
 		"taskModal.customFieldsLabel": "Custom Fields",
+		"taskModal.noCustomFields":
+			'No custom fields yet. Click "+ Add Field" to add one.',
+		"taskModal.dropdownOptionsLabel": "Options (comma separated)",
+		"taskModal.dropdownOptionsPlaceholder": "High, Medium, Low",
+		"taskModal.optionNamePlaceholder": "Option name",
+		"taskModal.removeOption": "Remove option",
+		"taskModal.addOptionPlaceholder": "+ Add option (e.g. High, Medium, Low)",
+		"taskModal.editOptions": "Edit Options",
+		"taskModal.editOptionsTooltip": "Edit options & colors",
+		"taskModal.checklistProgress": "Progress",
+		"taskModal.dragToReorderSubtask": "Drag to reorder",
+		"taskModal.subtaskActionsTooltip": "Delete or unlink subtask",
 		"taskModal.fieldEnabled": "ON",
 		"taskModal.fieldDisabled": "Off (Hidden)",
 		"taskModal.tagsLabel": "Tags",
 		"taskModal.tagsPlaceholder": "Type tag and press Enter or comma...",
 		"taskModal.tagSuggestions": "Suggested Tags",
 		"taskModal.tagSuggestionsHint": "Press Enter or click to add",
+		"taskModal.tagAddHint": "+ add",
+		"taskModal.removeTag": 'Remove tag "{tag}"',
 		"taskModal.contentLabel": "Card Content (Markdown)",
 		"taskModal.contentPlaceholder": "Card description or checklists...",
 		"taskModal.actionsMenu": "Actions menu",
@@ -401,6 +532,13 @@ export const translations = {
 		"taskModal.noLinks": "No links yet. Add one using the form below.",
 		"taskModal.linkLabelPlaceholder": "Display text (optional)",
 		"taskModal.linkUrlPlaceholder": "URL (https://..., vscode://...)",
+		"taskModal.dragToReorderLinkItem": 'Drag to reorder "{name}"',
+		"taskModal.moveLinkItemUp": 'Move "{name}" up',
+		"taskModal.moveLinkItemDown": 'Move "{name}" down',
+		"taskModal.linkItemMovedAnnouncement":
+			'Moved "{name}" to position {position} of {total}',
+		"taskModal.linkItemMoveCancelled": 'Cancelled moving "{name}"',
+		"taskModal.linkItemFallbackName": "Link {index}",
 		"taskModal.editLink": "Edit link",
 		"taskModal.doneEditLink": "Done",
 		"taskModal.removeLink": "Remove link",
@@ -474,6 +612,8 @@ export const translations = {
 		"editor.modeEdit": "Edit",
 		"editor.modeSplit": "Split",
 		"editor.modePreview": "Preview",
+		"editor.undo": "Undo (Cmd+Z / Ctrl+Z)",
+		"editor.redo": "Redo (Cmd+Shift+Z / Ctrl+Y)",
 		"editor.bold": "Bold",
 		"editor.italic": "Italic",
 		"editor.strikethrough": "Strikethrough",
@@ -494,6 +634,22 @@ export const translations = {
 			"Add headings (# Heading) to generate a table of contents",
 		"editor.tocToggle": "Toggle Table of Contents",
 		"editor.tocClose": "Close Table of Contents",
+		"editor.focusEnter": "Focus",
+		"editor.focusExit": "Restore",
+		"editor.focusEnterTooltip": "Expand editor to full screen (Focus mode)",
+		"editor.focusExitTooltip": "Exit focus mode",
+		"editor.copyMarkdown": "Copy Markdown",
+		"editor.copyCode": "Copy code",
+		"editor.placeholder": "Write in Markdown...",
+		"editor.anchorLink": "Anchor link",
+		"editor.emptyPreview": "Nothing to preview",
+		"editor.sampleBold": "bold",
+		"editor.sampleItalic": "italic",
+		"editor.sampleStrikethrough": "strikethrough",
+		"editor.sampleLinkText": "link text",
+		"editor.sampleCode": "// code here",
+		"editor.sampleTable":
+			"\n| Header 1 | Header 2 |\n| --- | --- |\n| Cell 1 | Cell 2 |\n",
 
 		// Presets Names
 		"preset.dark": "Default Dark",
@@ -512,12 +668,27 @@ export const translations = {
 		"modal.maximize": "Maximize",
 		"modal.minimize": "Restore size",
 		"common.close": "Close",
+		"common.loading": "Loading...",
+		"common.loadingApp": "Loading LocalKanban...",
+		"common.untitled": "Untitled",
+		"common.defaultFieldName": "Field",
 		"common.error": "An error occurred",
 		"common.saved": "Task updated successfully",
+		"common.saveFailed": "Failed to save card",
 		"common.created": "Task created successfully",
+		"common.createFailed": "Failed to create card",
 		"common.duplicated": "Card duplicated",
 		"common.duplicateFailed": "Failed to duplicate card",
 		"common.deleted": "Task deleted",
+		"common.deleteFailed": "Failed to delete card",
+		"common.subtaskUpdateFailed": "Failed to update subtask",
+		"common.subtaskCreateFailed": "Failed to create subtask",
+		"common.checklistUpdateFailed": "Failed to update checklist item",
+		"common.configSaved": "Board configuration saved",
+		"common.configSaveFailed": "Failed to save configuration",
+		"common.themeApplied": "Theme applied",
 		"common.rebuilt": "Database rebuilt successfully",
+		"common.rebuiltWithCount": "Database rebuilt successfully ({count} tasks)",
+		"common.rebuildFailed": "Failed to rebuild database cache",
 	},
 };

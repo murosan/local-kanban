@@ -5,7 +5,9 @@ const generateLinkId = (): string =>
 	`link-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
 
 /**
- * Normalizes a custom field value of type "link" into a LinkItem array.
+ * Normalizes a custom field value of type "link" into a LinkItem array
+ * with guaranteed unique, non-empty IDs.
+ * Returns the original array reference if all entries are already normalized.
  * Supports:
  * - LinkItem[] (current format)
  * - string (legacy single-link format)
@@ -26,6 +28,7 @@ export const normalizeLinkItems = (
 	}
 
 	const usedIds = new Set<string>();
+	let changed = false;
 	const result: LinkItem[] = [];
 
 	value.forEach((entry, index) => {
@@ -45,6 +48,7 @@ export const normalizeLinkItems = (
 		};
 
 		if (typeof entry === "string") {
+			changed = true;
 			const trimmed = entry.trim();
 			if (!trimmed) return;
 			result.push({ id: allocateId(), url: trimmed });
@@ -55,24 +59,43 @@ export const normalizeLinkItems = (
 			const record = entry as Record<string, unknown>;
 			const url = typeof record.url === "string" ? record.url : "";
 			const label = typeof record.label === "string" ? record.label : undefined;
-			const id = typeof record.id === "string" ? record.id : undefined;
+			const rawId = typeof record.id === "string" ? record.id : undefined;
 
 			if (!url.trim() && !label?.trim()) {
+				changed = true;
 				return;
 			}
 
-			const item: LinkItem = {
-				id: allocateId(id),
-				url,
-			};
-			if (label?.trim()) {
-				item.label = label;
+			const id = allocateId(rawId);
+			const hasValidLabel = label !== undefined && label.trim().length > 0;
+			const labelNeedsNormalization =
+				("label" in record && !hasValidLabel) ||
+				(record.label !== undefined && typeof record.label !== "string");
+
+			if (
+				id !== record.id ||
+				typeof record.url !== "string" ||
+				labelNeedsNormalization
+			) {
+				changed = true;
+				const item: LinkItem = {
+					id,
+					url,
+				};
+				if (hasValidLabel) {
+					item.label = label;
+				}
+				result.push(item);
+			} else {
+				result.push(entry as LinkItem);
 			}
-			result.push(item);
+			return;
 		}
+
+		changed = true;
 	});
 
-	return result;
+	return changed ? result : (value as LinkItem[]);
 };
 
 /**

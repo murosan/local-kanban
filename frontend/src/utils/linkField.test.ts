@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
+import type { LinkItem } from "../types/task";
 import {
 	createLinkItem,
 	getLinkDisplayText,
 	normalizeLinkItems,
 } from "./linkField";
+import { moveItemByOffset, reorderItemsById } from "./reorder";
 
 describe("normalizeLinkItems", () => {
 	it("returns empty array for nullish, boolean, number, or empty string values", () => {
@@ -52,6 +54,44 @@ describe("normalizeLinkItems", () => {
 			{ id: "l1-2", url: "https://example.com/pr" },
 			{ id: "cf3-2", url: "vscode://file/README.md" },
 		]);
+	});
+
+	it("returns original reference when items are already normalized with unique IDs", () => {
+		const items: LinkItem[] = [
+			{ id: "l1", url: "https://example.com/spec", label: "仕様書" },
+			{ id: "l2", url: "https://example.com/pr" },
+		];
+		expect(normalizeLinkItems(items, "cf4")).toBe(items);
+	});
+});
+
+describe("reordering link items", () => {
+	const items: LinkItem[] = [
+		{ id: "link-1", url: "https://example.com/spec", label: "仕様書" },
+		{ id: "link-2", url: "https://example.com/pr" },
+		{ id: "link-3", url: "vscode://file/README.md", label: "README" },
+	];
+
+	it("reorders link items by drag ID while preserving url and label", () => {
+		const reordered = reorderItemsById(items, "link-1", "link-3");
+		expect(reordered).toEqual([
+			{ id: "link-2", url: "https://example.com/pr" },
+			{ id: "link-3", url: "vscode://file/README.md", label: "README" },
+			{ id: "link-1", url: "https://example.com/spec", label: "仕様書" },
+		]);
+	});
+
+	it("moves link items by offset while preserving url and label", () => {
+		const movedUp = moveItemByOffset(items, 2, -1);
+		expect(movedUp.map((i) => i.id)).toEqual(["link-1", "link-3", "link-2"]);
+		expect(movedUp[1]).toEqual({
+			id: "link-3",
+			url: "vscode://file/README.md",
+			label: "README",
+		});
+
+		const movedDown = moveItemByOffset(items, 0, 1);
+		expect(movedDown.map((i) => i.id)).toEqual(["link-2", "link-1", "link-3"]);
 	});
 });
 

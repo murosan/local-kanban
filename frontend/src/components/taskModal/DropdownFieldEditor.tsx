@@ -71,7 +71,7 @@ export const DropdownFieldEditor: React.FC<DropdownFieldEditorProps> = ({
 			{isEditingOptions && (
 				<div className="bg-[var(--bg-input)] p-3 rounded-xl border border-[var(--border-color)] space-y-2.5 animate-in fade-in duration-150">
 					<div className="flex items-center justify-between text-[11px] font-semibold text-[var(--text-secondary)]">
-						<span>プルダウン選択肢（色付け設定）:</span>
+						<span>{t("configModal.dropdownOptions")}</span>
 					</div>
 
 					<div className="space-y-2">
@@ -95,7 +95,7 @@ export const DropdownFieldEditor: React.FC<DropdownFieldEditorProps> = ({
 												onOptionValueChange(opt.id, e.target.value)
 											}
 											className="bg-[var(--bg-input)] border border-[var(--border-color)] focus:border-blue-500 rounded px-2 py-0.5 text-xs font-medium text-[var(--text-primary)] flex-1 outline-none truncate"
-											placeholder="選択肢名"
+											placeholder={t("taskModal.optionNamePlaceholder")}
 										/>
 									</div>
 
@@ -117,7 +117,7 @@ export const DropdownFieldEditor: React.FC<DropdownFieldEditorProps> = ({
 											type="button"
 											onClick={() => onRemoveOption(opt.id)}
 											className="p-1 text-xs text-rose-500 hover:text-rose-600 font-bold ml-1"
-											title="選択肢を削除"
+											title={t("taskModal.removeOption")}
 										>
 											×
 										</button>
@@ -126,7 +126,7 @@ export const DropdownFieldEditor: React.FC<DropdownFieldEditorProps> = ({
 							))
 						) : (
 							<span className="text-xs text-[var(--text-muted)] italic block">
-								選択肢が設定されていません
+								{t("configModal.noDropdownOptions")}
 							</span>
 						)}
 					</div>
@@ -136,7 +136,7 @@ export const DropdownFieldEditor: React.FC<DropdownFieldEditorProps> = ({
 							type="text"
 							value={addOptionInput}
 							onChange={(e) => setAddOptionInput(e.target.value)}
-							placeholder="＋ 選択肢を追加（例: 高, 中, 低）"
+							placeholder={t("taskModal.addOptionPlaceholder")}
 							className="flex-1 px-2.5 py-1 text-xs bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-lg text-[var(--text-primary)] focus:outline-none focus:border-blue-500"
 							onKeyDown={(e) => {
 								if (e.key === "Enter" && !e.nativeEvent.isComposing) {
@@ -151,7 +151,7 @@ export const DropdownFieldEditor: React.FC<DropdownFieldEditorProps> = ({
 							disabled={!addOptionInput.trim()}
 							className="px-3 py-1 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-500 rounded-lg shrink-0 disabled:opacity-50"
 						>
-							追加
+							{t("configModal.add")}
 						</button>
 					</div>
 				</div>

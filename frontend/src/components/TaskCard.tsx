@@ -46,7 +46,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
 	onDuplicate,
 	isOverlay,
 }) => {
-	const { t } = useI18n();
+	const { language, t } = useI18n();
 	const cardInstanceId = useId();
 	const [isSubtasksExpanded, setIsSubtasksExpanded] = useState(false);
 	const [isDuplicating, setIsDuplicating] = useState(false);
@@ -70,7 +70,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
 			};
 
 	const formattedDate = new Date(task.updated_at).toLocaleDateString(
-		undefined,
+		language === "ja" ? "ja-JP" : "en-US",
 		{
 			month: "short",
 			day: "numeric",
@@ -113,7 +113,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
 
 					return {
 						id: cf.id || cf.field_id || cf.name,
-						name: cf.name || cf.field_id || "Field",
+						name: cf.name || cf.field_id || t("common.defaultFieldName"),
 						type: cf.type,
 						value: cf.value,
 						color: resolvedColor,

@@ -152,17 +152,17 @@ export const ThemeModal: React.FC<ThemeModalProps> = ({
 											<div
 												className="w-5 h-5 rounded-full border border-slate-400/40 shadow-sm"
 												style={{ backgroundColor: preset.primaryBg }}
-												title="Primary BG"
+												title={t("themeModal.background")}
 											/>
 											<div
 												className="w-5 h-5 rounded-full border border-slate-400/40 shadow-sm"
 												style={{ backgroundColor: preset.cardBg }}
-												title="Card BG"
+												title={t("themeModal.cardBackground")}
 											/>
 											<div
 												className="w-5 h-5 rounded-full border border-slate-400/40 shadow-sm"
 												style={{ backgroundColor: preset.accentColor }}
-												title="Accent"
+												title={t("themeModal.accentColor")}
 											/>
 										</div>
 									</button>

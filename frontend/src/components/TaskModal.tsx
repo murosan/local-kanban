@@ -95,7 +95,9 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 	);
 	const [customFieldsState, setCustomFieldsState] = useState<
 		CustomFieldValue[]
-	>(() => parseInitialCustomFields(task, customFields));
+	>(() =>
+		parseInitialCustomFields(task, customFields, t("common.defaultFieldName")),
+	);
 
 	const [saveStatus, setSaveStatus] = useState<SaveStatus>("saved");
 	const [isSaving, setIsSaving] = useState(false);
@@ -135,8 +137,15 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 		initialColumnId,
 		columns,
 		customFields,
+		defaultFieldName: t("common.defaultFieldName"),
 	});
-	latestPropsRef.current = { task, initialColumnId, columns, customFields };
+	latestPropsRef.current = {
+		task,
+		initialColumnId,
+		columns,
+		customFields,
+		defaultFieldName: t("common.defaultFieldName"),
+	};
 
 	const latestStateRef = useRef<FormState>({
 		title,
@@ -305,6 +314,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 			initialColumnId: initColId,
 			columns: currentColumns,
 			customFields: currentPresetFields,
+			defaultFieldName,
 		} = latestPropsRef.current;
 
 		setIsMenuOpen(false);
@@ -322,6 +332,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 		const initialFields = parseInitialCustomFields(
 			currentTask,
 			currentPresetFields,
+			defaultFieldName,
 		);
 
 		setTitle(initialTitle);
@@ -747,7 +758,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 													? "bg-rose-500/10 text-rose-400 border-rose-500/30 hover:bg-rose-500/20"
 													: "bg-amber-500/10 text-amber-400 border-amber-500/30 hover:bg-amber-500/20"
 									}`}
-									title="クリックで手動即時保存"
+									title={t("taskModal.manualSaveTooltip")}
 								>
 									{saveStatus === "saved" && (
 										<>
@@ -831,7 +842,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 								required
 								value={title}
 								onChange={(e) => handleTitleChange(e.target.value)}
-								placeholder="e.g. Implement authentication logic"
+								placeholder={t("taskModal.titlePlaceholder")}
 								className="w-full px-3.5 py-2 text-sm bg-[var(--bg-input)] border border-[var(--border-color)] rounded-xl text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
 							/>
 						</div>
@@ -841,7 +852,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 							<div>
 								<label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-1.5 flex items-center gap-1">
 									<Columns className="w-3.5 h-3.5 text-[var(--text-muted)]" />{" "}
-									カラム
+									{t("createModal.columnLabel")}
 								</label>
 								<div className="relative flex items-center">
 									<select
@@ -952,7 +963,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 								{isLoadingContent && (
 									<span className="flex items-center gap-1 text-xs text-blue-500 font-normal normal-case">
 										<Loader2 className="w-3 h-3 animate-spin" />
-										<span>Loading...</span>
+										<span>{t("common.loading")}</span>
 									</span>
 								)}
 							</label>

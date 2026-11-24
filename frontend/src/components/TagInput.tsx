@@ -270,7 +270,7 @@ export const TagInput: React.FC<TagInputProps> = ({
 									handleRemoveTag(idx);
 								}}
 								className="p-0.5 rounded hover:bg-blue-500/20 text-blue-400/70 hover:text-blue-300 transition-colors cursor-pointer"
-								aria-label={`Remove tag ${tag}`}
+								aria-label={t("taskModal.removeTag", { tag })}
 							>
 								<X className="w-3 h-3" />
 							</button>
@@ -348,7 +348,7 @@ export const TagInput: React.FC<TagInputProps> = ({
 										</span>
 									</span>
 									<span className="text-[10px] text-[var(--text-muted)] group-hover:text-blue-400 font-mono">
-										+ add
+										{t("taskModal.tagAddHint")}
 									</span>
 								</li>
 							);

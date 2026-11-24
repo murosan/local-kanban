@@ -29,6 +29,7 @@ import {
 import type React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { COLOR_PRESETS } from "../constants/colors";
+import { getCustomFieldTypeKey } from "../i18n/translations";
 import { useI18n } from "../i18n/useI18n";
 import type {
 	Column,
@@ -216,7 +217,7 @@ const SortableChecklistPresetOption: React.FC<
 					type="button"
 					onClick={() => onRemoveOption(fieldIndex, option.id)}
 					className="p-1 text-xs text-rose-500 hover:text-rose-600 font-bold ml-1 cursor-pointer"
-					title="項目を削除"
+					title={t("configModal.removeItem")}
 				>
 					×
 				</button>
@@ -562,10 +563,10 @@ const SortableCustomFieldCard: React.FC<SortableCustomFieldCardProps> = ({
 						value={field.name}
 						onChange={(e) => onNameChange(index, e.target.value)}
 						className="bg-[var(--bg-input)] border border-[var(--border-color)] focus:border-blue-500 rounded px-2.5 py-1 text-sm font-bold text-[var(--text-primary)] flex-1 min-w-0 outline-none"
-						placeholder="フィールド名"
+						placeholder={t("configModal.fieldTitle")}
 					/>
 					<span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-500 border border-blue-500/20 shrink-0">
-						{field.type}
+						{t(getCustomFieldTypeKey(field.type))}
 					</span>
 				</div>
 
@@ -606,10 +607,10 @@ const SortableCustomFieldCard: React.FC<SortableCustomFieldCardProps> = ({
 						type="button"
 						onClick={() => onDelete(index)}
 						className="flex items-center space-x-1.5 px-3 py-1.5 text-xs bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 rounded-lg text-rose-500 font-bold transition-all shadow-2xs cursor-pointer shrink-0"
-						title="このカスタムフィールド自体を削除"
+						title={t("configModal.deleteFieldTooltip")}
 					>
 						<Trash2 className="w-3.5 h-3.5" />
-						<span>フィールド自体を削除</span>
+						<span>{t("configModal.deleteField")}</span>
 					</button>
 				</div>
 			</div>
@@ -619,9 +620,8 @@ const SortableCustomFieldCard: React.FC<SortableCustomFieldCardProps> = ({
 				<div className="space-y-2 pt-1">
 					<span className="text-[11px] font-semibold text-[var(--text-secondary)] block">
 						{field.type === "checklist"
-							? t("configModal.checklistItems") ||
-								"チェックリスト初期項目（色付け設定）:"
-							: "プルダウン選択肢（色付け設定）:"}
+							? t("configModal.checklistItems")
+							: t("configModal.dropdownOptions")}
 					</span>
 					<div className="space-y-2">
 						{field.options && field.options.length > 0 ? (
@@ -680,7 +680,7 @@ const SortableCustomFieldCard: React.FC<SortableCustomFieldCardProps> = ({
 												type="button"
 												onClick={() => onRemoveOption(index, opt.id)}
 												className="p-1 text-xs text-rose-500 hover:text-rose-600 font-bold ml-1"
-												title="項目を削除"
+												title={t("configModal.removeItem")}
 											>
 												×
 											</button>
@@ -691,8 +691,8 @@ const SortableCustomFieldCard: React.FC<SortableCustomFieldCardProps> = ({
 						) : (
 							<span className="text-xs text-[var(--text-muted)] italic">
 								{field.type === "checklist"
-									? "初期項目が設定されていません"
-									: "選択肢が設定されていません"}
+									? t("configModal.noChecklistItems")
+									: t("configModal.noDropdownOptions")}
 							</span>
 						)}
 					</div>
@@ -702,8 +702,8 @@ const SortableCustomFieldCard: React.FC<SortableCustomFieldCardProps> = ({
 						onClick={() => {
 							const val = prompt(
 								field.type === "checklist"
-									? "新しいチェック項目の名前を入力してください:"
-									: "新しい選択肢の名前を入力してください:",
+									? t("configModal.promptNewChecklistItem")
+									: t("configModal.promptNewOption"),
 							);
 							if (val?.trim()) {
 								onAddOption(index, val.trim());
@@ -712,8 +712,8 @@ const SortableCustomFieldCard: React.FC<SortableCustomFieldCardProps> = ({
 						className="mt-2 px-3 py-1 bg-[var(--bg-surface)] hover:opacity-80 border border-[var(--border-color)] text-[var(--text-primary)] rounded-lg text-xs font-medium transition-colors"
 					>
 						{field.type === "checklist"
-							? "＋ 初期項目を追加"
-							: "＋ 選択肢を追加"}
+							? t("configModal.addChecklistItemButton")
+							: t("configModal.addOptionButton")}
 					</button>
 				</div>
 			)}
@@ -1227,7 +1227,7 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
 						}`}
 					>
 						<span>🎛️</span>
-						<span>カスタムフィールド設定</span>
+						<span>{t("configModal.tabCustomFields")}</span>
 					</button>
 				</div>
 
@@ -1255,7 +1255,7 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
 											<div className="flex items-center space-x-2 flex-1">
 												<label
 													className="relative flex items-center cursor-pointer group"
-													title="カスタムカラー選択"
+													title={t("configModal.selectCustomColor")}
 												>
 													<span
 														className="w-5 h-5 rounded-full border border-white/20 shrink-0 shadow-xs group-hover:scale-110 transition-transform"
@@ -1287,7 +1287,7 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
 													disabled={idx === 0}
 													onClick={() => handleMoveColumn(idx, "up")}
 													className="p-1.5 text-xs bg-[var(--bg-card)] hover:opacity-80 disabled:opacity-30 border border-[var(--border-color)] rounded text-[var(--text-primary)] transition-colors"
-													title="Move Up / Left"
+													title={t("configModal.moveColumnUp")}
 												>
 													▲
 												</button>
@@ -1296,7 +1296,7 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
 													disabled={idx === localColumns.length - 1}
 													onClick={() => handleMoveColumn(idx, "down")}
 													className="p-1.5 text-xs bg-[var(--bg-card)] hover:opacity-80 disabled:opacity-30 border border-[var(--border-color)] rounded text-[var(--text-primary)] transition-colors"
-													title="Move Down / Right"
+													title={t("configModal.moveColumnDown")}
 												>
 													▼
 												</button>
@@ -1317,7 +1317,7 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
 													type="button"
 													onClick={() => handleDeleteColumn(idx)}
 													className="p-1.5 text-xs bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 rounded text-rose-500 transition-colors"
-													title="Delete Column"
+													title={t("configModal.deleteColumn")}
 												>
 													🗑️
 												</button>
@@ -1327,7 +1327,7 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
 										{/* Extended Color Preset Palette */}
 										<div className="flex items-center space-x-1.5 flex-wrap pt-1 pl-7">
 											<span className="text-[11px] font-medium text-[var(--text-muted)] mr-1">
-												カラー:
+												{t("configModal.colorLabel")}
 											</span>
 											{COLOR_PRESETS.map((colorHex) => (
 												<button
@@ -1384,7 +1384,9 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
 								<h3 className="text-sm font-bold text-[var(--text-primary)] flex items-center space-x-2">
 									<Sliders className="w-4 h-4 text-blue-500" />
 									<span>
-										設定済みカスタムフィールド ({localCustomFields.length})
+										{t("configModal.configuredCustomFields", {
+											count: localCustomFields.length,
+										})}
 									</span>
 								</h3>
 							</div>

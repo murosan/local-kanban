@@ -403,7 +403,7 @@ export const ChecklistFieldEditor: React.FC<ChecklistFieldEditorProps> = ({
 			<div className="flex items-center justify-between text-xs">
 				<span className="font-semibold text-[var(--text-secondary)] flex items-center gap-1.5">
 					<CheckSquare className="w-3.5 h-3.5 text-blue-500" />
-					<span>進捗状況</span>
+					<span>{t("taskModal.checklistProgress")}</span>
 				</span>
 				<span className="font-bold text-[11px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-500 border border-blue-500/20">
 					{t("taskModal.checklistCompleted", {

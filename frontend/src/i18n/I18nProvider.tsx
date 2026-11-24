@@ -1,5 +1,11 @@
 import type React from "react";
-import { type ReactNode, useCallback, useMemo, useState } from "react";
+import {
+	type ReactNode,
+	useCallback,
+	useEffect,
+	useMemo,
+	useState,
+} from "react";
 import { I18nContext } from "./I18nContext";
 import { type Language, translations } from "./translations";
 
@@ -31,6 +37,10 @@ export const I18nProvider: React.FC<{
 			return lang;
 		});
 	}, []);
+
+	useEffect(() => {
+		document.documentElement.lang = language;
+	}, [language]);
 
 	const t = useCallback(
 		(key: string, params?: Record<string, string | number>): string => {

@@ -75,7 +75,7 @@ export const Header: React.FC<HeaderProps> = ({
 						type="button"
 						onClick={toggleLanguage}
 						className="flex items-center space-x-1 px-2 py-1 text-xs font-semibold text-[var(--text-primary)] bg-[var(--bg-card)] hover:opacity-80 border border-[var(--border-color)] rounded-md transition-all active:scale-95"
-						title="Switch Language (日本語 / English)"
+						title={t("header.switchLanguage")}
 					>
 						<Globe className="w-3 h-3 text-blue-500" />
 						<span>{language.toUpperCase()}</span>
