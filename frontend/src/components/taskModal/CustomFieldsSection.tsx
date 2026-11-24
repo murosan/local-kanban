@@ -736,6 +736,7 @@ export const CustomFieldsSection: React.FC<CustomFieldsSectionProps> = ({
 												handleUpdateLinks(field.id, nextItems)
 											}
 											onAnnounceValidationError={announceLinkValidationError}
+											onDragStateChange={onDragStateChange}
 										/>
 									)}
 
