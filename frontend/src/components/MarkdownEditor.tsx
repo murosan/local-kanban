@@ -79,7 +79,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 	canUndo = false,
 	canRedo = false,
 }) => {
-	const { t } = useI18n();
+	const { language, t } = useI18n();
 	const [isFocusMode, setIsFocusMode] = useState(false);
 	const [mode, setMode] = useState<Mode>(() => {
 		try {
@@ -390,13 +390,16 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 
 	const insertTimestamp = () => {
 		const now = new Date();
-		const formatted = now.toLocaleString(undefined, {
-			year: "numeric",
-			month: "2-digit",
-			day: "2-digit",
-			hour: "2-digit",
-			minute: "2-digit",
-		});
+		const formatted = now.toLocaleString(
+			language === "ja" ? "ja-JP" : "en-US",
+			{
+				year: "numeric",
+				month: "2-digit",
+				day: "2-digit",
+				hour: "2-digit",
+				minute: "2-digit",
+			},
+		);
 		insertFormat(`\`${formatted}\` `);
 	};
 
@@ -428,17 +431,17 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 
 			if (e.key === "b" || e.key === "B") {
 				e.preventDefault();
-				insertFormat("**", "**", "太字");
+				insertFormat("**", "**", t("editor.sampleBold"));
 				return;
 			}
 			if (e.key === "i" || e.key === "I") {
 				e.preventDefault();
-				insertFormat("*", "*", "斜体");
+				insertFormat("*", "*", t("editor.sampleItalic"));
 				return;
 			}
 			if (e.key === "k" || e.key === "K") {
 				e.preventDefault();
-				insertFormat("[", "](https://example.com)", "リンクテキスト");
+				insertFormat("[", "](https://example.com)", t("editor.sampleLinkText"));
 				return;
 			}
 		}
@@ -744,7 +747,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 										onClick={onUndo}
 										disabled={!canUndo}
 										className="p-1.5 text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--border-color)]/40 rounded-lg transition-colors disabled:opacity-30 disabled:pointer-events-none"
-										title="元に戻す (Cmd+Z / Ctrl+Z)"
+										title={t("editor.undo")}
 									>
 										<Undo className="w-4 h-4" />
 									</button>
@@ -756,7 +759,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 										onClick={onRedo}
 										disabled={!canRedo}
 										className="p-1.5 text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--border-color)]/40 rounded-lg transition-colors disabled:opacity-30 disabled:pointer-events-none"
-										title="やり直す (Cmd+Shift+Z / Ctrl+Y)"
+										title={t("editor.redo")}
 									>
 										<Redo className="w-4 h-4" />
 									</button>
@@ -798,7 +801,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 							<button
 								type="button"
 								onMouseDown={(e) => e.preventDefault()}
-								onClick={() => insertFormat("**", "**", "太字")}
+								onClick={() => insertFormat("**", "**", t("editor.sampleBold"))}
 								className="p-1.5 text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--border-color)]/40 rounded-lg transition-colors"
 								title={t("editor.bold")}
 							>
@@ -807,7 +810,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 							<button
 								type="button"
 								onMouseDown={(e) => e.preventDefault()}
-								onClick={() => insertFormat("*", "*", "斜体")}
+								onClick={() => insertFormat("*", "*", t("editor.sampleItalic"))}
 								className="p-1.5 text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--border-color)]/40 rounded-lg transition-colors"
 								title={t("editor.italic")}
 							>
@@ -816,7 +819,9 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 							<button
 								type="button"
 								onMouseDown={(e) => e.preventDefault()}
-								onClick={() => insertFormat("~~", "~~", "打ち消し")}
+								onClick={() =>
+									insertFormat("~~", "~~", t("editor.sampleStrikethrough"))
+								}
 								className="p-1.5 text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--border-color)]/40 rounded-lg transition-colors"
 								title={t("editor.strikethrough")}
 							>
@@ -868,7 +873,11 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 								type="button"
 								onMouseDown={(e) => e.preventDefault()}
 								onClick={() =>
-									insertFormat("\n```javascript\n", "\n```\n", "// code here")
+									insertFormat(
+										"\n```javascript\n",
+										"\n```\n",
+										t("editor.sampleCode"),
+									)
 								}
 								className="p-1.5 text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--border-color)]/40 rounded-lg transition-colors"
 								title={t("editor.codeBlock")}
@@ -878,11 +887,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 							<button
 								type="button"
 								onMouseDown={(e) => e.preventDefault()}
-								onClick={() =>
-									insertFormat(
-										"\n| ヘッダー 1 | ヘッダー 2 |\n| --- | --- |\n| セル 1 | セル 2 |\n",
-									)
-								}
+								onClick={() => insertFormat(t("editor.sampleTable"))}
 								className="p-1.5 text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--border-color)]/40 rounded-lg transition-colors"
 								title={t("editor.table")}
 							>
@@ -892,7 +897,11 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 								type="button"
 								onMouseDown={(e) => e.preventDefault()}
 								onClick={() =>
-									insertFormat("[", "](https://example.com)", "リンクテキスト")
+									insertFormat(
+										"[",
+										"](https://example.com)",
+										t("editor.sampleLinkText"),
+									)
 								}
 								className="p-1.5 text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--border-color)]/40 rounded-lg transition-colors"
 								title={t("editor.link")}
@@ -963,8 +972,8 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 						}`}
 						title={
 							isFocusMode
-								? "フォーカス表示解除"
-								: "編集画面いっぱいに拡大 (フォーカス表示)"
+								? t("editor.focusExitTooltip")
+								: t("editor.focusEnterTooltip")
 						}
 					>
 						{isFocusMode ? (
@@ -973,7 +982,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 							<Maximize2 className="w-3.5 h-3.5" />
 						)}
 						<span className="hidden sm:inline">
-							{isFocusMode ? "戻す" : "全画面拡大"}
+							{isFocusMode ? t("editor.focusExit") : t("editor.focusEnter")}
 						</span>
 					</button>
 
@@ -983,7 +992,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 						onMouseDown={(e) => e.preventDefault()}
 						onClick={handleCopy}
 						className="p-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] rounded-lg transition-colors"
-						title="Markdownをコピー"
+						title={t("editor.copyMarkdown")}
 					>
 						{copied ? (
 							<Check className="w-4 h-4 text-emerald-400" />
@@ -1013,7 +1022,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 							onKeyDown={handleKeyDown}
 							onSelect={syncActiveHeadingFromCursor}
 							onClick={syncActiveHeadingFromCursor}
-							placeholder={placeholder || "Markdown形式で入力..."}
+							placeholder={placeholder || t("editor.placeholder")}
 							className="w-full flex-1 h-full p-4 pb-48 sm:pb-64 bg-[var(--bg-input)] text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none font-mono text-sm leading-relaxed resize-none overflow-y-auto"
 						/>
 					</div>
@@ -1104,7 +1113,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 																}
 															}}
 															className="opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity ml-2 text-blue-400 text-xs font-mono select-none inline-block no-underline"
-															title="アンカーリンク"
+															title={t("editor.anchorLink")}
 														>
 															#
 														</a>
@@ -1269,7 +1278,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 																onClick={() => {
 																	void copyTextToClipboard(codeString);
 																}}
-																title="コードをコピー"
+																title={t("editor.copyCode")}
 															>
 																<Copy />
 															</button>
@@ -1297,7 +1306,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 						) : (
 							<div className="flex flex-col items-center justify-center h-full text-[var(--text-muted)] text-xs py-8">
 								<Eye className="w-6 h-6 mb-2 opacity-40" />
-								<p>プレビューする内容がありません</p>
+								<p>{t("editor.emptyPreview")}</p>
 							</div>
 						)}
 					</div>

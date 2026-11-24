@@ -1,5 +1,6 @@
 import type React from "react";
 import { useEffect } from "react";
+import { useI18n } from "../i18n/useI18n";
 
 export type ToastType = "success" | "error" | "info";
 
@@ -28,6 +29,7 @@ const ToastItem: React.FC<{
 	toast: ToastMessage;
 	onDismiss: (id: string) => void;
 }> = ({ toast, onDismiss }) => {
+	const { t } = useI18n();
 	useEffect(() => {
 		const timer = setTimeout(() => {
 			onDismiss(toast.id);
@@ -99,7 +101,7 @@ const ToastItem: React.FC<{
 				type="button"
 				onClick={() => onDismiss(toast.id)}
 				className="text-slate-400 hover:text-white p-1 rounded-md transition-colors"
-				aria-label="Close"
+				aria-label={t("common.close")}
 			>
 				<svg
 					className="w-4 h-4"

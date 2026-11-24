@@ -16,6 +16,7 @@ import { Plus, Sliders } from "lucide-react";
 import type React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { COLOR_PRESETS } from "../../constants/colors";
+import { getCustomFieldTypeKey } from "../../i18n/translations";
 import { useI18n } from "../../i18n/useI18n";
 import type {
 	ChecklistItem,
@@ -263,7 +264,9 @@ export const CustomFieldsSection: React.FC<CustomFieldsSectionProps> = ({
 
 	const handleRemoveField = (id: string, name?: string) => {
 		const fieldName =
-			name || fields.find((cf) => cf.id === id)?.name || "Field";
+			name ||
+			fields.find((cf) => cf.id === id)?.name ||
+			t("common.defaultFieldName");
 		if (!confirm(t("taskModal.removeFieldConfirm", { name: fieldName }))) {
 			return;
 		}
@@ -506,7 +509,7 @@ export const CustomFieldsSection: React.FC<CustomFieldsSectionProps> = ({
 											>
 												<span>{preset.name}</span>
 												<span className="text-[10px] uppercase font-mono text-[var(--text-muted)] bg-[var(--bg-surface)] px-1.5 py-0.5 rounded border border-[var(--border-color)]">
-													{preset.type}
+													{t(getCustomFieldTypeKey(preset.type))}
 												</span>
 											</button>
 										))
@@ -529,7 +532,7 @@ export const CustomFieldsSection: React.FC<CustomFieldsSectionProps> = ({
 											type="text"
 											value={newCustomName}
 											onChange={(e) => setNewCustomName(e.target.value)}
-											placeholder="例: 優先度, 期日, 担当者"
+											placeholder={t("configModal.fieldNamePlaceholder")}
 											className="w-full px-3 py-2 text-xs bg-[var(--bg-input)] border border-[var(--border-color)] rounded-xl text-[var(--text-primary)] focus:outline-none focus:border-blue-500"
 										/>
 									</div>
@@ -568,9 +571,8 @@ export const CustomFieldsSection: React.FC<CustomFieldsSectionProps> = ({
 										<div>
 											<label className="block text-[11px] font-semibold text-[var(--text-secondary)] mb-1">
 												{newCustomType === "checklist"
-													? t("configModal.checklistItemsPlaceholder") ||
-														"デフォルト項目（カンマ区切り）"
-													: "選択肢（カンマ区切り）"}
+													? t("configModal.checklistItemsPlaceholder")
+													: t("taskModal.dropdownOptionsLabel")}
 											</label>
 											<input
 												type="text"
@@ -578,9 +580,8 @@ export const CustomFieldsSection: React.FC<CustomFieldsSectionProps> = ({
 												onChange={(e) => setNewOptionsInput(e.target.value)}
 												placeholder={
 													newCustomType === "checklist"
-														? t("configModal.checklistItemsPlaceholder") ||
-															"例: 要件定義, 実装, テスト"
-														: "高, 中, 低"
+														? t("configModal.checklistItemsPlaceholder")
+														: t("taskModal.dropdownOptionsPlaceholder")
 												}
 												className="w-full px-3 py-2 text-xs bg-[var(--bg-input)] border border-[var(--border-color)] rounded-xl text-[var(--text-primary)] focus:outline-none focus:border-blue-500"
 											/>
@@ -803,8 +804,7 @@ export const CustomFieldsSection: React.FC<CustomFieldsSectionProps> = ({
 				</DndContext>
 			) : (
 				<p className="text-xs text-[var(--text-muted)] text-center py-2 font-medium">
-					カスタムフィールドがありません。「＋
-					フィールドを追加」から追加できます。
+					{t("taskModal.noCustomFields")}
 				</p>
 			)}
 		</div>

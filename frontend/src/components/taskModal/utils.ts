@@ -24,6 +24,7 @@ export const resolveFieldOptions = (
 export const parseInitialCustomFields = (
 	taskData: Task | null,
 	presetFields: CustomFieldDef[],
+	defaultFieldName: string = "Field",
 ): CustomFieldValue[] => {
 	if (!taskData?.custom_fields) return [];
 	if (Array.isArray(taskData.custom_fields)) {
@@ -34,7 +35,7 @@ export const parseInitialCustomFields = (
 				return {
 					id: fieldId,
 					field_id: cf.field_id,
-					name: cf.name || cf.field_id || "Field",
+					name: cf.name || cf.field_id || defaultFieldName,
 					type: fieldType,
 					value:
 						fieldType === "link"

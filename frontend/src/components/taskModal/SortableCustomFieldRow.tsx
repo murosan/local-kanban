@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import type React from "react";
 import { useCallback } from "react";
+import { getCustomFieldTypeKey } from "../../i18n/translations";
 import { useI18n } from "../../i18n/useI18n";
 import type { CustomFieldValue } from "../../types/task";
 import { prefersReducedMotion } from "../../utils/reorder";
@@ -112,10 +113,10 @@ export const SortableCustomFieldRow: React.FC<SortableCustomFieldRowProps> = ({
 						value={field.name}
 						onChange={(e) => onUpdateName(field.id, e.target.value)}
 						className="text-xs font-bold text-[var(--text-primary)] bg-transparent border-b border-transparent hover:border-[var(--border-color)] focus:border-blue-500 focus:bg-[var(--bg-input)] px-1.5 py-0.5 rounded-md transition-all outline-none truncate flex-1 max-w-[220px]"
-						placeholder="フィールド名"
+						placeholder={t("configModal.fieldTitle")}
 					/>
 					<span className="text-[10px] uppercase font-mono text-[var(--text-muted)] bg-[var(--bg-input)] px-1.5 py-0.5 rounded border border-[var(--border-color)] shrink-0">
-						{field.type}
+						{t(getCustomFieldTypeKey(field.type))}
 					</span>
 				</div>
 
@@ -164,10 +165,10 @@ export const SortableCustomFieldRow: React.FC<SortableCustomFieldRowProps> = ({
 									? "bg-blue-600/10 text-blue-500 border border-blue-500/30 font-bold"
 									: "text-[var(--text-secondary)] hover:text-blue-500 hover:bg-[var(--bg-input)]"
 							}`}
-							title="選択肢・色を編集"
+							title={t("taskModal.editOptionsTooltip")}
 						>
 							<Settings className="w-3.5 h-3.5" />
-							<span>選択肢編集</span>
+							<span>{t("taskModal.editOptions")}</span>
 						</button>
 					)}
 					<button

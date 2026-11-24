@@ -163,14 +163,11 @@ export const App: React.FC = () => {
 		setIsRebuilding(true);
 		try {
 			const res = await rebuildCache();
-			addToast(
-				`${t("common.rebuilt") || "Database rebuilt successfully"} (${res.count} tasks)`,
-				"success",
-			);
+			addToast(t("common.rebuiltWithCount", { count: res.count }), "success");
 			await loadData();
 		} catch (err) {
 			console.error("Error rebuilding database:", err);
-			addToast("Failed to rebuild database cache", "error");
+			addToast(t("common.rebuildFailed"), "error");
 		} finally {
 			setIsRebuilding(false);
 		}
@@ -191,14 +188,14 @@ export const App: React.FC = () => {
 				title: data.title,
 				column_id: data.column_id,
 			});
-			addToast(t("common.created") || "Task created successfully", "success");
+			addToast(t("common.created"), "success");
 			await loadData();
 			setIsCreateModalOpen(false);
 			setSelectedTask(createdTask);
 			setIsTaskModalOpen(true);
 		} catch (err) {
 			console.error("Error creating task:", err);
-			addToast("Failed to create task", "error");
+			addToast(t("common.createFailed"), "error");
 			throw err;
 		}
 	};
@@ -217,28 +214,25 @@ export const App: React.FC = () => {
 			if (taskData.id) {
 				await updateTask(taskData.id, taskData);
 				if (!options?.silent) {
-					addToast(t("common.saved") || "Task updated successfully", "success");
+					addToast(t("common.saved"), "success");
 				}
 			} else {
 				await createTask({
-					title: taskData.title || "Untitled",
+					title: taskData.title || t("common.untitled"),
 					column_id: taskData.column_id || defaultColumnId,
 					tags: taskData.tags,
 					custom_fields: taskData.custom_fields,
 					content: taskData.content,
 				});
 				if (!options?.silent) {
-					addToast(
-						t("common.created") || "Task created successfully",
-						"success",
-					);
+					addToast(t("common.created"), "success");
 				}
 			}
 			await loadData();
 		} catch (err) {
 			console.error("Error saving task:", err);
 			if (!options?.silent) {
-				addToast("Failed to save task", "error");
+				addToast(t("common.saveFailed"), "error");
 			}
 			throw err;
 		}
@@ -276,7 +270,7 @@ export const App: React.FC = () => {
 			await loadData();
 		} catch (err) {
 			console.error("Failed to toggle subtask:", err);
-			addToast("Failed to update subtask", "error");
+			addToast(t("common.subtaskUpdateFailed"), "error");
 		}
 	};
 
@@ -287,11 +281,11 @@ export const App: React.FC = () => {
 				title,
 				column_id: "",
 			});
-			addToast(t("common.created") || "Subtask created", "success");
+			addToast(t("common.created"), "success");
 			await loadData();
 		} catch (err) {
 			console.error("Failed to create subtask:", err);
-			addToast("Failed to create subtask", "error");
+			addToast(t("common.subtaskCreateFailed"), "error");
 		}
 	};
 
@@ -330,7 +324,7 @@ export const App: React.FC = () => {
 			await loadData();
 		} catch (err) {
 			console.error("Failed to toggle checklist item:", err);
-			addToast("Failed to update checklist item", "error");
+			addToast(t("common.checklistUpdateFailed"), "error");
 			await loadData();
 		}
 	};
@@ -367,11 +361,11 @@ export const App: React.FC = () => {
 	const handleDeleteTask = async (id: string) => {
 		try {
 			await deleteTask(id);
-			addToast(t("common.deleted") || "Task deleted", "info");
+			addToast(t("common.deleted"), "info");
 			await loadData();
 		} catch (err) {
 			console.error("Error deleting task:", err);
-			addToast("Failed to delete task", "error");
+			addToast(t("common.deleteFailed"), "error");
 		}
 	};
 
@@ -408,11 +402,11 @@ export const App: React.FC = () => {
 			};
 			const saved = await saveBoardConfig(updatedConfig);
 			setConfig(saved);
-			addToast("Board configuration saved", "success");
+			addToast(t("common.configSaved"), "success");
 			await loadData();
 		} catch (err) {
 			console.error("Failed to save board config:", err);
-			addToast("Failed to save configuration", "error");
+			addToast(t("common.configSaveFailed"), "error");
 		}
 	};
 
@@ -424,7 +418,7 @@ export const App: React.FC = () => {
 		try {
 			const saved = await saveBoardConfig(updatedConfig);
 			setConfig(saved);
-			addToast("Theme applied", "success");
+			addToast(t("common.themeApplied"), "success");
 		} catch (err) {
 			console.error("Failed to save theme to config:", err);
 		}
@@ -436,7 +430,7 @@ export const App: React.FC = () => {
 				<div className="flex flex-col items-center space-y-3">
 					<div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
 					<p className="text-sm font-medium text-slate-400">
-						Loading LocalKanban...
+						{t("common.loadingApp")}
 					</p>
 				</div>
 			</div>

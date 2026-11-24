@@ -2,6 +2,7 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { CheckSquare, GripVertical, Square, Trash2 } from "lucide-react";
 import type React from "react";
+import { useI18n } from "../../i18n/useI18n";
 import type { Column, Task } from "../../types/task";
 
 interface SortableSubtaskItemProps {
@@ -19,6 +20,7 @@ export const SortableSubtaskItem: React.FC<SortableSubtaskItemProps> = ({
 	onOpen,
 	onDelete,
 }) => {
+	const { t } = useI18n();
 	const {
 		attributes,
 		listeners,
@@ -52,7 +54,7 @@ export const SortableSubtaskItem: React.FC<SortableSubtaskItemProps> = ({
 					{...attributes}
 					{...listeners}
 					className="cursor-grab active:cursor-grabbing text-[var(--text-muted)] hover:text-[var(--text-primary)] p-0.5 rounded transition-colors shrink-0"
-					title="ドラッグして並び替え"
+					title={t("taskModal.dragToReorderSubtask")}
 				>
 					<GripVertical className="w-3.5 h-3.5" />
 				</button>
@@ -100,7 +102,7 @@ export const SortableSubtaskItem: React.FC<SortableSubtaskItemProps> = ({
 					type="button"
 					onClick={() => onDelete(sub)}
 					className="p-1 rounded-lg text-[var(--text-muted)] hover:text-rose-500 hover:bg-rose-500/10 opacity-0 group-hover/subtask:opacity-100 transition-all cursor-pointer"
-					title="サブタスクの削除・解除"
+					title={t("taskModal.subtaskActionsTooltip")}
 				>
 					<Trash2 className="w-3.5 h-3.5" />
 				</button>
