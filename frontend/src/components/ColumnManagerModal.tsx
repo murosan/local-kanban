@@ -33,10 +33,15 @@ import { getCustomFieldTypeKey } from "../i18n/translations";
 import { useI18n } from "../i18n/useI18n";
 import type {
 	Column,
+	ColumnSettings,
 	CustomFieldDef,
 	CustomFieldOption,
 	CustomFieldType,
 } from "../types/task";
+import {
+	isColumnCardDetailsVisible,
+	isColumnCardsVisible,
+} from "../utils/columnSettings";
 import {
 	ensureUniqueIds,
 	moveItemByOffset,
@@ -1127,6 +1132,26 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
 		setLocalColumns(updated);
 	};
 
+	const handleColumnSettingChange = (
+		index: number,
+		patch: Partial<ColumnSettings>,
+	) => {
+		setLocalColumns((prev) =>
+			prev.map((col, idx) =>
+				idx === index
+					? {
+							...col,
+							settings: {
+								show_cards: isColumnCardsVisible(col),
+								show_card_details: isColumnCardDetailsVisible(col),
+								...patch,
+							},
+						}
+					: col,
+			),
+		);
+	};
+
 	const handleAddColumn = () => {
 		if (!newColumnName.trim()) return;
 		const name = newColumnName.trim();
@@ -1343,6 +1368,42 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
 													title={colorHex}
 												/>
 											))}
+										</div>
+
+										{/* Per-Column Display Settings */}
+										<div className="flex items-center flex-wrap gap-x-4 gap-y-1.5 pt-1 pl-7">
+											<span className="text-[11px] font-medium text-[var(--text-muted)]">
+												{t("configModal.displaySettingsLabel")}
+											</span>
+											<label className="inline-flex items-center gap-1.5 text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer select-none">
+												<input
+													type="checkbox"
+													checked={isColumnCardsVisible(col)}
+													onChange={(e) =>
+														handleColumnSettingChange(idx, {
+															show_cards: e.target.checked,
+														})
+													}
+													className="w-3.5 h-3.5 rounded accent-[var(--accent-color)] cursor-pointer"
+												/>
+												<span>{t("column.showCards")}</span>
+											</label>
+											<label
+												className="inline-flex items-center gap-1.5 text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer select-none"
+												title={t("column.showCardDetailsTooltip")}
+											>
+												<input
+													type="checkbox"
+													checked={isColumnCardDetailsVisible(col)}
+													onChange={(e) =>
+														handleColumnSettingChange(idx, {
+															show_card_details: e.target.checked,
+														})
+													}
+													className="w-3.5 h-3.5 rounded accent-[var(--accent-color)] cursor-pointer"
+												/>
+												<span>{t("column.showCardDetails")}</span>
+											</label>
 										</div>
 									</div>
 								))}

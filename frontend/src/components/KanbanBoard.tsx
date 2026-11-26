@@ -19,7 +19,13 @@ import type React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "../i18n/useI18n";
 import { updateTask } from "../services/api";
-import type { Column, CustomFieldDef, Task } from "../types/task";
+import type {
+	Column,
+	ColumnSettings,
+	CustomFieldDef,
+	Task,
+} from "../types/task";
+import { isColumnCardDetailsVisible } from "../utils/columnSettings";
 import {
 	findColumnIdForItem,
 	getTaskPosition,
@@ -35,6 +41,7 @@ interface KanbanBoardProps {
 	columns: Column[];
 	customFields?: CustomFieldDef[];
 	tasks: Task[];
+	hasActiveSearch?: boolean;
 	onTaskUpdated: () => void;
 	onTasksChange?: (tasks: Task[]) => void;
 	onCardClick: (task: Task) => void;
@@ -47,6 +54,10 @@ interface KanbanBoardProps {
 	) => Promise<void> | void;
 	onDuplicateTask?: (task: Task) => Promise<Task | null>;
 	onAddCard?: (columnId: string) => void;
+	onUpdateColumnSettings?: (
+		columnId: string,
+		patch: Partial<ColumnSettings>,
+	) => Promise<void> | void;
 }
 
 const MEASURING_CONFIG = {
@@ -59,6 +70,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
 	columns,
 	customFields = [],
 	tasks,
+	hasActiveSearch = false,
 	onTaskUpdated,
 	onTasksChange,
 	onCardClick,
@@ -67,6 +79,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
 	onChecklistItemToggle,
 	onDuplicateTask,
 	onAddCard,
+	onUpdateColumnSettings,
 }) => {
 	const { t } = useI18n();
 	const [activeTask, setActiveTask] = useState<Task | null>(null);
@@ -312,6 +325,14 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
 	const currentActiveColumnId = activeTask
 		? displayTasks.find((task) => task.id === activeTask.id)?.column_id
 		: undefined;
+	const activeOverlayColumn = activeTask
+		? columns.find(
+				(col) => col.id === (currentActiveColumnId ?? activeTask.column_id),
+			)
+		: undefined;
+	const showOverlayCardDetails = activeOverlayColumn
+		? isColumnCardDetailsVisible(activeOverlayColumn)
+		: true;
 
 	if (visibleColumns.length === 0) {
 		return (
@@ -348,12 +369,14 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
 							customFields={customFields}
 							tasks={colTasks}
 							isDropTarget={isDropTarget}
+							hasActiveSearch={hasActiveSearch}
 							onCardClick={onCardClick}
 							onSubtaskToggle={onSubtaskToggle}
 							onAddSubtask={onAddSubtask}
 							onChecklistItemToggle={onChecklistItemToggle}
 							onDuplicateTask={onDuplicateTask}
 							onAddCard={onAddCard}
+							onUpdateColumnSettings={onUpdateColumnSettings}
 						/>
 					);
 				})}
@@ -362,7 +385,12 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
 			<DragOverlay dropAnimation={null}>
 				{activeTask ? (
 					<div className="rotate-2 scale-105 shadow-2xl">
-						<TaskCard task={activeTask} customFields={customFields} isOverlay />
+						<TaskCard
+							task={activeTask}
+							customFields={customFields}
+							showCardDetails={showOverlayCardDetails}
+							isOverlay
+						/>
 					</div>
 				) : null}
 			</DragOverlay>

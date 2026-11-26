@@ -26,12 +26,14 @@ import {
 import type {
 	BoardConfig,
 	Column,
+	ColumnSettings,
 	CustomFieldDef,
 	SubtaskRef,
 	Task,
 	ThemeConfig,
 } from "./types/task";
 import { normalizeChecklistItems } from "./utils/checklistField";
+import { updateColumnSettings } from "./utils/columnSettings";
 import { buildDuplicateTitle } from "./utils/duplicateTitle";
 
 export const App: React.FC = () => {
@@ -54,6 +56,9 @@ export const App: React.FC = () => {
 	const [selectedTask, setSelectedTask] = useState<Task | null>(null);
 	const [initialColumnId, setInitialColumnId] = useState<string>("");
 	const loadRequestIdRef = useRef(0);
+	const configRef = useRef<BoardConfig | null>(null);
+	const lastCommittedConfigRef = useRef<BoardConfig | null>(null);
+	const configSaveVersionRef = useRef(0);
 
 	const addToast = useCallback((message: string, type: ToastType = "info") => {
 		const id = Date.now().toString() + Math.random().toString(36).slice(2, 6);
@@ -102,6 +107,9 @@ export const App: React.FC = () => {
 			if (requestId !== loadRequestIdRef.current) {
 				return;
 			}
+			configSaveVersionRef.current++;
+			configRef.current = cfg;
+			lastCommittedConfigRef.current = cfg;
 			setConfig(cfg);
 			setTasks(taskList || []);
 			setAvailableTags(tagList || []);
@@ -400,8 +408,13 @@ export const App: React.FC = () => {
 				custom_fields: newCustomFields,
 				language,
 			};
+			const saveVersion = ++configSaveVersionRef.current;
 			const saved = await saveBoardConfig(updatedConfig);
-			setConfig(saved);
+			if (saveVersion === configSaveVersionRef.current) {
+				configRef.current = saved;
+				lastCommittedConfigRef.current = saved;
+				setConfig(saved);
+			}
 			addToast(t("common.configSaved"), "success");
 			await loadData();
 		} catch (err) {
@@ -410,14 +423,56 @@ export const App: React.FC = () => {
 		}
 	};
 
+	const handleUpdateColumnSettings = useCallback(
+		async (columnId: string, patch: Partial<ColumnSettings>) => {
+			const currentConfig = configRef.current;
+			if (!currentConfig) return;
+
+			const updatedConfig: BoardConfig = {
+				...currentConfig,
+				columns: updateColumnSettings(currentConfig.columns, columnId, patch),
+				language,
+			};
+
+			const saveVersion = ++configSaveVersionRef.current;
+			configRef.current = updatedConfig;
+			setConfig(updatedConfig);
+
+			try {
+				const saved = await saveBoardConfig(updatedConfig);
+				if (saveVersion === configSaveVersionRef.current) {
+					configRef.current = saved;
+					lastCommittedConfigRef.current = saved;
+					setConfig(saved);
+				}
+			} catch (err) {
+				console.error("Failed to save column settings:", err);
+				if (saveVersion === configSaveVersionRef.current) {
+					const fallbackConfig =
+						lastCommittedConfigRef.current ?? currentConfig;
+					configRef.current = fallbackConfig;
+					setConfig(fallbackConfig);
+					addToast(t("common.configSaveFailed"), "error");
+				}
+			}
+		},
+		[language, addToast, t],
+	);
+
 	const handleSelectTheme = async (theme: ThemeConfig) => {
 		applyTheme(theme);
 		localStorage.setItem("localkanban_theme", JSON.stringify(theme));
-		if (!config) return;
-		const updatedConfig: BoardConfig = { ...config, theme, language };
+		const currentConfig = configRef.current;
+		if (!currentConfig) return;
+		const updatedConfig: BoardConfig = { ...currentConfig, theme, language };
+		const saveVersion = ++configSaveVersionRef.current;
 		try {
 			const saved = await saveBoardConfig(updatedConfig);
-			setConfig(saved);
+			if (saveVersion === configSaveVersionRef.current) {
+				configRef.current = saved;
+				lastCommittedConfigRef.current = saved;
+				setConfig(saved);
+			}
 			addToast(t("common.themeApplied"), "success");
 		} catch (err) {
 			console.error("Failed to save theme to config:", err);
@@ -460,6 +515,7 @@ export const App: React.FC = () => {
 					columns={config.columns}
 					customFields={config.custom_fields}
 					tasks={tasks}
+					hasActiveSearch={debouncedQuery.trim().length > 0}
 					onTaskUpdated={loadData}
 					onTasksChange={setTasks}
 					onCardClick={handleCardClick}
@@ -468,6 +524,7 @@ export const App: React.FC = () => {
 					onChecklistItemToggle={handleChecklistItemToggle}
 					onDuplicateTask={(task) => handleDuplicateTask(task)}
 					onAddCard={(columnId) => handleOpenNewCardModal(columnId)}
+					onUpdateColumnSettings={handleUpdateColumnSettings}
 				/>
 			</main>
 

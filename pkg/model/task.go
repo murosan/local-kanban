@@ -384,10 +384,30 @@ type BoardConfig struct {
 	Language     string           `json:"language,omitempty"`
 }
 
+type ColumnSettings struct {
+	ShowCards       *bool `json:"show_cards,omitempty"        yaml:"show_cards,omitempty"`
+	ShowCardDetails *bool `json:"show_card_details,omitempty" yaml:"show_card_details,omitempty"`
+}
+
+func (s *ColumnSettings) IsShowCards() bool {
+	if s == nil || s.ShowCards == nil {
+		return true
+	}
+	return *s.ShowCards
+}
+
+func (s *ColumnSettings) IsShowCardDetails() bool {
+	if s == nil || s.ShowCardDetails == nil {
+		return true
+	}
+	return *s.ShowCardDetails
+}
+
 type Column struct {
-	ID      string `json:"id"              yaml:"id"`
-	Name    string `json:"name"            yaml:"name"`
-	Visible bool   `json:"visible"         yaml:"visible"`
-	Color   string `json:"color,omitempty" yaml:"color,omitempty"`
-	Order   int    `json:"order,omitempty" yaml:"order,omitempty"`
+	ID       string          `json:"id"                 yaml:"id"`
+	Name     string          `json:"name"               yaml:"name"`
+	Visible  bool            `json:"visible"            yaml:"visible"`
+	Color    string          `json:"color,omitempty"    yaml:"color,omitempty"`
+	Order    int             `json:"order,omitempty"    yaml:"order,omitempty"`
+	Settings *ColumnSettings `json:"settings,omitempty" yaml:"settings,omitempty"`
 }

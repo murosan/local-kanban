@@ -15,6 +15,7 @@ export interface ActionMenuItem {
 	onSelect: () => void | Promise<void>;
 	disabled?: boolean;
 	variant?: "default" | "danger";
+	checked?: boolean;
 }
 
 export interface ActionMenuGroup {
@@ -28,6 +29,7 @@ interface ActionMenuProps {
 	groups: ActionMenuGroup[];
 	onOpenChange?: (isOpen: boolean) => void;
 	triggerClassName?: string;
+	popoverClassName?: string;
 }
 
 type FocusOptionsWithVisible = FocusOptions & { focusVisible?: boolean };
@@ -71,6 +73,7 @@ export const ActionMenu: React.FC<ActionMenuProps> = ({
 	groups,
 	onOpenChange,
 	triggerClassName = "",
+	popoverClassName = "",
 }) => {
 	const baseId = useId();
 	const triggerId = `${baseId}-trigger`;
@@ -84,6 +87,20 @@ export const ActionMenu: React.FC<ActionMenuProps> = ({
 	const isOpenRef = useRef(false);
 	const enterOnOpenRef = useRef(false);
 	const pointerTriggerRef = useRef(false);
+	const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+	const clearPendingClose = useCallback(() => {
+		if (closeTimerRef.current !== null) {
+			clearTimeout(closeTimerRef.current);
+			closeTimerRef.current = null;
+		}
+	}, []);
+
+	useEffect(() => {
+		return () => {
+			clearPendingClose();
+		};
+	}, [clearPendingClose]);
 
 	const visibleGroups = groups.filter((group) => group.items.length > 0);
 	const visibleItemCount = visibleGroups.reduce(
@@ -155,6 +172,7 @@ export const ActionMenu: React.FC<ActionMenuProps> = ({
 			restoreFocus: boolean;
 			fromPointer?: boolean;
 		}) => {
+			clearPendingClose();
 			const popover = popoverRef.current;
 			const trigger = triggerRef.current;
 
@@ -174,7 +192,7 @@ export const ActionMenu: React.FC<ActionMenuProps> = ({
 				syncOpenState(false);
 			}
 		},
-		[syncOpenState],
+		[clearPendingClose, syncOpenState],
 	);
 
 	const showMenu = useCallback(() => {
@@ -225,6 +243,7 @@ export const ActionMenu: React.FC<ActionMenuProps> = ({
 					focusElement(triggerRef.current, { focusVisible: false });
 				}
 			} else {
+				clearPendingClose();
 				enterOnOpenRef.current = false;
 			}
 		};
@@ -233,7 +252,7 @@ export const ActionMenu: React.FC<ActionMenuProps> = ({
 		return () => {
 			popover.removeEventListener("toggle", handleToggle);
 		};
-	}, [getEnabledItems, positionFallback, syncOpenState]);
+	}, [clearPendingClose, getEnabledItems, positionFallback, syncOpenState]);
 
 	// Fallback for browsers without native focusgroup:
 	// Set role="menu" / role="menuitem" and install ArrowDown/ArrowUp/Home/End wrap-around navigation.
@@ -422,7 +441,7 @@ export const ActionMenu: React.FC<ActionMenuProps> = ({
 				ref={popoverRef}
 				id={menuId}
 				{...({ popover: "auto" } as Record<string, string>)}
-				className={`action-menu-popover min-w-[10.5rem] bg-[var(--modal-bg)] text-[var(--text-primary)] border border-[var(--border-color)] rounded-xl shadow-xl py-1 ${
+				className={`action-menu-popover min-w-[10.5rem] bg-[var(--modal-bg)] text-[var(--text-primary)] border border-[var(--border-color)] rounded-xl shadow-xl py-1 ${popoverClassName} ${
 					!supportsNativePopover() && isOpen ? "popover-fallback-open" : ""
 				}`}
 			>
@@ -440,41 +459,96 @@ export const ActionMenu: React.FC<ActionMenuProps> = ({
 							{groupIndex > 0 && (
 								<hr className="my-1 border-0 border-t border-[var(--border-color)]" />
 							)}
-							{group.items.map((item) => (
-								<button
-									key={item.id}
-									type="button"
-									disabled={item.disabled}
-									onPointerMove={(event) => {
-										if (
-											!item.disabled &&
-											document.activeElement !== event.currentTarget
-										) {
-											focusElement(event.currentTarget, {
-												focusVisible: false,
-											});
-										}
-									}}
-									onClick={(event) => {
-										const fromPointer = event.detail !== 0;
+							{group.items.map((item) => {
+								const isCheckable = item.checked !== undefined;
+								const scheduleCheckableClose = (fromPointer: boolean) => {
+									clearPendingClose();
+									closeTimerRef.current = setTimeout(() => {
+										closeTimerRef.current = null;
 										hideMenu({ restoreFocus: true, fromPointer });
-										void item.onSelect();
-									}}
-									className={`action-menu-item w-full flex items-center gap-2 px-3.5 py-2 text-xs font-semibold transition-colors text-left cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-blue-500 ${
-										item.variant === "danger"
-											? "text-rose-500 hover:bg-rose-500/10 focus:bg-rose-500/10"
-											: "text-[var(--text-primary)] hover:bg-[var(--bg-input)] focus:bg-[var(--bg-input)]"
-									}`}
-								>
-									<span
-										className="inline-flex items-center justify-center flex-none w-4 h-4"
-										aria-hidden="true"
+									}, 300);
+								};
+								const itemClassName = `action-menu-item w-full flex items-center gap-2 px-3.5 py-2 text-xs font-semibold transition-colors text-left cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-blue-500 ${
+									item.variant === "danger"
+										? "text-rose-500 hover:bg-rose-500/10 focus:bg-rose-500/10"
+										: "text-[var(--text-primary)] hover:bg-[var(--bg-input)] focus:bg-[var(--bg-input)]"
+								}`;
+								const handleItemPointerMove = (
+									event: React.PointerEvent<HTMLButtonElement>,
+								) => {
+									if (
+										!item.disabled &&
+										document.activeElement !== event.currentTarget
+									) {
+										focusElement(event.currentTarget, {
+											focusVisible: false,
+										});
+									}
+								};
+
+								if (isCheckable) {
+									return (
+										<button
+											key={item.id}
+											type="button"
+											role="menuitemcheckbox"
+											aria-checked={item.checked}
+											disabled={item.disabled}
+											onPointerMove={handleItemPointerMove}
+											onKeyDown={(event) => {
+												if (event.key === " ") {
+													event.preventDefault();
+													clearPendingClose();
+													void item.onSelect();
+												} else if (event.key === "Enter") {
+													event.preventDefault();
+													void item.onSelect();
+													scheduleCheckableClose(false);
+												}
+											}}
+											onClick={(event) => {
+												const fromPointer = event.detail !== 0;
+												void item.onSelect();
+												scheduleCheckableClose(fromPointer);
+											}}
+											className={itemClassName}
+										>
+											{item.icon && (
+												<span
+													className="inline-flex items-center justify-center flex-none w-4 h-4"
+													aria-hidden="true"
+												>
+													{item.icon}
+												</span>
+											)}
+											<span className="truncate">{item.label}</span>
+										</button>
+									);
+								}
+
+								return (
+									<button
+										key={item.id}
+										type="button"
+										disabled={item.disabled}
+										onPointerMove={handleItemPointerMove}
+										onClick={(event) => {
+											const fromPointer = event.detail !== 0;
+											hideMenu({ restoreFocus: true, fromPointer });
+											void item.onSelect();
+										}}
+										className={itemClassName}
 									>
-										{item.icon}
-									</span>
-									<span className="truncate">{item.label}</span>
-								</button>
-							))}
+										<span
+											className="inline-flex items-center justify-center flex-none w-4 h-4"
+											aria-hidden="true"
+										>
+											{item.icon}
+										</span>
+										<span className="truncate">{item.label}</span>
+									</button>
+								);
+							})}
 						</Fragment>
 					))}
 				</div>

@@ -42,6 +42,13 @@ export const translations = {
 		"board.moveRight": "右へ移動",
 		"column.addCard": "カードを追加",
 		"column.addCardTooltip": "このカラムにカードを追加",
+		"column.settingsMenu": "カラム表示設定",
+		"column.showCards": "カード一覧を表示",
+		"column.showCardDetails": "カードの詳細を表示",
+		"column.showCardDetailsTooltip":
+			"OFFにするとタイトルのみ表示（本文・タグ・カスタムフィールド・サブタスク・フッターを非表示）",
+		"column.cardsHiddenBadge": "カード一覧を非表示中",
+		"column.showingSearchResults": "検索ヒットのため一時表示中",
 
 		// Column & Status Manager Modal
 		"configModal.title": "ボード＆プリセットフィールド設定",
@@ -98,6 +105,7 @@ export const translations = {
 			"ボード上の表示順序・名前・表示/非表示を設定します。",
 		"configModal.selectCustomColor": "カスタムカラー選択",
 		"configModal.colorLabel": "カラー:",
+		"configModal.displaySettingsLabel": "表示設定:",
 		"configModal.moveColumnUp": "上 / 左へ移動",
 		"configModal.moveColumnDown": "下 / 右へ移動",
 		"configModal.deleteColumn": "カラムを削除",
@@ -377,6 +385,13 @@ export const translations = {
 		"board.moveRight": "Move Right",
 		"column.addCard": "Add Card",
 		"column.addCardTooltip": "Add card to this column",
+		"column.settingsMenu": "Column display settings",
+		"column.showCards": "Show card list",
+		"column.showCardDetails": "Show card details",
+		"column.showCardDetailsTooltip":
+			"When off, shows only the card title (hides summary, tags, custom fields, subtasks, and footer)",
+		"column.cardsHiddenBadge": "Card list hidden",
+		"column.showingSearchResults": "Showing matching search results",
 
 		// Column & Status Manager Modal
 		"configModal.title": "Board & Field Presets Settings",
@@ -430,6 +445,7 @@ export const translations = {
 			"Configure display order, name, and visibility for board columns.",
 		"configModal.selectCustomColor": "Select custom color",
 		"configModal.colorLabel": "Color:",
+		"configModal.displaySettingsLabel": "Display:",
 		"configModal.moveColumnUp": "Move Up / Left",
 		"configModal.moveColumnDown": "Move Down / Right",
 		"configModal.deleteColumn": "Delete Column",

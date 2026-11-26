@@ -100,12 +100,13 @@ func (s *Store) readBoardConfigUnlocked() (*model.BoardConfig, bool, error) {
 	}
 
 	type legacyColumn struct {
-		ID      string `json:"id"`
-		Name    string `json:"name"`
-		Title   string `json:"title"`
-		Visible bool   `json:"visible"`
-		Color   string `json:"color,omitempty"`
-		Order   int    `json:"order,omitempty"`
+		ID       string                `json:"id"`
+		Name     string                `json:"name"`
+		Title    string                `json:"title"`
+		Visible  bool                  `json:"visible"`
+		Color    string                `json:"color,omitempty"`
+		Order    int                   `json:"order,omitempty"`
+		Settings *model.ColumnSettings `json:"settings,omitempty"`
 	}
 
 	type legacyBoardConfig struct {
@@ -131,11 +132,12 @@ func (s *Store) readBoardConfigUnlocked() (*model.BoardConfig, bool, error) {
 			needsMigration = true
 		}
 		columns = append(columns, model.Column{
-			ID:      col.ID,
-			Name:    name,
-			Visible: col.Visible,
-			Color:   col.Color,
-			Order:   col.Order,
+			ID:       col.ID,
+			Name:     name,
+			Visible:  col.Visible,
+			Color:    col.Color,
+			Order:    col.Order,
+			Settings: col.Settings,
 		})
 	}
 

@@ -75,12 +75,18 @@ export interface Task {
 	completed?: boolean;
 }
 
+export interface ColumnSettings {
+	show_cards?: boolean;
+	show_card_details?: boolean;
+}
+
 export interface Column {
 	id: string;
 	name: string;
 	visible?: boolean;
 	color?: string;
 	order?: number;
+	settings?: ColumnSettings;
 }
 
 export interface ThemeConfig {

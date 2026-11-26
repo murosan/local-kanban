@@ -50,7 +50,17 @@ func TestConfigRoutes(t *testing.T) {
 		t.Errorf("expected column name 'Todo', got '%s'", cfg.Columns[0].Name)
 	}
 
-	// 2. PUT /api/config (Save theme, custom columns & custom fields)
+	// 2. PUT /api/config (Save theme, custom columns, column settings & custom fields)
+	falseVal := false
+	trueVal := true
+	cfg.Columns[0].Settings = &model.ColumnSettings{
+		ShowCards:       &falseVal,
+		ShowCardDetails: &trueVal,
+	}
+	cfg.Columns[1].Settings = &model.ColumnSettings{
+		ShowCards:       &trueVal,
+		ShowCardDetails: &falseVal,
+	}
 	updatedCfg := model.BoardConfig{
 		Columns: cfg.Columns,
 		CustomFields: []model.CustomFieldDef{
@@ -97,6 +107,23 @@ func TestConfigRoutes(t *testing.T) {
 	}
 	if len(cfg2.CustomFields) != 1 || cfg2.CustomFields[0].Name != "Priority" {
 		t.Errorf("expected 1 custom field 'Priority', got %+v", cfg2.CustomFields)
+	}
+	if cfg2.Columns[0].Settings == nil || cfg2.Columns[0].Settings.IsShowCards() ||
+		!cfg2.Columns[0].Settings.IsShowCardDetails() {
+		t.Errorf(
+			"expected column 0 settings show_cards=false, show_card_details=true, got %+v",
+			cfg2.Columns[0].Settings,
+		)
+	}
+	if cfg2.Columns[1].Settings == nil || !cfg2.Columns[1].Settings.IsShowCards() ||
+		cfg2.Columns[1].Settings.IsShowCardDetails() {
+		t.Errorf(
+			"expected column 1 settings show_cards=true, show_card_details=false, got %+v",
+			cfg2.Columns[1].Settings,
+		)
+	}
+	if !cfg2.Columns[2].Settings.IsShowCards() || !cfg2.Columns[2].Settings.IsShowCardDetails() {
+		t.Errorf("expected column 2 default settings to be true, got %+v", cfg2.Columns[2].Settings)
 	}
 }
 

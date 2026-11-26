@@ -146,6 +146,99 @@ func TestBoardConfigMigration(t *testing.T) {
 	}
 }
 
+func TestBoardConfigColumnSettingsRoundTrip(t *testing.T) {
+	tmpDir := t.TempDir()
+	store, err := NewStore(tmpDir)
+	if err != nil {
+		t.Fatalf("failed to init store: %v", err)
+	}
+
+	boolPtr := func(v bool) *bool { return &v }
+
+	cfg := &model.BoardConfig{
+		Version: model.CurrentBoardConfigVersion,
+		Columns: []model.Column{
+			{
+				ID:      "col-todo",
+				Name:    "Todo",
+				Visible: true,
+				Order:   1,
+			},
+			{
+				ID:      "col-done",
+				Name:    "Done",
+				Visible: true,
+				Order:   2,
+				Settings: &model.ColumnSettings{
+					ShowCards:       boolPtr(false),
+					ShowCardDetails: boolPtr(false),
+				},
+			},
+			{
+				ID:      "col-template",
+				Name:    "Template",
+				Visible: true,
+				Order:   3,
+				Settings: &model.ColumnSettings{
+					ShowCards:       boolPtr(true),
+					ShowCardDetails: boolPtr(false),
+				},
+			},
+		},
+		Language: "ja",
+	}
+
+	if err := store.SaveBoardConfig(cfg); err != nil {
+		t.Fatalf("SaveBoardConfig failed: %v", err)
+	}
+
+	loaded, err := store.GetBoardConfig()
+	if err != nil {
+		t.Fatalf("GetBoardConfig failed: %v", err)
+	}
+
+	if len(loaded.Columns) != 3 {
+		t.Fatalf("expected 3 columns, got %d", len(loaded.Columns))
+	}
+
+	if !loaded.Columns[0].Settings.IsShowCards() ||
+		!loaded.Columns[0].Settings.IsShowCardDetails() {
+		t.Errorf("expected nil settings to default to true, got %+v", loaded.Columns[0].Settings)
+	}
+	if loaded.Columns[1].Settings == nil ||
+		loaded.Columns[1].Settings.IsShowCards() ||
+		loaded.Columns[1].Settings.IsShowCardDetails() {
+		t.Errorf(
+			"expected col-done settings to preserve false values, got %+v",
+			loaded.Columns[1].Settings,
+		)
+	}
+	if loaded.Columns[2].Settings == nil ||
+		!loaded.Columns[2].Settings.IsShowCards() ||
+		loaded.Columns[2].Settings.IsShowCardDetails() {
+		t.Errorf(
+			"expected col-template settings to preserve show_cards=true, show_card_details=false, got %+v",
+			loaded.Columns[2].Settings,
+		)
+	}
+
+	// Ensure columns with show_cards=false remain visible to task queries so counts & search work
+	doneTask := &model.Task{Title: "Finished Task", ColumnID: "col-done", Rank: "0|a"}
+	if err := store.SaveTask(doneTask); err != nil {
+		t.Fatalf("SaveTask failed: %v", err)
+	}
+	visibleTasks, err := store.GetVisibleTasks()
+	if err != nil {
+		t.Fatalf("GetVisibleTasks failed: %v", err)
+	}
+	if len(visibleTasks) != 1 || visibleTasks[0].ID != doneTask.ID {
+		t.Errorf(
+			"expected task in column with show_cards=false to remain in GetVisibleTasks, got %+v",
+			visibleTasks,
+		)
+	}
+}
+
 func TestGetAllTasksEmpty(t *testing.T) {
 	tmpDir := t.TempDir()
 	store, err := NewStore(tmpDir)
