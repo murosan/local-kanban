@@ -216,7 +216,11 @@ func TestMCPGetTasksFiltering(t *testing.T) {
 	_ = json.Unmarshal(data, &output)
 
 	if len(output.Tasks) != 2 {
-		t.Fatalf("expected 2 active tasks in get_tasks output, got %d: %+v", len(output.Tasks), output.Tasks)
+		t.Fatalf(
+			"expected 2 active tasks in get_tasks output, got %d: %+v",
+			len(output.Tasks),
+			output.Tasks,
+		)
 	}
 	titles := map[string]bool{}
 	for _, task := range output.Tasks {

@@ -195,7 +195,10 @@ func (s *Store) SaveBoardConfig(cfg *model.BoardConfig) error {
 	return s.saveBoardConfigLocked(cfg)
 }
 
-func (s *Store) getFilteredColumnIDsUnlocked(includeHidden bool, includeArchived bool) ([]string, error) {
+func (s *Store) getFilteredColumnIDsUnlocked(
+	includeHidden bool,
+	includeArchived bool,
+) ([]string, error) {
 	cfg, _, err := s.readBoardConfigUnlocked()
 	if err != nil {
 		return nil, err
@@ -391,7 +394,10 @@ func (s *Store) GetActiveTasksByColumnID(columnID string) ([]*model.Task, error)
 }
 
 // GetTasksByColumnFilter returns tasks belonging to columns matching the visibility/archive filter.
-func (s *Store) GetTasksByColumnFilter(includeHidden bool, includeArchived bool) ([]*model.Task, error) {
+func (s *Store) GetTasksByColumnFilter(
+	includeHidden bool,
+	includeArchived bool,
+) ([]*model.Task, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	colIDs, err := s.getFilteredColumnIDsUnlocked(includeHidden, includeArchived)

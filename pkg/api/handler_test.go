@@ -2114,7 +2114,10 @@ func TestArchivedColumnsAndLanesAPI(t *testing.T) {
 		t.Fatalf("failed to decode saved config: %v", err)
 	}
 	if len(savedCfg.Lanes) != 1 || len(savedCfg.Lanes[0].ColumnIDs) != 2 {
-		t.Fatalf("expected archived column to be stripped from saved lanes, got %+v", savedCfg.Lanes)
+		t.Fatalf(
+			"expected archived column to be stripped from saved lanes, got %+v",
+			savedCfg.Lanes,
+		)
 	}
 
 	_ = store.SaveTask(&model.Task{Title: "Visible Task", ColumnID: "col-todo", Rank: "0|a"})
@@ -2132,7 +2135,11 @@ func TestArchivedColumnsAndLanesAPI(t *testing.T) {
 	}
 
 	// GET /api/tasks?include_hidden=true&include_archived=true returns all 3
-	reqAll := httptest.NewRequest("GET", "/api/tasks?include_hidden=true&include_archived=true", nil)
+	reqAll := httptest.NewRequest(
+		"GET",
+		"/api/tasks?include_hidden=true&include_archived=true",
+		nil,
+	)
 	wAll := httptest.NewRecorder()
 	mux.ServeHTTP(wAll, reqAll)
 	var allTasks []*model.Task

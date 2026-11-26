@@ -990,7 +990,10 @@ func TestArchivedColumnsAndBoardLanesPersistence(t *testing.T) {
 		t.Fatalf("GetActiveTasks failed: %v", err)
 	}
 	if len(activeTasks) != 3 {
-		t.Fatalf("expected 3 active tasks (including hidden, excluding archived), got %d", len(activeTasks))
+		t.Fatalf(
+			"expected 3 active tasks (including hidden, excluding archived), got %d",
+			len(activeTasks),
+		)
 	}
 
 	allDefinedTasks, err := store.GetTasksByColumnFilter(true, true)
@@ -998,6 +1001,9 @@ func TestArchivedColumnsAndBoardLanesPersistence(t *testing.T) {
 		t.Fatalf("GetTasksByColumnFilter failed: %v", err)
 	}
 	if len(allDefinedTasks) != 4 {
-		t.Fatalf("expected 4 tasks when including hidden and archived, got %d", len(allDefinedTasks))
+		t.Fatalf(
+			"expected 4 tasks when including hidden and archived, got %d",
+			len(allDefinedTasks),
+		)
 	}
 }
