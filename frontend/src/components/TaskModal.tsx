@@ -27,6 +27,11 @@ import type {
 	CustomFieldValue,
 	Task,
 } from "../types/task";
+import {
+	getActiveColumns,
+	getDefaultActiveColumnId,
+	isColumnArchived,
+} from "../utils/columnSettings";
 import { copyTextToClipboard } from "../utils/copyCommand";
 import { ActionMenu, type ActionMenuGroup } from "./ActionMenu";
 import { type ChangeOptions, MarkdownEditor } from "./MarkdownEditor";
@@ -85,8 +90,21 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 
 	const [title, setTitle] = useState(() => (task ? task.title : ""));
 	const [columnId, setColumnId] = useState<string>(() =>
-		task ? task.column_id || "" : initialColumnId || columns[0]?.id || "",
+		task
+			? task.column_id || ""
+			: initialColumnId || getDefaultActiveColumnId(columns),
 	);
+	const activeColumns = getActiveColumns(columns).sort(
+		(a, b) => (a.order ?? 0) - (b.order ?? 0),
+	);
+	const selectableColumns = (() => {
+		if (!columnId) return activeColumns;
+		const currentCol = columns.find((col) => col.id === columnId);
+		if (currentCol && isColumnArchived(currentCol)) {
+			return [...activeColumns, currentCol];
+		}
+		return activeColumns;
+	})();
 	const [tags, setTags] = useState<string[]>(() =>
 		task?.tags ? [...task.tags] : [],
 	);
@@ -224,7 +242,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 						title: currentState.title.trim(),
 						column_id: currentParentId
 							? currentState.columnId
-							: currentState.columnId || columns[0]?.id,
+							: currentState.columnId || getDefaultActiveColumnId(columns),
 						tags: currentState.tags || [],
 						custom_fields: currentState.customFieldsState,
 						content: currentState.content.trimEnd(),
@@ -627,7 +645,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 			try {
 				await onSave({
 					title: title.trim(),
-					column_id: columnId || columns[0]?.id,
+					column_id: columnId || getDefaultActiveColumnId(columns),
 					tags: tags || [],
 					custom_fields: customFieldsState,
 					content: content.trimEnd(),
@@ -848,7 +866,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 						</div>
 
 						{/* Column Selector */}
-						{columns.length > 0 && (
+						{selectableColumns.length > 0 && (
 							<div>
 								<label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-1.5 flex items-center gap-1">
 									<Columns className="w-3.5 h-3.5 text-[var(--text-muted)]" />{" "}
@@ -868,15 +886,23 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 												-
 											</option>
 										)}
-										{columns.map((col) => (
-											<option
-												key={col.id}
-												value={col.id}
-												className="bg-[var(--modal-bg)] text-[var(--text-primary)]"
-											>
-												{col.name}
-											</option>
-										))}
+										{selectableColumns.map((col) => {
+											const suffix = isColumnArchived(col)
+												? ` (${t("column.archivedBadge")})`
+												: col.visible === false
+													? ` (${t("column.hiddenBadge")})`
+													: "";
+											return (
+												<option
+													key={col.id}
+													value={col.id}
+													className="bg-[var(--modal-bg)] text-[var(--text-primary)]"
+												>
+													{col.name}
+													{suffix}
+												</option>
+											);
+										})}
 									</select>
 									<ChevronDown className="absolute right-3 w-4 h-4 text-[var(--text-secondary)] pointer-events-none" />
 								</div>
@@ -900,7 +926,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 						{task && (
 							<TaskHierarchySection
 								task={task}
-								columns={columns}
+								columns={activeColumns}
 								currentColumnId={columnId}
 								currentParentId={currentParentId}
 								parentTask={parentTask}

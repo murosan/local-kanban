@@ -25,6 +25,7 @@ import {
 } from "./services/api";
 import type {
 	BoardConfig,
+	BoardLane,
 	Column,
 	ColumnSettings,
 	CustomFieldDef,
@@ -32,8 +33,22 @@ import type {
 	Task,
 	ThemeConfig,
 } from "./types/task";
+import {
+	archiveColumnInConfig,
+	moveColumnInLaneByOffset,
+	moveLaneByOffset,
+	normalizeBoardLanes,
+	reorderColumnInLaneById,
+	reorderLanesById,
+	stackColumnIntoAdjacentLane,
+	syncColumnOrderFromLanes,
+	unstackColumn,
+} from "./utils/boardLayout";
 import { normalizeChecklistItems } from "./utils/checklistField";
-import { updateColumnSettings } from "./utils/columnSettings";
+import {
+	getDefaultActiveColumnId,
+	updateColumnSettings,
+} from "./utils/columnSettings";
 import { buildDuplicateTitle } from "./utils/duplicateTitle";
 
 export const App: React.FC = () => {
@@ -182,7 +197,8 @@ export const App: React.FC = () => {
 	};
 
 	const handleOpenNewCardModal = (columnId?: string) => {
-		const defaultColumnId = columnId || config?.columns[0]?.id || "";
+		const defaultColumnId =
+			columnId || getDefaultActiveColumnId(config?.columns ?? []);
 		setInitialColumnId(defaultColumnId);
 		setIsCreateModalOpen(true);
 	};
@@ -217,7 +233,7 @@ export const App: React.FC = () => {
 		taskData: Partial<Task>,
 		options?: { silent?: boolean },
 	) => {
-		const defaultColumnId = config?.columns[0]?.id;
+		const defaultColumnId = getDefaultActiveColumnId(config?.columns ?? []);
 		try {
 			if (taskData.id) {
 				await updateTask(taskData.id, taskData);
@@ -380,31 +396,46 @@ export const App: React.FC = () => {
 	const handleSaveConfig = async (
 		newColumns: Column[],
 		newCustomFields?: CustomFieldDef[],
+		newLanes?: BoardLane[],
 	) => {
 		if (!config || newColumns.length === 0) return;
 
 		try {
 			const validColumnIds = new Set(newColumns.map((c) => c.id));
-			const fallbackColumn = newColumns[0];
+			const fallbackColumnId =
+				getDefaultActiveColumnId(newColumns) || newColumns[0].id;
 
-			// Reassign orphan tasks across ALL tasks (not just currently search-filtered tasks)
-			const allCurrentTasks = debouncedQuery ? await fetchTasks() : tasks;
+			// Reassign orphan tasks across ALL tasks (including hidden/archived columns and when search is active)
+			const allCurrentTasks = await fetchTasks(undefined, {
+				includeHidden: true,
+				includeArchived: true,
+			});
 			const orphanTasks = allCurrentTasks.filter(
 				(t) => t.column_id && !validColumnIds.has(t.column_id),
 			);
 			for (const t of orphanTasks) {
 				try {
 					await updateTask(t.id, {
-						column_id: fallbackColumn.id,
+						column_id: fallbackColumnId,
 					});
 				} catch (err) {
 					console.error(`Failed to reassign task ${t.id}:`, err);
 				}
 			}
 
+			const normalizedLanes = normalizeBoardLanes(
+				newColumns,
+				newLanes ?? config.lanes,
+			);
+			const syncedColumns = syncColumnOrderFromLanes(
+				newColumns,
+				normalizedLanes,
+			);
+
 			const updatedConfig: BoardConfig = {
 				...config,
-				columns: newColumns,
+				columns: syncedColumns,
+				lanes: normalizedLanes,
 				custom_fields: newCustomFields,
 				language,
 			};
@@ -423,14 +454,16 @@ export const App: React.FC = () => {
 		}
 	};
 
-	const handleUpdateColumnSettings = useCallback(
-		async (columnId: string, patch: Partial<ColumnSettings>) => {
+	const commitBoardConfigOptimistically = useCallback(
+		async (
+			updater: (current: BoardConfig) => BoardConfig,
+			options?: { toastMessage?: string; reloadAfter?: boolean },
+		) => {
 			const currentConfig = configRef.current;
 			if (!currentConfig) return;
 
 			const updatedConfig: BoardConfig = {
-				...currentConfig,
-				columns: updateColumnSettings(currentConfig.columns, columnId, patch),
+				...updater(currentConfig),
 				language,
 			};
 
@@ -445,8 +478,14 @@ export const App: React.FC = () => {
 					lastCommittedConfigRef.current = saved;
 					setConfig(saved);
 				}
+				if (options?.toastMessage) {
+					addToast(options.toastMessage, "success");
+				}
+				if (options?.reloadAfter) {
+					await loadData();
+				}
 			} catch (err) {
-				console.error("Failed to save column settings:", err);
+				console.error("Failed to save board config:", err);
 				if (saveVersion === configSaveVersionRef.current) {
 					const fallbackConfig =
 						lastCommittedConfigRef.current ?? currentConfig;
@@ -456,7 +495,155 @@ export const App: React.FC = () => {
 				}
 			}
 		},
-		[language, addToast, t],
+		[language, addToast, t, loadData],
+	);
+
+	const handleUpdateColumnSettings = useCallback(
+		async (columnId: string, patch: Partial<ColumnSettings>) => {
+			await commitBoardConfigOptimistically((current) => ({
+				...current,
+				columns: updateColumnSettings(current.columns, columnId, patch),
+			}));
+		},
+		[commitBoardConfigOptimistically],
+	);
+
+	const handleMoveLane = useCallback(
+		(laneId: string, direction: "left" | "right") => {
+			const delta = direction === "left" ? -1 : 1;
+			void commitBoardConfigOptimistically((current) => {
+				const next = moveLaneByOffset(
+					current.columns,
+					current.lanes,
+					laneId,
+					delta,
+				);
+				return {
+					...current,
+					columns: next.columns,
+					lanes: next.lanes,
+				};
+			});
+		},
+		[commitBoardConfigOptimistically],
+	);
+
+	const handleReorderLanes = useCallback(
+		(activeLaneId: string, overLaneId: string) => {
+			void commitBoardConfigOptimistically((current) => {
+				const next = reorderLanesById(
+					current.columns,
+					current.lanes,
+					activeLaneId,
+					overLaneId,
+				);
+				return {
+					...current,
+					columns: next.columns,
+					lanes: next.lanes,
+				};
+			});
+		},
+		[commitBoardConfigOptimistically],
+	);
+
+	const handleMoveColumnInLane = useCallback(
+		(columnId: string, direction: "up" | "down") => {
+			const delta = direction === "up" ? -1 : 1;
+			void commitBoardConfigOptimistically((current) => {
+				const next = moveColumnInLaneByOffset(
+					current.columns,
+					current.lanes,
+					columnId,
+					delta,
+				);
+				return {
+					...current,
+					columns: next.columns,
+					lanes: next.lanes,
+				};
+			});
+		},
+		[commitBoardConfigOptimistically],
+	);
+
+	const handleReorderColumnInLane = useCallback(
+		(laneId: string, activeColumnId: string, overColumnId: string) => {
+			void commitBoardConfigOptimistically((current) => {
+				const next = reorderColumnInLaneById(
+					current.columns,
+					current.lanes,
+					laneId,
+					activeColumnId,
+					overColumnId,
+				);
+				return {
+					...current,
+					columns: next.columns,
+					lanes: next.lanes,
+				};
+			});
+		},
+		[commitBoardConfigOptimistically],
+	);
+
+	const handleStackColumn = useCallback(
+		(columnId: string, direction: "left" | "right") => {
+			void commitBoardConfigOptimistically((current) => {
+				const next = stackColumnIntoAdjacentLane(
+					current.columns,
+					current.lanes,
+					columnId,
+					direction,
+				);
+				return {
+					...current,
+					columns: next.columns,
+					lanes: next.lanes,
+				};
+			});
+		},
+		[commitBoardConfigOptimistically],
+	);
+
+	const handleUnstackColumn = useCallback(
+		(columnId: string) => {
+			void commitBoardConfigOptimistically((current) => {
+				const next = unstackColumn(current.columns, current.lanes, columnId);
+				return {
+					...current,
+					columns: next.columns,
+					lanes: next.lanes,
+				};
+			});
+		},
+		[commitBoardConfigOptimistically],
+	);
+
+	const handleArchiveColumn = useCallback(
+		(columnId: string) => {
+			const current = configRef.current;
+			const target = current?.columns.find((col) => col.id === columnId);
+			if (!target) return;
+			if (!confirm(t("column.archiveConfirm", { name: target.name }))) {
+				return;
+			}
+			void commitBoardConfigOptimistically(
+				(cfg) => {
+					const next = archiveColumnInConfig(cfg.columns, cfg.lanes, columnId);
+					return {
+						...cfg,
+						columns: next.columns,
+						lanes: next.lanes,
+					};
+				},
+				{
+					toastMessage: t("common.columnArchived", { name: target.name }),
+					reloadAfter: true,
+				},
+			);
+		},
+		[commitBoardConfigOptimistically, t],
 	);
 
 	const handleSelectTheme = async (theme: ThemeConfig) => {
@@ -513,6 +700,7 @@ export const App: React.FC = () => {
 			<main className="flex-1 w-full px-3 sm:px-4 pb-3 flex flex-col min-h-0 overflow-hidden">
 				<KanbanBoard
 					columns={config.columns}
+					lanes={config.lanes}
 					customFields={config.custom_fields}
 					tasks={tasks}
 					hasActiveSearch={debouncedQuery.trim().length > 0}
@@ -525,6 +713,13 @@ export const App: React.FC = () => {
 					onDuplicateTask={(task) => handleDuplicateTask(task)}
 					onAddCard={(columnId) => handleOpenNewCardModal(columnId)}
 					onUpdateColumnSettings={handleUpdateColumnSettings}
+					onMoveLane={handleMoveLane}
+					onReorderLanes={handleReorderLanes}
+					onMoveColumnInLane={handleMoveColumnInLane}
+					onReorderColumnInLane={handleReorderColumnInLane}
+					onStackColumn={handleStackColumn}
+					onUnstackColumn={handleUnstackColumn}
+					onArchiveColumn={handleArchiveColumn}
 				/>
 			</main>
 
@@ -576,6 +771,7 @@ export const App: React.FC = () => {
 					isOpen={isColumnModalOpen}
 					onClose={() => setIsColumnModalOpen(false)}
 					columns={config.columns}
+					lanes={config.lanes}
 					customFields={config.custom_fields}
 					onSaveConfig={handleSaveConfig}
 				/>

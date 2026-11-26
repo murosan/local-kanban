@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { Column } from "../types/task";
 import {
+	getActiveColumns,
+	getArchivedColumns,
+	getDefaultActiveColumnId,
+	isColumnActive,
+	isColumnArchived,
+	isColumnBoardVisible,
 	isColumnCardDetailsVisible,
 	isColumnCardsVisible,
 	isTemporarilyExpandedBySearch,
@@ -106,5 +112,32 @@ describe("columnSettings", () => {
 		});
 		// Does not mutate original array
 		expect(columns[1].settings?.show_card_details).toBe(true);
+	});
+
+	it("classifies active, archived, board-visible columns and picks default active column", () => {
+		const cols: Column[] = [
+			makeColumn({ id: "col-arch", order: 1, archived: true, visible: true }),
+			makeColumn({ id: "col-hidden", order: 2, visible: false }),
+			makeColumn({ id: "col-vis", order: 3, visible: true }),
+		];
+
+		expect(isColumnArchived(cols[0])).toBe(true);
+		expect(isColumnActive(cols[0])).toBe(false);
+		expect(isColumnBoardVisible(cols[0])).toBe(false);
+
+		expect(isColumnActive(cols[1])).toBe(true);
+		expect(isColumnBoardVisible(cols[1])).toBe(false);
+
+		expect(isColumnActive(cols[2])).toBe(true);
+		expect(isColumnBoardVisible(cols[2])).toBe(true);
+
+		expect(getActiveColumns(cols).map((c) => c.id)).toEqual([
+			"col-hidden",
+			"col-vis",
+		]);
+		expect(getArchivedColumns(cols).map((c) => c.id)).toEqual(["col-arch"]);
+		expect(getDefaultActiveColumnId(cols)).toBe("col-vis");
+		expect(getDefaultActiveColumnId([cols[0], cols[1]])).toBe("col-hidden");
+		expect(getDefaultActiveColumnId([cols[0]])).toBe("");
 	});
 });

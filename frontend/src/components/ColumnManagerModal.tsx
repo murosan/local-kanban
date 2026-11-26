@@ -16,9 +16,13 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
+	Archive,
+	ArchiveRestore,
 	ChevronDown,
+	ChevronRight,
 	ChevronUp,
 	GripVertical,
+	Layers,
 	Maximize2,
 	Minimize2,
 	Plus,
@@ -27,11 +31,13 @@ import {
 	X,
 } from "lucide-react";
 import type React from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { COLOR_PRESETS } from "../constants/colors";
 import { getCustomFieldTypeKey } from "../i18n/translations";
 import { useI18n } from "../i18n/useI18n";
+import { fetchTasks } from "../services/api";
 import type {
+	BoardLane,
 	Column,
 	ColumnSettings,
 	CustomFieldDef,
@@ -39,6 +45,16 @@ import type {
 	CustomFieldType,
 } from "../types/task";
 import {
+	archiveColumnInConfig,
+	moveColumnInConfigModal,
+	normalizeBoardLanes,
+	syncColumnOrderFromLanes,
+	unarchiveColumnInConfig,
+	unstackColumn,
+} from "../utils/boardLayout";
+import {
+	getActiveColumns,
+	getArchivedColumns,
 	isColumnCardDetailsVisible,
 	isColumnCardsVisible,
 } from "../utils/columnSettings";
@@ -730,10 +746,12 @@ interface ColumnManagerModalProps {
 	isOpen: boolean;
 	onClose: () => void;
 	columns: Column[];
+	lanes?: BoardLane[];
 	customFields?: CustomFieldDef[];
 	onSaveConfig: (
 		newColumns: Column[],
 		newCustomFields?: CustomFieldDef[],
+		newLanes?: BoardLane[],
 	) => Promise<void>;
 }
 
@@ -741,22 +759,40 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
 	isOpen,
 	onClose,
 	columns,
+	lanes,
 	customFields = [],
 	onSaveConfig,
 }) => {
-	const { t } = useI18n();
+	const { language, t } = useI18n();
 	const [activeTab, setActiveTab] = useState<"columns" | "customFields">(
 		"columns",
 	);
 
-	const [localColumns, setLocalColumns] = useState<Column[]>(() =>
-		columns.map((col, idx) => ({
-			...col,
-			name: col.name || (col as unknown as { title?: string }).title || "",
-			visible: col.visible !== false,
-			order: col.order ?? idx + 1,
-		})),
+	const initialColumns = useMemo(
+		() =>
+			columns.map((col, idx) => ({
+				...col,
+				name: col.name || (col as unknown as { title?: string }).title || "",
+				visible: col.visible !== false,
+				archived: col.archived === true,
+				order: col.order ?? idx + 1,
+			})),
+		[columns],
 	);
+	const initialLanes = useMemo(
+		() => normalizeBoardLanes(initialColumns, lanes),
+		[initialColumns, lanes],
+	);
+
+	const [localLanes, setLocalLanes] = useState<BoardLane[]>(() => initialLanes);
+	const [localColumns, setLocalColumns] = useState<Column[]>(() =>
+		syncColumnOrderFromLanes(initialColumns, initialLanes),
+	);
+	const [taskCountsByColumn, setTaskCountsByColumn] = useState<Record<
+		string,
+		number
+	> | null>(null);
+	const [isArchivedSectionOpen, setIsArchivedSectionOpen] = useState(true);
 	const [localCustomFields, setLocalCustomFields] = useState<CustomFieldDef[]>(
 		() =>
 			ensureUniqueIds(customFields || [], "cf").map((field) =>
@@ -853,6 +889,32 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
 			}
 		};
 	}, []);
+
+	useEffect(() => {
+		if (!isOpen) return;
+		let cancelled = false;
+		(async () => {
+			try {
+				const allTasks = await fetchTasks(undefined, {
+					includeHidden: true,
+					includeArchived: true,
+				});
+				if (cancelled) return;
+				const counts: Record<string, number> = {};
+				for (const task of allTasks) {
+					if (task.column_id) {
+						counts[task.column_id] = (counts[task.column_id] ?? 0) + 1;
+					}
+				}
+				setTaskCountsByColumn(counts);
+			} catch (err) {
+				console.error("Failed to fetch column task counts:", err);
+			}
+		})();
+		return () => {
+			cancelled = true;
+		};
+	}, [isOpen]);
 
 	useEffect(() => {
 		const handleKeyDown = (e: KeyboardEvent) => {
@@ -1087,58 +1149,116 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
 	};
 
 	// --- Column Actions ---
-	const handleMoveColumn = (index: number, direction: "up" | "down") => {
-		const targetIndex = direction === "up" ? index - 1 : index + 1;
-		if (targetIndex < 0 || targetIndex >= localColumns.length) return;
+	const activeColumns = getActiveColumns(localColumns).sort(
+		(a, b) => (a.order ?? 0) - (b.order ?? 0),
+	);
+	const archivedColumns = getArchivedColumns(localColumns);
 
-		const updated = [...localColumns];
-		const [moved] = updated.splice(index, 1);
-		updated.splice(targetIndex, 0, moved);
+	const stackIndexByColumnId = new Map<string, number>();
+	let nextStackNumber = 1;
+	for (const lane of localLanes) {
+		if (lane.column_ids.length > 1) {
+			for (const colId of lane.column_ids) {
+				stackIndexByColumnId.set(colId, nextStackNumber);
+			}
+			nextStackNumber += 1;
+		}
+	}
 
-		const reordered = updated.map((col, idx) => ({ ...col, order: idx + 1 }));
-		setLocalColumns(reordered);
+	const formatArchivedAt = (iso?: string): string => {
+		if (!iso) return "";
+		const date = new Date(iso);
+		if (Number.isNaN(date.getTime())) return iso;
+		return date.toLocaleString(language === "ja" ? "ja-JP" : "en-US", {
+			year: "numeric",
+			month: "2-digit",
+			day: "2-digit",
+			hour: "2-digit",
+			minute: "2-digit",
+		});
 	};
 
-	const handleToggleVisibility = (index: number) => {
-		const updated = [...localColumns];
-		updated[index] = { ...updated[index], visible: !updated[index].visible };
-		setLocalColumns(updated);
+	const handleMoveColumn = (columnId: string, direction: "up" | "down") => {
+		const delta = direction === "up" ? -1 : 1;
+		const next = moveColumnInConfigModal(
+			localColumns,
+			localLanes,
+			columnId,
+			delta,
+		);
+		setLocalColumns(next.columns);
+		setLocalLanes(next.lanes);
 	};
 
-	const handleDeleteColumn = (index: number) => {
+	const handleToggleVisibility = (columnId: string) => {
+		setLocalColumns((prev) =>
+			prev.map((col) =>
+				col.id === columnId ? { ...col, visible: col.visible === false } : col,
+			),
+		);
+	};
+
+	const handleArchiveColumn = (columnId: string) => {
+		const target = localColumns.find((col) => col.id === columnId);
+		if (!target) return;
+		if (!confirm(t("column.archiveConfirm", { name: target.name }))) {
+			return;
+		}
+		const next = archiveColumnInConfig(localColumns, localLanes, columnId);
+		setLocalColumns(next.columns);
+		setLocalLanes(next.lanes);
+	};
+
+	const handleUnarchiveColumn = (columnId: string) => {
+		const next = unarchiveColumnInConfig(localColumns, localLanes, columnId);
+		setLocalColumns(next.columns);
+		setLocalLanes(next.lanes);
+	};
+
+	const handleUnstackColumn = (columnId: string) => {
+		const next = unstackColumn(localColumns, localLanes, columnId);
+		setLocalColumns(next.columns);
+		setLocalLanes(next.lanes);
+	};
+
+	const handleDeleteColumn = (columnId: string) => {
 		if (localColumns.length <= 1) {
 			alert(t("configModal.atLeastOneColumn"));
 			return;
 		}
-		const colToDelete = localColumns[index];
+		const colToDelete = localColumns.find((col) => col.id === columnId);
+		if (!colToDelete) return;
 		if (
 			confirm(t("configModal.deleteColumnConfirm", { name: colToDelete.name }))
 		) {
-			const updated = localColumns.filter((_, i) => i !== index);
-			const reordered = updated.map((col, idx) => ({ ...col, order: idx + 1 }));
-			setLocalColumns(reordered);
+			const remaining = localColumns.filter((col) => col.id !== columnId);
+			const nextLanes = normalizeBoardLanes(remaining, localLanes);
+			setLocalColumns(syncColumnOrderFromLanes(remaining, nextLanes));
+			setLocalLanes(nextLanes);
 		}
 	};
 
-	const handleColumnNameChange = (index: number, newName: string) => {
-		const updated = [...localColumns];
-		updated[index] = { ...updated[index], name: newName };
-		setLocalColumns(updated);
+	const handleColumnNameChange = (columnId: string, newName: string) => {
+		setLocalColumns((prev) =>
+			prev.map((col) =>
+				col.id === columnId ? { ...col, name: newName } : col,
+			),
+		);
 	};
 
-	const handleColumnColorChange = (index: number, color: string) => {
-		const updated = [...localColumns];
-		updated[index] = { ...updated[index], color };
-		setLocalColumns(updated);
+	const handleColumnColorChange = (columnId: string, color: string) => {
+		setLocalColumns((prev) =>
+			prev.map((col) => (col.id === columnId ? { ...col, color } : col)),
+		);
 	};
 
 	const handleColumnSettingChange = (
-		index: number,
+		columnId: string,
 		patch: Partial<ColumnSettings>,
 	) => {
 		setLocalColumns((prev) =>
-			prev.map((col, idx) =>
-				idx === index
+			prev.map((col) =>
+				col.id === columnId
 					? {
 							...col,
 							settings: {
@@ -1162,9 +1282,13 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
 			name,
 			color,
 			visible: true,
+			archived: false,
 			order: localColumns.length + 1,
 		};
-		setLocalColumns([...localColumns, newCol]);
+		const nextCols = [...localColumns, newCol];
+		const nextLanes = normalizeBoardLanes(nextCols, localLanes);
+		setLocalColumns(syncColumnOrderFromLanes(nextCols, nextLanes));
+		setLocalLanes(nextLanes);
 		setNewColumnName("");
 	};
 
@@ -1182,7 +1306,12 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
 				finalCustomFields.push(pendingField);
 			}
 
-			await onSaveConfig(localColumns, finalCustomFields);
+			const normalizedLanes = normalizeBoardLanes(localColumns, localLanes);
+			const syncedColumns = syncColumnOrderFromLanes(
+				localColumns,
+				normalizedLanes,
+			);
+			await onSaveConfig(syncedColumns, finalCustomFields, normalizedLanes);
 			onClose();
 		} catch (err) {
 			console.error("Failed to save config:", err);
@@ -1266,147 +1395,195 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
 							</p>
 
 							<div className="space-y-3">
-								{localColumns.map((col, idx) => (
-									<div
-										key={col.id}
-										className={`flex flex-col p-3 rounded-lg border gap-2.5 transition-all ${
-											col.visible !== false
-												? "border-[var(--border-color)] bg-[var(--bg-card)]"
-												: "border-[var(--border-color)] opacity-60"
-										}`}
-									>
-										<div className="flex items-center justify-between gap-3">
-											{/* Title & Color Input */}
-											<div className="flex items-center space-x-2 flex-1">
-												<label
-													className="relative flex items-center cursor-pointer group"
-													title={t("configModal.selectCustomColor")}
-												>
-													<span
-														className="w-5 h-5 rounded-full border border-white/20 shrink-0 shadow-xs group-hover:scale-110 transition-transform"
-														style={{ backgroundColor: col.color || "#3b82f6" }}
-													/>
-													<input
-														type="color"
-														value={col.color || "#3b82f6"}
-														onChange={(e) =>
-															handleColumnColorChange(idx, e.target.value)
-														}
-														className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
-													/>
-												</label>
-												<input
-													type="text"
-													value={col.name}
-													onChange={(e) =>
-														handleColumnNameChange(idx, e.target.value)
-													}
-													className="bg-[var(--bg-input)] border border-[var(--border-color)] focus:border-blue-500 rounded px-2.5 py-1 text-sm font-medium text-[var(--text-primary)] flex-1 outline-none"
-												/>
-											</div>
-
-											{/* Actions: Move Up, Move Down, Toggle Visibility, Delete */}
-											<div className="flex items-center space-x-1.5 justify-end">
-												<button
-													type="button"
-													disabled={idx === 0}
-													onClick={() => handleMoveColumn(idx, "up")}
-													className="p-1.5 text-xs bg-[var(--bg-card)] hover:opacity-80 disabled:opacity-30 border border-[var(--border-color)] rounded text-[var(--text-primary)] transition-colors"
-													title={t("configModal.moveColumnUp")}
-												>
-													▲
-												</button>
-												<button
-													type="button"
-													disabled={idx === localColumns.length - 1}
-													onClick={() => handleMoveColumn(idx, "down")}
-													className="p-1.5 text-xs bg-[var(--bg-card)] hover:opacity-80 disabled:opacity-30 border border-[var(--border-color)] rounded text-[var(--text-primary)] transition-colors"
-													title={t("configModal.moveColumnDown")}
-												>
-													▼
-												</button>
-												<button
-													type="button"
-													onClick={() => handleToggleVisibility(idx)}
-													className={`px-2.5 py-1 text-xs rounded font-medium transition-colors ${
-														col.visible !== false
-															? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/30"
-															: "bg-[var(--bg-card)] text-[var(--text-secondary)] border border-[var(--border-color)]"
-													}`}
-												>
-													{col.visible !== false
-														? t("configModal.visible")
-														: t("configModal.hidden")}
-												</button>
-												<button
-													type="button"
-													onClick={() => handleDeleteColumn(idx)}
-													className="p-1.5 text-xs bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 rounded text-rose-500 transition-colors"
-													title={t("configModal.deleteColumn")}
-												>
-													🗑️
-												</button>
-											</div>
-										</div>
-
-										{/* Extended Color Preset Palette */}
-										<div className="flex items-center space-x-1.5 flex-wrap pt-1 pl-7">
-											<span className="text-[11px] font-medium text-[var(--text-muted)] mr-1">
-												{t("configModal.colorLabel")}
-											</span>
-											{COLOR_PRESETS.map((colorHex) => (
-												<button
-													key={colorHex}
-													type="button"
-													onClick={() => handleColumnColorChange(idx, colorHex)}
-													className={`w-4 h-4 rounded-full transition-transform ${
-														col.color === colorHex
-															? "scale-125 ring-2 ring-white/80 shadow-md"
-															: "opacity-70 hover:opacity-100 hover:scale-110"
-													}`}
-													style={{ backgroundColor: colorHex }}
-													title={colorHex}
-												/>
-											))}
-										</div>
-
-										{/* Per-Column Display Settings */}
-										<div className="flex items-center flex-wrap gap-x-4 gap-y-1.5 pt-1 pl-7">
-											<span className="text-[11px] font-medium text-[var(--text-muted)]">
-												{t("configModal.displaySettingsLabel")}
-											</span>
-											<label className="inline-flex items-center gap-1.5 text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer select-none">
-												<input
-													type="checkbox"
-													checked={isColumnCardsVisible(col)}
-													onChange={(e) =>
-														handleColumnSettingChange(idx, {
-															show_cards: e.target.checked,
-														})
-													}
-													className="w-3.5 h-3.5 rounded accent-[var(--accent-color)] cursor-pointer"
-												/>
-												<span>{t("column.showCards")}</span>
-											</label>
-											<label
-												className="inline-flex items-center gap-1.5 text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer select-none"
-												title={t("column.showCardDetailsTooltip")}
-											>
-												<input
-													type="checkbox"
-													checked={isColumnCardDetailsVisible(col)}
-													onChange={(e) =>
-														handleColumnSettingChange(idx, {
-															show_card_details: e.target.checked,
-														})
-													}
-													className="w-3.5 h-3.5 rounded accent-[var(--accent-color)] cursor-pointer"
-												/>
-												<span>{t("column.showCardDetails")}</span>
-											</label>
-										</div>
+								{activeColumns.length === 0 ? (
+									<div className="p-4 rounded-lg border border-dashed border-[var(--border-color)] text-center text-xs text-[var(--text-muted)]">
+										{t("configModal.noActiveColumns")}
 									</div>
-								))}
+								) : (
+									activeColumns.map((col, idx) => {
+										const stackNumber = stackIndexByColumnId.get(col.id);
+										return (
+											<div
+												key={col.id}
+												className={`flex flex-col p-3 rounded-lg border gap-2.5 transition-all ${
+													col.visible !== false
+														? "border-[var(--border-color)] bg-[var(--bg-card)]"
+														: "border-[var(--border-color)] opacity-65"
+												}`}
+											>
+												<div className="flex items-center justify-between gap-3 flex-wrap sm:flex-nowrap">
+													{/* Title & Color Input */}
+													<div className="flex items-center space-x-2 flex-1 min-w-0">
+														<label
+															className="relative flex items-center cursor-pointer group shrink-0"
+															title={t("configModal.selectCustomColor")}
+														>
+															<span
+																className="w-5 h-5 rounded-full border border-white/20 shrink-0 shadow-xs group-hover:scale-110 transition-transform"
+																style={{
+																	backgroundColor: col.color || "#3b82f6",
+																}}
+															/>
+															<input
+																type="color"
+																value={col.color || "#3b82f6"}
+																onChange={(e) =>
+																	handleColumnColorChange(
+																		col.id,
+																		e.target.value,
+																	)
+																}
+																className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+															/>
+														</label>
+														<input
+															type="text"
+															value={col.name}
+															onChange={(e) =>
+																handleColumnNameChange(col.id, e.target.value)
+															}
+															className="bg-[var(--bg-input)] border border-[var(--border-color)] focus:border-blue-500 rounded px-2.5 py-1 text-sm font-medium text-[var(--text-primary)] flex-1 min-w-0 outline-none"
+														/>
+														{stackNumber !== undefined && (
+															<span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/30 shrink-0">
+																<Layers
+																	className="w-3 h-3"
+																	aria-hidden="true"
+																/>
+																<span>
+																	{t("configModal.stackedBadge", {
+																		index: stackNumber,
+																	})}
+																</span>
+																<button
+																	type="button"
+																	onClick={() => handleUnstackColumn(col.id)}
+																	className="ml-0.5 px-1 rounded hover:bg-indigo-500/20 text-[10px] underline cursor-pointer"
+																	title={t("column.unstack")}
+																>
+																	{t("configModal.unstackColumn")}
+																</button>
+															</span>
+														)}
+													</div>
+
+													{/* Actions: Move Up, Move Down, Toggle Visibility, Archive, Delete */}
+													<div className="flex items-center space-x-1.5 justify-end shrink-0">
+														<button
+															type="button"
+															disabled={idx === 0}
+															onClick={() => handleMoveColumn(col.id, "up")}
+															className="p-1.5 text-xs bg-[var(--bg-card)] hover:opacity-80 disabled:opacity-30 border border-[var(--border-color)] rounded text-[var(--text-primary)] transition-colors cursor-pointer disabled:cursor-not-allowed"
+															title={t("configModal.moveColumnUp")}
+														>
+															▲
+														</button>
+														<button
+															type="button"
+															disabled={idx === activeColumns.length - 1}
+															onClick={() => handleMoveColumn(col.id, "down")}
+															className="p-1.5 text-xs bg-[var(--bg-card)] hover:opacity-80 disabled:opacity-30 border border-[var(--border-color)] rounded text-[var(--text-primary)] transition-colors cursor-pointer disabled:cursor-not-allowed"
+															title={t("configModal.moveColumnDown")}
+														>
+															▼
+														</button>
+														<button
+															type="button"
+															onClick={() => handleToggleVisibility(col.id)}
+															title={t("configModal.visibleTooltip")}
+															className={`px-2.5 py-1 text-xs rounded font-medium transition-colors cursor-pointer ${
+																col.visible !== false
+																	? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/30"
+																	: "bg-[var(--bg-card)] text-[var(--text-secondary)] border border-[var(--border-color)]"
+															}`}
+														>
+															{col.visible !== false
+																? t("configModal.visible")
+																: t("configModal.hidden")}
+														</button>
+														<button
+															type="button"
+															onClick={() => handleArchiveColumn(col.id)}
+															className="p-1.5 text-xs bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded text-amber-500 transition-colors cursor-pointer"
+															title={t("configModal.archiveColumn")}
+															aria-label={t("configModal.archiveColumn")}
+														>
+															<Archive className="w-3.5 h-3.5" />
+														</button>
+														<button
+															type="button"
+															onClick={() => handleDeleteColumn(col.id)}
+															className="p-1.5 text-xs bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 rounded text-rose-500 transition-colors cursor-pointer"
+															title={t("configModal.deleteColumn")}
+															aria-label={t("configModal.deleteColumn")}
+														>
+															<Trash2 className="w-3.5 h-3.5" />
+														</button>
+													</div>
+												</div>
+
+												{/* Extended Color Preset Palette */}
+												<div className="flex items-center space-x-1.5 flex-wrap pt-1 pl-7">
+													<span className="text-[11px] font-medium text-[var(--text-muted)] mr-1">
+														{t("configModal.colorLabel")}
+													</span>
+													{COLOR_PRESETS.map((colorHex) => (
+														<button
+															key={colorHex}
+															type="button"
+															onClick={() =>
+																handleColumnColorChange(col.id, colorHex)
+															}
+															className={`w-4 h-4 rounded-full transition-transform ${
+																col.color === colorHex
+																	? "scale-125 ring-2 ring-white/80 shadow-md"
+																	: "opacity-70 hover:opacity-100 hover:scale-110"
+															}`}
+															style={{ backgroundColor: colorHex }}
+															title={colorHex}
+														/>
+													))}
+												</div>
+
+												{/* Per-Column Display Settings */}
+												<div className="flex items-center flex-wrap gap-x-4 gap-y-1.5 pt-1 pl-7">
+													<span className="text-[11px] font-medium text-[var(--text-muted)]">
+														{t("configModal.displaySettingsLabel")}
+													</span>
+													<label className="inline-flex items-center gap-1.5 text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer select-none">
+														<input
+															type="checkbox"
+															checked={isColumnCardsVisible(col)}
+															onChange={(e) =>
+																handleColumnSettingChange(col.id, {
+																	show_cards: e.target.checked,
+																})
+															}
+															className="w-3.5 h-3.5 rounded accent-[var(--accent-color)] cursor-pointer"
+														/>
+														<span>{t("column.showCards")}</span>
+													</label>
+													<label
+														className="inline-flex items-center gap-1.5 text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer select-none"
+														title={t("column.showCardDetailsTooltip")}
+													>
+														<input
+															type="checkbox"
+															checked={isColumnCardDetailsVisible(col)}
+															onChange={(e) =>
+																handleColumnSettingChange(col.id, {
+																	show_card_details: e.target.checked,
+																})
+															}
+															className="w-3.5 h-3.5 rounded accent-[var(--accent-color)] cursor-pointer"
+														/>
+														<span>{t("column.showCardDetails")}</span>
+													</label>
+												</div>
+											</div>
+										);
+									})
+								)}
 							</div>
 
 							{/* Add New Column */}
@@ -1437,6 +1614,97 @@ export const ColumnManagerModal: React.FC<ColumnManagerModalProps> = ({
 									</button>
 								</div>
 							</div>
+
+							{/* Archived Columns Section */}
+							{archivedColumns.length > 0 && (
+								<div className="pt-4 border-t border-[var(--border-color)] space-y-3">
+									<button
+										type="button"
+										onClick={() => setIsArchivedSectionOpen((prev) => !prev)}
+										className="w-full flex items-center justify-between text-left group cursor-pointer"
+									>
+										<div className="flex items-center gap-2">
+											{isArchivedSectionOpen ? (
+												<ChevronDown className="w-4 h-4 text-[var(--text-muted)]" />
+											) : (
+												<ChevronRight className="w-4 h-4 text-[var(--text-muted)]" />
+											)}
+											<Archive className="w-4 h-4 text-amber-500" />
+											<span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)] group-hover:text-[var(--text-primary)]">
+												{t("configModal.archivedSectionTitle", {
+													count: archivedColumns.length,
+												})}
+											</span>
+										</div>
+									</button>
+
+									{isArchivedSectionOpen && (
+										<div className="space-y-2.5">
+											<p className="text-xs text-[var(--text-muted)]">
+												{t("configModal.archivedSectionDesc")}
+											</p>
+											{archivedColumns.map((col) => {
+												const count = taskCountsByColumn?.[col.id];
+												const formattedDate = formatArchivedAt(col.archived_at);
+												return (
+													<div
+														key={col.id}
+														className="flex items-center justify-between gap-3 p-3 rounded-lg border border-[var(--border-color)] bg-[var(--bg-surface)]/70"
+													>
+														<div className="flex items-center gap-2.5 min-w-0">
+															<span
+																className="w-3.5 h-3.5 rounded-full shrink-0 opacity-75"
+																style={{
+																	backgroundColor: col.color || "#64748b",
+																}}
+															/>
+															<div className="min-w-0">
+																<div className="flex items-center gap-2">
+																	<span className="text-sm font-semibold text-[var(--text-primary)] truncate">
+																		{col.name}
+																	</span>
+																	{count !== undefined && (
+																		<span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-[var(--bg-card)] border border-[var(--border-color)] text-[var(--text-secondary)] shrink-0">
+																			{t("configModal.taskCount", { count })}
+																		</span>
+																	)}
+																</div>
+																{formattedDate && (
+																	<p className="text-[11px] text-[var(--text-muted)] mt-0.5">
+																		{t("configModal.archivedAt", {
+																			date: formattedDate,
+																		})}
+																	</p>
+																)}
+															</div>
+														</div>
+
+														<div className="flex items-center space-x-1.5 shrink-0">
+															<button
+																type="button"
+																onClick={() => handleUnarchiveColumn(col.id)}
+																className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded bg-blue-500/10 hover:bg-blue-500/20 text-blue-500 border border-blue-500/30 transition-colors cursor-pointer"
+															>
+																<ArchiveRestore className="w-3.5 h-3.5" />
+																<span>{t("configModal.restoreColumn")}</span>
+															</button>
+															<button
+																type="button"
+																onClick={() => handleDeleteColumn(col.id)}
+																className="p-1.5 text-xs bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 rounded text-rose-500 transition-colors cursor-pointer"
+																title={t("configModal.deleteColumn")}
+																aria-label={t("configModal.deleteColumn")}
+															>
+																<Trash2 className="w-3.5 h-3.5" />
+															</button>
+														</div>
+													</div>
+												);
+											})}
+										</div>
+									)}
+								</div>
+							)}
 						</div>
 					) : (
 						/* Custom Fields Tab */

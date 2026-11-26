@@ -1,5 +1,33 @@
 import type { Column, ColumnSettings } from "../types/task";
 
+export function isColumnArchived(column: Column): boolean {
+	return column.archived === true;
+}
+
+export function isColumnActive(column: Column): boolean {
+	return !isColumnArchived(column);
+}
+
+export function isColumnBoardVisible(column: Column): boolean {
+	return isColumnActive(column) && column.visible !== false;
+}
+
+export function getActiveColumns(columns: Column[]): Column[] {
+	return columns.filter(isColumnActive);
+}
+
+export function getArchivedColumns(columns: Column[]): Column[] {
+	return columns.filter(isColumnArchived);
+}
+
+export function getDefaultActiveColumnId(columns: Column[]): string {
+	const sorted = [...columns].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+	const boardVisible = sorted.find(isColumnBoardVisible);
+	if (boardVisible) return boardVisible.id;
+	const active = sorted.find(isColumnActive);
+	return active?.id ?? "";
+}
+
 export function isColumnCardsVisible(column: Column): boolean {
 	return column.settings?.show_cards !== false;
 }

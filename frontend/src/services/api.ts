@@ -37,10 +37,27 @@ export async function saveBoardConfig(
 	return res.json();
 }
 
-export async function fetchTasks(query?: string): Promise<Task[]> {
-	const url = query
-		? `${API_BASE}/tasks?q=${encodeURIComponent(query)}`
-		: `${API_BASE}/tasks`;
+export interface FetchTasksOptions {
+	includeHidden?: boolean;
+	includeArchived?: boolean;
+}
+
+export async function fetchTasks(
+	query?: string,
+	options?: FetchTasksOptions,
+): Promise<Task[]> {
+	const params = new URLSearchParams();
+	if (query) {
+		params.set("q", query);
+	}
+	if (options?.includeHidden) {
+		params.set("include_hidden", "true");
+	}
+	if (options?.includeArchived) {
+		params.set("include_archived", "true");
+	}
+	const qs = params.toString();
+	const url = qs ? `${API_BASE}/tasks?${qs}` : `${API_BASE}/tasks`;
 	const res = await fetch(url);
 	if (!res.ok) throw await parseApiError(res, "Failed to fetch tasks");
 	const data = await res.json();

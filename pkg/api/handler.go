@@ -85,7 +85,18 @@ func (s *Server) handleSaveConfig(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleGetTasks(w http.ResponseWriter, r *http.Request) {
 	rawQuery := strings.TrimSpace(r.URL.Query().Get("q"))
 	query := strings.ToLower(rawQuery)
-	tasks, err := s.store.GetVisibleTasks()
+	includeHidden := r.URL.Query().Get("include_hidden") == "true"
+	includeArchived := r.URL.Query().Get("include_archived") == "true"
+
+	var (
+		tasks []*model.Task
+		err   error
+	)
+	if !includeHidden && !includeArchived {
+		tasks, err = s.store.GetVisibleTasks()
+	} else {
+		tasks, err = s.store.GetTasksByColumnFilter(includeHidden, includeArchived)
+	}
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return

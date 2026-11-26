@@ -37,18 +37,34 @@ export const translations = {
 
 		// Board & Columns
 		"board.noColumns":
-			"表示可能なカラムがありません。「設定」からカラムを追加または表示に切り替えてください。",
+			"表示可能なカラムがありません。「設定」からカラムを追加・表示・復元してください。",
 		"board.moveLeft": "左へ移動",
 		"board.moveRight": "右へ移動",
 		"column.addCard": "カードを追加",
 		"column.addCardTooltip": "このカラムにカードを追加",
-		"column.settingsMenu": "カラム表示設定",
+		"column.settingsMenu": "カラムメニュー",
 		"column.showCards": "カード一覧を表示",
 		"column.showCardDetails": "カードの詳細を表示",
 		"column.showCardDetailsTooltip":
 			"OFFにするとタイトルのみ表示（本文・タグ・カスタムフィールド・サブタスク・フッターを非表示）",
 		"column.cardsHiddenBadge": "カード一覧を非表示中",
 		"column.showingSearchResults": "検索ヒットのため一時表示中",
+		"column.moveLeft": "左へ移動",
+		"column.moveRight": "右へ移動",
+		"column.moveUp": "上へ移動",
+		"column.moveDown": "下へ移動",
+		"column.moveLaneLeft": "列ごと左へ移動",
+		"column.moveLaneRight": "列ごと右へ移動",
+		"column.stackLeft": "左の列にスタック",
+		"column.stackRight": "右の列にスタック",
+		"column.unstack": "独立した列に分離",
+		"column.archive": "カラムをアーカイブ",
+		"column.archiveConfirm":
+			'カラム "{name}" をアーカイブしてもよろしいですか？\n（カードのデータは削除されず、「設定」からいつでも復元できます）',
+		"column.dragToReorder": '"{name}" をドラッグして並び替え',
+		"column.dragLaneToReorder": "列ごとドラッグして左右に並び替え",
+		"column.archivedBadge": "アーカイブ済み",
+		"column.hiddenBadge": "非表示",
 
 		// Column & Status Manager Modal
 		"configModal.title": "ボード＆プリセットフィールド設定",
@@ -114,6 +130,19 @@ export const translations = {
 		"configModal.columnNamePlaceholder": "カラム名（例: To Do）",
 		"configModal.visible": "表示",
 		"configModal.hidden": "非表示",
+		"configModal.visibleTooltip":
+			"ボード上の一時的な表示/非表示を切り替えます（非表示でもMCPやタスク編集からは利用可能）",
+		"configModal.archiveColumn": "カラムをアーカイブ",
+		"configModal.archivedSectionTitle": "アーカイブ済みカラム ({count})",
+		"configModal.archivedSectionDesc":
+			"アーカイブされたカラムはボード・通常検索・MCPから除外されますが、カードのデータは保持されています。",
+		"configModal.archivedAt": "アーカイブ日時: {date}",
+		"configModal.taskCount": "{count} 件",
+		"configModal.restoreColumn": "復元",
+		"configModal.stackedBadge": "スタック #{index}",
+		"configModal.unstackColumn": "分離",
+		"configModal.noActiveColumns":
+			"アクティブなカラムがありません。新しいカラムを追加するか、アーカイブから復元してください。",
 		"configModal.deleteColumnConfirm":
 			'カラム "{name}" を削除してもよろしいですか？',
 		"configModal.atLeastOneColumn": "ボードには最低1つのカラムが必要です。",
@@ -361,6 +390,7 @@ export const translations = {
 		"common.checklistUpdateFailed": "チェック項目の更新に失敗しました",
 		"common.configSaved": "ボード設定を保存しました",
 		"common.configSaveFailed": "ボード設定の保存に失敗しました",
+		"common.columnArchived": 'カラム "{name}" をアーカイブしました',
 		"common.themeApplied": "テーマを適用しました",
 		"common.rebuilt": "データベースを再構築しました",
 		"common.rebuiltWithCount": "データベースを再構築しました（{count} 件）",
@@ -380,18 +410,34 @@ export const translations = {
 
 		// Board & Columns
 		"board.noColumns":
-			"No visible columns. Please add or unhide columns in Config.",
+			"No visible columns. Please add, unhide, or restore columns in Config.",
 		"board.moveLeft": "Move Left",
 		"board.moveRight": "Move Right",
 		"column.addCard": "Add Card",
 		"column.addCardTooltip": "Add card to this column",
-		"column.settingsMenu": "Column display settings",
+		"column.settingsMenu": "Column menu",
 		"column.showCards": "Show card list",
 		"column.showCardDetails": "Show card details",
 		"column.showCardDetailsTooltip":
 			"When off, shows only the card title (hides summary, tags, custom fields, subtasks, and footer)",
 		"column.cardsHiddenBadge": "Card list hidden",
 		"column.showingSearchResults": "Showing matching search results",
+		"column.moveLeft": "Move left",
+		"column.moveRight": "Move right",
+		"column.moveUp": "Move up",
+		"column.moveDown": "Move down",
+		"column.moveLaneLeft": "Move stack left",
+		"column.moveLaneRight": "Move stack right",
+		"column.stackLeft": "Stack into left lane",
+		"column.stackRight": "Stack into right lane",
+		"column.unstack": "Split into standalone column",
+		"column.archive": "Archive column",
+		"column.archiveConfirm":
+			'Are you sure you want to archive column "{name}"?\n(Cards are preserved and you can restore the column anytime from Config.)',
+		"column.dragToReorder": 'Drag to reorder "{name}"',
+		"column.dragLaneToReorder": "Drag to reorder stacked lane",
+		"column.archivedBadge": "Archived",
+		"column.hiddenBadge": "Hidden",
 
 		// Column & Status Manager Modal
 		"configModal.title": "Board & Field Presets Settings",
@@ -454,6 +500,19 @@ export const translations = {
 		"configModal.columnNamePlaceholder": "Column Name (e.g. To Do)",
 		"configModal.visible": "Visible",
 		"configModal.hidden": "Hidden",
+		"configModal.visibleTooltip":
+			"Temporarily show or hide this column on the board (tasks remain active for MCP and editing)",
+		"configModal.archiveColumn": "Archive column",
+		"configModal.archivedSectionTitle": "Archived Columns ({count})",
+		"configModal.archivedSectionDesc":
+			"Archived columns are hidden from the board, search, and MCP, while preserving all card files.",
+		"configModal.archivedAt": "Archived: {date}",
+		"configModal.taskCount": "{count} cards",
+		"configModal.restoreColumn": "Restore",
+		"configModal.stackedBadge": "Stack #{index}",
+		"configModal.unstackColumn": "Split",
+		"configModal.noActiveColumns":
+			"No active columns. Add a new column or restore one from the archive below.",
 		"configModal.deleteColumnConfirm":
 			'Are you sure you want to delete column "{name}"?',
 		"configModal.atLeastOneColumn":
@@ -702,6 +761,7 @@ export const translations = {
 		"common.checklistUpdateFailed": "Failed to update checklist item",
 		"common.configSaved": "Board configuration saved",
 		"common.configSaveFailed": "Failed to save configuration",
+		"common.columnArchived": 'Archived column "{name}"',
 		"common.themeApplied": "Theme applied",
 		"common.rebuilt": "Database rebuilt successfully",
 		"common.rebuiltWithCount": "Database rebuilt successfully ({count} tasks)",
