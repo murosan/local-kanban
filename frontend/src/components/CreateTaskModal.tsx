@@ -1,8 +1,12 @@
 import { Columns, Plus, X } from "lucide-react";
 import type React from "react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "../i18n/useI18n";
 import type { Column } from "../types/task";
+import {
+	getActiveColumns,
+	getDefaultActiveColumnId,
+} from "../utils/columnSettings";
 
 interface CreateTaskModalProps {
 	isOpen: boolean;
@@ -26,11 +30,22 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
 	const inputRef = useRef<HTMLInputElement>(null);
 	const prevIsOpenRef = useRef(false);
 
+	const activeColumns = useMemo(
+		() =>
+			getActiveColumns(columns).sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
+		[columns],
+	);
+
 	useEffect(() => {
 		// Only reset form state when the modal transitions from closed to open
 		if (isOpen && !prevIsOpenRef.current) {
 			setTitle("");
-			const defaultCol = initialColumnId || columns[0]?.id || "";
+			const isInitialActive = activeColumns.some(
+				(col) => col.id === initialColumnId,
+			);
+			const defaultCol = isInitialActive
+				? initialColumnId
+				: getDefaultActiveColumnId(columns);
 			setColumnId(defaultCol);
 			setIsSubmitting(false);
 
@@ -42,7 +57,7 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
 			}, 50);
 		}
 		prevIsOpenRef.current = isOpen;
-	}, [isOpen, initialColumnId, columns]);
+	}, [isOpen, initialColumnId, columns, activeColumns]);
 
 	if (!isOpen) return null;
 
@@ -54,7 +69,7 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
 		try {
 			await onSave({
 				title: title.trim(),
-				column_id: columnId || columns[0]?.id || "",
+				column_id: columnId || getDefaultActiveColumnId(columns),
 			});
 		} catch (err) {
 			console.error("Failed to create task:", err);
@@ -129,13 +144,15 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
 								onChange={(e) => setColumnId(e.target.value)}
 								className="w-full pl-9 pr-3 py-2 text-sm bg-[var(--bg-input)] border border-[var(--border-color)] rounded-xl text-[var(--text-primary)] focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all appearance-none cursor-pointer font-medium"
 							>
-								{columns.map((col) => (
+								{activeColumns.map((col) => (
 									<option
 										key={col.id}
 										value={col.id}
 										className="bg-[var(--modal-bg)] text-[var(--text-primary)]"
 									>
-										{col.name}
+										{col.visible === false
+											? `${col.name} (${t("column.hiddenBadge")})`
+											: col.name}
 									</option>
 								))}
 							</select>

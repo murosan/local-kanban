@@ -228,3 +228,40 @@ func TestCloneCustomFields(t *testing.T) {
 		t.Errorf("mutating cloned checklist leaked into original: %#v", origItem)
 	}
 }
+
+func TestColumnStatusHelpersAndNormalizeBoardLanes(t *testing.T) {
+	cols := []Column{
+		{ID: "col-a", Name: "A", Visible: true, Order: 1},
+		{ID: "col-b", Name: "B", Visible: false, Order: 2},
+		{ID: "col-c", Name: "C", Visible: true, Archived: true, Order: 3},
+		{ID: "col-d", Name: "D", Visible: true, Order: 4},
+	}
+
+	if !cols[0].IsActive() || !cols[0].IsBoardVisible() {
+		t.Errorf("expected col-a to be active and board-visible")
+	}
+	if !cols[1].IsActive() || cols[1].IsBoardVisible() {
+		t.Errorf("expected col-b to be active and not board-visible")
+	}
+	if cols[2].IsActive() || cols[2].IsBoardVisible() {
+		t.Errorf("expected col-c to be archived (neither active nor board-visible)")
+	}
+
+	lanes := []BoardLane{
+		{ID: "lane-stack", ColumnIDs: []string{"col-a", "col-c", "col-deleted", "col-a", "col-b"}},
+		{ID: "lane-empty", ColumnIDs: []string{"col-c"}},
+	}
+
+	normalized := NormalizeBoardLanes(cols, lanes)
+	if len(normalized) != 2 {
+		t.Fatalf("expected 2 normalized lanes, got %d: %+v", len(normalized), normalized)
+	}
+	if normalized[0].ID != "lane-stack" || len(normalized[0].ColumnIDs) != 2 ||
+		normalized[0].ColumnIDs[0] != "col-a" || normalized[0].ColumnIDs[1] != "col-b" {
+		t.Errorf("unexpected first lane: %+v", normalized[0])
+	}
+	if normalized[1].ID != "lane-col-d" || len(normalized[1].ColumnIDs) != 1 ||
+		normalized[1].ColumnIDs[0] != "col-d" {
+		t.Errorf("unexpected second lane: %+v", normalized[1])
+	}
+}

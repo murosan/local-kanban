@@ -100,17 +100,21 @@ func (s *Store) readBoardConfigUnlocked() (*model.BoardConfig, bool, error) {
 	}
 
 	type legacyColumn struct {
-		ID      string `json:"id"`
-		Name    string `json:"name"`
-		Title   string `json:"title"`
-		Visible bool   `json:"visible"`
-		Color   string `json:"color,omitempty"`
-		Order   int    `json:"order,omitempty"`
+		ID         string                `json:"id"`
+		Name       string                `json:"name"`
+		Title      string                `json:"title"`
+		Visible    bool                  `json:"visible"`
+		Archived   bool                  `json:"archived,omitempty"`
+		ArchivedAt *time.Time            `json:"archived_at,omitempty"`
+		Color      string                `json:"color,omitempty"`
+		Order      int                   `json:"order,omitempty"`
+		Settings   *model.ColumnSettings `json:"settings,omitempty"`
 	}
 
 	type legacyBoardConfig struct {
 		Version      int                    `json:"version"`
 		Columns      []legacyColumn         `json:"columns"`
+		Lanes        []model.BoardLane      `json:"lanes,omitempty"`
 		CustomFields []model.CustomFieldDef `json:"custom_fields,omitempty"`
 		Theme        *model.ThemeConfig     `json:"theme,omitempty"`
 		Language     string                 `json:"language,omitempty"`
@@ -131,17 +135,26 @@ func (s *Store) readBoardConfigUnlocked() (*model.BoardConfig, bool, error) {
 			needsMigration = true
 		}
 		columns = append(columns, model.Column{
-			ID:      col.ID,
-			Name:    name,
-			Visible: col.Visible,
-			Color:   col.Color,
-			Order:   col.Order,
+			ID:         col.ID,
+			Name:       name,
+			Visible:    col.Visible,
+			Archived:   col.Archived,
+			ArchivedAt: col.ArchivedAt,
+			Color:      col.Color,
+			Order:      col.Order,
+			Settings:   col.Settings,
 		})
+	}
+
+	var normalizedLanes []model.BoardLane
+	if len(legCfg.Lanes) > 0 {
+		normalizedLanes = model.NormalizeBoardLanes(columns, legCfg.Lanes)
 	}
 
 	cfg := &model.BoardConfig{
 		Version:      model.CurrentBoardConfigVersion,
 		Columns:      columns,
+		Lanes:        normalizedLanes,
 		CustomFields: legCfg.CustomFields,
 		Theme:        legCfg.Theme,
 		Language:     legCfg.Language,
@@ -159,6 +172,9 @@ func (s *Store) readBoardConfigUnlocked() (*model.BoardConfig, bool, error) {
 
 func (s *Store) saveBoardConfigLocked(cfg *model.BoardConfig) error {
 	cfg.Version = model.CurrentBoardConfigVersion
+	if len(cfg.Lanes) > 0 {
+		cfg.Lanes = model.NormalizeBoardLanes(cfg.Columns, cfg.Lanes)
+	}
 	configPath := filepath.Join(s.dir, ".kanban_config.json")
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
@@ -179,25 +195,47 @@ func (s *Store) SaveBoardConfig(cfg *model.BoardConfig) error {
 	return s.saveBoardConfigLocked(cfg)
 }
 
-func (s *Store) getVisibleColumnIDsUnlocked() ([]string, error) {
+func (s *Store) getFilteredColumnIDsUnlocked(
+	includeHidden bool,
+	includeArchived bool,
+) ([]string, error) {
 	cfg, _, err := s.readBoardConfigUnlocked()
 	if err != nil {
 		return nil, err
 	}
 	ids := make([]string, 0, len(cfg.Columns))
 	for _, col := range cfg.Columns {
-		if col.Visible {
-			ids = append(ids, col.ID)
+		if !includeArchived && col.Archived {
+			continue
 		}
+		if !includeHidden && !col.Visible {
+			continue
+		}
+		ids = append(ids, col.ID)
 	}
 	return ids, nil
 }
 
-// GetVisibleColumnIDs returns column IDs that are defined and visible in BoardConfig.
+func (s *Store) getVisibleColumnIDsUnlocked() ([]string, error) {
+	return s.getFilteredColumnIDsUnlocked(false, false)
+}
+
+func (s *Store) getActiveColumnIDsUnlocked() ([]string, error) {
+	return s.getFilteredColumnIDsUnlocked(true, false)
+}
+
+// GetVisibleColumnIDs returns column IDs that are active (not archived) and visible on the board.
 func (s *Store) GetVisibleColumnIDs() ([]string, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.getVisibleColumnIDsUnlocked()
+}
+
+// GetActiveColumnIDs returns column IDs that are active (not archived), regardless of board visibility.
+func (s *Store) GetActiveColumnIDs() ([]string, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.getActiveColumnIDsUnlocked()
 }
 
 func sortTasksByRank(tasks []*model.Task) {
@@ -235,23 +273,22 @@ func (s *Store) readTasksFromDirUnlocked(filter func(*model.Task) bool) ([]*mode
 	return tasks, nil
 }
 
-func (s *Store) getTasksByColumnIDsUnlocked(columnIDs []string) ([]*model.Task, error) {
-	if len(columnIDs) == 0 {
+func (s *Store) getTasksByAllowedColumnIDsUnlocked(
+	columnIDs []string,
+	allowedIDs []string,
+) ([]*model.Task, error) {
+	if len(columnIDs) == 0 || len(allowedIDs) == 0 {
 		return []*model.Task{}, nil
 	}
 
-	visibleIDs, err := s.getVisibleColumnIDsUnlocked()
-	if err != nil {
-		return nil, err
-	}
-	visibleMap := make(map[string]bool, len(visibleIDs))
-	for _, id := range visibleIDs {
-		visibleMap[id] = true
+	allowedMap := make(map[string]bool, len(allowedIDs))
+	for _, id := range allowedIDs {
+		allowedMap[id] = true
 	}
 
 	targetIDs := make([]string, 0, len(columnIDs))
 	for _, id := range columnIDs {
-		if visibleMap[id] {
+		if allowedMap[id] {
 			targetIDs = append(targetIDs, id)
 		}
 	}
@@ -285,6 +322,14 @@ func (s *Store) getTasksByColumnIDsUnlocked(columnIDs []string) ([]*model.Task, 
 	})
 }
 
+func (s *Store) getTasksByColumnIDsUnlocked(columnIDs []string) ([]*model.Task, error) {
+	visibleIDs, err := s.getVisibleColumnIDsUnlocked()
+	if err != nil {
+		return nil, err
+	}
+	return s.getTasksByAllowedColumnIDsUnlocked(columnIDs, visibleIDs)
+}
+
 // GetColumnTasks returns all tasks belonging to a column ID regardless of column visibility,
 // sorted by rank ascending. Intended for internal rank calculation and column rebalancing.
 func (s *Store) GetColumnTasks(columnID string) ([]*model.Task, error) {
@@ -308,14 +353,14 @@ func (s *Store) GetColumnTasks(columnID string) ([]*model.Task, error) {
 }
 
 // GetTasksByColumnIDs reads and parses task markdown files matching the specified column IDs.
-// It leverages SQLite cache index when available and excludes non-visible and deleted column tasks.
+// It leverages SQLite cache index when available and excludes non-visible, archived, and deleted column tasks.
 func (s *Store) GetTasksByColumnIDs(columnIDs []string) ([]*model.Task, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.getTasksByColumnIDsUnlocked(columnIDs)
 }
 
-// GetVisibleTasks returns tasks belonging to visible and non-deleted columns.
+// GetVisibleTasks returns tasks belonging to board-visible, active (non-archived), and non-deleted columns.
 func (s *Store) GetVisibleTasks() ([]*model.Task, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -323,10 +368,46 @@ func (s *Store) GetVisibleTasks() ([]*model.Task, error) {
 	if err != nil {
 		return nil, err
 	}
-	return s.getTasksByColumnIDsUnlocked(colIDs)
+	return s.getTasksByAllowedColumnIDsUnlocked(colIDs, colIDs)
 }
 
-// GetTasksByColumnID returns tasks belonging to a single column ID.
+// GetActiveTasks returns tasks belonging to all active (non-archived) columns, including temporarily hidden columns.
+func (s *Store) GetActiveTasks() ([]*model.Task, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	colIDs, err := s.getActiveColumnIDsUnlocked()
+	if err != nil {
+		return nil, err
+	}
+	return s.getTasksByAllowedColumnIDsUnlocked(colIDs, colIDs)
+}
+
+// GetActiveTasksByColumnID returns tasks belonging to a single active (non-archived) column ID.
+func (s *Store) GetActiveTasksByColumnID(columnID string) ([]*model.Task, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	activeIDs, err := s.getActiveColumnIDsUnlocked()
+	if err != nil {
+		return nil, err
+	}
+	return s.getTasksByAllowedColumnIDsUnlocked([]string{columnID}, activeIDs)
+}
+
+// GetTasksByColumnFilter returns tasks belonging to columns matching the visibility/archive filter.
+func (s *Store) GetTasksByColumnFilter(
+	includeHidden bool,
+	includeArchived bool,
+) ([]*model.Task, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	colIDs, err := s.getFilteredColumnIDsUnlocked(includeHidden, includeArchived)
+	if err != nil {
+		return nil, err
+	}
+	return s.getTasksByAllowedColumnIDsUnlocked(colIDs, colIDs)
+}
+
+// GetTasksByColumnID returns tasks belonging to a single board-visible, active column ID.
 func (s *Store) GetTasksByColumnID(columnID string) ([]*model.Task, error) {
 	return s.GetTasksByColumnIDs([]string{columnID})
 }

@@ -50,7 +50,17 @@ func TestConfigRoutes(t *testing.T) {
 		t.Errorf("expected column name 'Todo', got '%s'", cfg.Columns[0].Name)
 	}
 
-	// 2. PUT /api/config (Save theme, custom columns & custom fields)
+	// 2. PUT /api/config (Save theme, custom columns, column settings & custom fields)
+	falseVal := false
+	trueVal := true
+	cfg.Columns[0].Settings = &model.ColumnSettings{
+		ShowCards:       &falseVal,
+		ShowCardDetails: &trueVal,
+	}
+	cfg.Columns[1].Settings = &model.ColumnSettings{
+		ShowCards:       &trueVal,
+		ShowCardDetails: &falseVal,
+	}
 	updatedCfg := model.BoardConfig{
 		Columns: cfg.Columns,
 		CustomFields: []model.CustomFieldDef{
@@ -97,6 +107,23 @@ func TestConfigRoutes(t *testing.T) {
 	}
 	if len(cfg2.CustomFields) != 1 || cfg2.CustomFields[0].Name != "Priority" {
 		t.Errorf("expected 1 custom field 'Priority', got %+v", cfg2.CustomFields)
+	}
+	if cfg2.Columns[0].Settings == nil || cfg2.Columns[0].Settings.IsShowCards() ||
+		!cfg2.Columns[0].Settings.IsShowCardDetails() {
+		t.Errorf(
+			"expected column 0 settings show_cards=false, show_card_details=true, got %+v",
+			cfg2.Columns[0].Settings,
+		)
+	}
+	if cfg2.Columns[1].Settings == nil || !cfg2.Columns[1].Settings.IsShowCards() ||
+		cfg2.Columns[1].Settings.IsShowCardDetails() {
+		t.Errorf(
+			"expected column 1 settings show_cards=true, show_card_details=false, got %+v",
+			cfg2.Columns[1].Settings,
+		)
+	}
+	if !cfg2.Columns[2].Settings.IsShowCards() || !cfg2.Columns[2].Settings.IsShowCardDetails() {
+		t.Errorf("expected column 2 default settings to be true, got %+v", cfg2.Columns[2].Settings)
 	}
 }
 
@@ -2048,5 +2075,76 @@ func TestDuplicateSubtaskAndErrors(t *testing.T) {
 	mux.ServeHTTP(w400, req400)
 	if w400.Code != http.StatusBadRequest {
 		t.Errorf("expected 400 for malformed JSON, got %d", w400.Code)
+	}
+}
+
+func TestArchivedColumnsAndLanesAPI(t *testing.T) {
+	tempDir := t.TempDir()
+	store, err := markdown.NewStore(tempDir)
+	if err != nil {
+		t.Fatalf("failed to create store: %v", err)
+	}
+
+	server := NewServer(store, nil)
+	mux := http.NewServeMux()
+	server.RegisterRoutes(mux)
+
+	cfg := model.BoardConfig{
+		Version: model.CurrentBoardConfigVersion,
+		Columns: []model.Column{
+			{ID: "col-todo", Name: "Todo", Visible: true, Order: 1},
+			{ID: "col-hidden", Name: "Hidden", Visible: false, Order: 2},
+			{ID: "col-archived", Name: "Archived", Visible: true, Archived: true, Order: 3},
+		},
+		Lanes: []model.BoardLane{
+			{ID: "lane-main", ColumnIDs: []string{"col-todo", "col-hidden", "col-archived"}},
+		},
+	}
+
+	body, _ := json.Marshal(cfg)
+	reqPut := httptest.NewRequest("PUT", "/api/config", bytes.NewReader(body))
+	wPut := httptest.NewRecorder()
+	mux.ServeHTTP(wPut, reqPut)
+	if wPut.Code != http.StatusOK {
+		t.Fatalf("expected 200 PUT /api/config, got %d: %s", wPut.Code, wPut.Body.String())
+	}
+
+	var savedCfg model.BoardConfig
+	if err := json.NewDecoder(wPut.Body).Decode(&savedCfg); err != nil {
+		t.Fatalf("failed to decode saved config: %v", err)
+	}
+	if len(savedCfg.Lanes) != 1 || len(savedCfg.Lanes[0].ColumnIDs) != 2 {
+		t.Fatalf(
+			"expected archived column to be stripped from saved lanes, got %+v",
+			savedCfg.Lanes,
+		)
+	}
+
+	_ = store.SaveTask(&model.Task{Title: "Visible Task", ColumnID: "col-todo", Rank: "0|a"})
+	_ = store.SaveTask(&model.Task{Title: "Hidden Task", ColumnID: "col-hidden", Rank: "0|b"})
+	_ = store.SaveTask(&model.Task{Title: "Archived Task", ColumnID: "col-archived", Rank: "0|c"})
+
+	// Default GET /api/tasks returns only visible & non-archived tasks
+	reqDefault := httptest.NewRequest("GET", "/api/tasks", nil)
+	wDefault := httptest.NewRecorder()
+	mux.ServeHTTP(wDefault, reqDefault)
+	var defaultTasks []*model.Task
+	_ = json.NewDecoder(wDefault.Body).Decode(&defaultTasks)
+	if len(defaultTasks) != 1 || defaultTasks[0].Title != "Visible Task" {
+		t.Fatalf("expected only Visible Task from default GET /api/tasks, got %+v", defaultTasks)
+	}
+
+	// GET /api/tasks?include_hidden=true&include_archived=true returns all 3
+	reqAll := httptest.NewRequest(
+		"GET",
+		"/api/tasks?include_hidden=true&include_archived=true",
+		nil,
+	)
+	wAll := httptest.NewRecorder()
+	mux.ServeHTTP(wAll, reqAll)
+	var allTasks []*model.Task
+	_ = json.NewDecoder(wAll.Body).Decode(&allTasks)
+	if len(allTasks) != 3 {
+		t.Fatalf("expected 3 tasks with include_hidden & include_archived, got %d", len(allTasks))
 	}
 }

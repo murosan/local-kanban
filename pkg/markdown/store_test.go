@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/murosan/local-kanban/pkg/cache"
 	"github.com/murosan/local-kanban/pkg/model"
@@ -143,6 +144,99 @@ func TestBoardConfigMigration(t *testing.T) {
 	diskStr := string(diskData)
 	if diskStr == legacyConfigJSON {
 		t.Errorf("expected disk file to be updated with migrated JSON")
+	}
+}
+
+func TestBoardConfigColumnSettingsRoundTrip(t *testing.T) {
+	tmpDir := t.TempDir()
+	store, err := NewStore(tmpDir)
+	if err != nil {
+		t.Fatalf("failed to init store: %v", err)
+	}
+
+	boolPtr := func(v bool) *bool { return &v }
+
+	cfg := &model.BoardConfig{
+		Version: model.CurrentBoardConfigVersion,
+		Columns: []model.Column{
+			{
+				ID:      "col-todo",
+				Name:    "Todo",
+				Visible: true,
+				Order:   1,
+			},
+			{
+				ID:      "col-done",
+				Name:    "Done",
+				Visible: true,
+				Order:   2,
+				Settings: &model.ColumnSettings{
+					ShowCards:       boolPtr(false),
+					ShowCardDetails: boolPtr(false),
+				},
+			},
+			{
+				ID:      "col-template",
+				Name:    "Template",
+				Visible: true,
+				Order:   3,
+				Settings: &model.ColumnSettings{
+					ShowCards:       boolPtr(true),
+					ShowCardDetails: boolPtr(false),
+				},
+			},
+		},
+		Language: "ja",
+	}
+
+	if err := store.SaveBoardConfig(cfg); err != nil {
+		t.Fatalf("SaveBoardConfig failed: %v", err)
+	}
+
+	loaded, err := store.GetBoardConfig()
+	if err != nil {
+		t.Fatalf("GetBoardConfig failed: %v", err)
+	}
+
+	if len(loaded.Columns) != 3 {
+		t.Fatalf("expected 3 columns, got %d", len(loaded.Columns))
+	}
+
+	if !loaded.Columns[0].Settings.IsShowCards() ||
+		!loaded.Columns[0].Settings.IsShowCardDetails() {
+		t.Errorf("expected nil settings to default to true, got %+v", loaded.Columns[0].Settings)
+	}
+	if loaded.Columns[1].Settings == nil ||
+		loaded.Columns[1].Settings.IsShowCards() ||
+		loaded.Columns[1].Settings.IsShowCardDetails() {
+		t.Errorf(
+			"expected col-done settings to preserve false values, got %+v",
+			loaded.Columns[1].Settings,
+		)
+	}
+	if loaded.Columns[2].Settings == nil ||
+		!loaded.Columns[2].Settings.IsShowCards() ||
+		loaded.Columns[2].Settings.IsShowCardDetails() {
+		t.Errorf(
+			"expected col-template settings to preserve show_cards=true, show_card_details=false, got %+v",
+			loaded.Columns[2].Settings,
+		)
+	}
+
+	// Ensure columns with show_cards=false remain visible to task queries so counts & search work
+	doneTask := &model.Task{Title: "Finished Task", ColumnID: "col-done", Rank: "0|a"}
+	if err := store.SaveTask(doneTask); err != nil {
+		t.Fatalf("SaveTask failed: %v", err)
+	}
+	visibleTasks, err := store.GetVisibleTasks()
+	if err != nil {
+		t.Fatalf("GetVisibleTasks failed: %v", err)
+	}
+	if len(visibleTasks) != 1 || visibleTasks[0].ID != doneTask.ID {
+		t.Errorf(
+			"expected task in column with show_cards=false to remain in GetVisibleTasks, got %+v",
+			visibleTasks,
+		)
 	}
 }
 
@@ -823,5 +917,93 @@ func TestInsertSubtaskLinkAfter(t *testing.T) {
 		!reloaded.Subtasks[1].Completed ||
 		reloaded.Subtasks[2].ID != "sub-2" {
 		t.Errorf("unexpected subtask order: %+v", reloaded.Subtasks)
+	}
+}
+
+func TestArchivedColumnsAndBoardLanesPersistence(t *testing.T) {
+	tmpDir := t.TempDir()
+	store, err := NewStore(tmpDir)
+	if err != nil {
+		t.Fatalf("failed to init store: %v", err)
+	}
+
+	archivedAt := time.Date(2026, 11, 26, 12, 0, 0, 0, time.UTC)
+	cfg := &model.BoardConfig{
+		Version: model.CurrentBoardConfigVersion,
+		Columns: []model.Column{
+			{ID: "col-todo", Name: "Todo", Visible: true, Order: 1},
+			{ID: "col-hidden", Name: "Hidden", Visible: false, Order: 2},
+			{
+				ID:         "col-archived",
+				Name:       "Archived",
+				Visible:    true,
+				Archived:   true,
+				ArchivedAt: &archivedAt,
+				Order:      3,
+			},
+			{ID: "col-done", Name: "Done", Visible: true, Order: 4},
+		},
+		Lanes: []model.BoardLane{
+			{ID: "lane-1", ColumnIDs: []string{"col-todo", "col-archived", "col-hidden"}},
+		},
+	}
+	if err := store.SaveBoardConfig(cfg); err != nil {
+		t.Fatalf("SaveBoardConfig failed: %v", err)
+	}
+
+	loaded, err := store.GetBoardConfig()
+	if err != nil {
+		t.Fatalf("GetBoardConfig failed: %v", err)
+	}
+	if !loaded.Columns[2].Archived || loaded.Columns[2].ArchivedAt == nil ||
+		!loaded.Columns[2].ArchivedAt.Equal(archivedAt) {
+		t.Errorf("expected archived metadata to persist, got %+v", loaded.Columns[2])
+	}
+	// Lanes should be normalized: archived col removed, unplaced active col-done appended
+	if len(loaded.Lanes) != 2 {
+		t.Fatalf("expected 2 normalized lanes, got %d: %+v", len(loaded.Lanes), loaded.Lanes)
+	}
+	if len(loaded.Lanes[0].ColumnIDs) != 2 ||
+		loaded.Lanes[0].ColumnIDs[0] != "col-todo" ||
+		loaded.Lanes[0].ColumnIDs[1] != "col-hidden" {
+		t.Errorf("unexpected first lane: %+v", loaded.Lanes[0])
+	}
+	if len(loaded.Lanes[1].ColumnIDs) != 1 || loaded.Lanes[1].ColumnIDs[0] != "col-done" {
+		t.Errorf("unexpected second lane: %+v", loaded.Lanes[1])
+	}
+
+	_ = store.SaveTask(&model.Task{Title: "T-Todo", ColumnID: "col-todo", Rank: "0|a"})
+	_ = store.SaveTask(&model.Task{Title: "T-Hidden", ColumnID: "col-hidden", Rank: "0|b"})
+	_ = store.SaveTask(&model.Task{Title: "T-Archived", ColumnID: "col-archived", Rank: "0|c"})
+	_ = store.SaveTask(&model.Task{Title: "T-Done", ColumnID: "col-done", Rank: "0|d"})
+
+	visibleTasks, err := store.GetVisibleTasks()
+	if err != nil {
+		t.Fatalf("GetVisibleTasks failed: %v", err)
+	}
+	if len(visibleTasks) != 2 {
+		t.Fatalf("expected 2 board-visible tasks, got %d", len(visibleTasks))
+	}
+
+	activeTasks, err := store.GetActiveTasks()
+	if err != nil {
+		t.Fatalf("GetActiveTasks failed: %v", err)
+	}
+	if len(activeTasks) != 3 {
+		t.Fatalf(
+			"expected 3 active tasks (including hidden, excluding archived), got %d",
+			len(activeTasks),
+		)
+	}
+
+	allDefinedTasks, err := store.GetTasksByColumnFilter(true, true)
+	if err != nil {
+		t.Fatalf("GetTasksByColumnFilter failed: %v", err)
+	}
+	if len(allDefinedTasks) != 4 {
+		t.Fatalf(
+			"expected 4 tasks when including hidden and archived, got %d",
+			len(allDefinedTasks),
+		)
 	}
 }

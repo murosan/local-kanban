@@ -86,16 +86,16 @@ func (s *Server) registerTools() {
 	// 1. get_tasks
 	mcp.AddTool(s.mcpServer, &mcp.Tool{
 		Name:        "get_tasks",
-		Description: "Get list of tasks with optional filtering by status and tag.",
+		Description: "Get list of tasks from active (non-archived) columns with optional filtering by status and tag.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input GetTasksInput) (*mcp.CallToolResult, *GetTasksOutput, error) {
-		visibleIDs, err := s.store.GetVisibleColumnIDs()
+		activeIDs, err := s.store.GetActiveColumnIDs()
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to fetch visible columns: %w", err)
+			return nil, nil, fmt.Errorf("failed to fetch active columns: %w", err)
 		}
 
-		visibleMap := make(map[string]bool, len(visibleIDs))
-		for _, id := range visibleIDs {
-			visibleMap[id] = true
+		activeMap := make(map[string]bool, len(activeIDs))
+		for _, id := range activeIDs {
+			activeMap[id] = true
 		}
 
 		var tasks []*model.Task
@@ -105,14 +105,14 @@ func (s *Server) registerTools() {
 				return nil, nil, fmt.Errorf("failed to fetch subtasks: %w", err)
 			}
 		} else if input.Status != "" {
-			if visibleMap[input.Status] {
-				tasks, err = s.store.GetTasksByColumnID(input.Status)
+			if activeMap[input.Status] {
+				tasks, err = s.store.GetActiveTasksByColumnID(input.Status)
 				if err != nil {
 					return nil, nil, fmt.Errorf("failed to fetch tasks: %w", err)
 				}
 			}
 		} else {
-			tasks, err = s.store.GetVisibleTasks()
+			tasks, err = s.store.GetActiveTasks()
 			if err != nil {
 				return nil, nil, fmt.Errorf("failed to fetch tasks: %w", err)
 			}
@@ -121,8 +121,8 @@ func (s *Server) registerTools() {
 				for _, t := range tasks {
 					seen[t.ID] = true
 				}
-				visibleParents := tasks
-				for _, t := range visibleParents {
+				activeParents := tasks
+				for _, t := range activeParents {
 					if subs, subErr := s.store.GetSubtasksByParentID(t.ID); subErr == nil {
 						for _, sub := range subs {
 							if !seen[sub.ID] {
@@ -261,7 +261,7 @@ func (s *Server) registerTools() {
 	// 4. search_tasks_fts
 	mcp.AddTool(s.mcpServer, &mcp.Tool{
 		Name:        "search_tasks_fts",
-		Description: "Search tasks by title, content, tags, and custom fields using SQLite FTS5 full-text search.",
+		Description: "Search tasks in active (non-archived) columns by title, content, tags, and custom fields using SQLite FTS5 full-text search.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input SearchTasksInput) (*mcp.CallToolResult, *SearchTasksOutput, error) {
 		if strings.TrimSpace(input.Query) == "" {
 			return nil, nil, fmt.Errorf("query is required")
@@ -272,13 +272,13 @@ func (s *Server) registerTools() {
 			return nil, nil, fmt.Errorf("search failed: %w", err)
 		}
 
-		visibleTasks, err := s.store.GetVisibleTasks()
+		activeTasks, err := s.store.GetActiveTasks()
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to load tasks: %w", err)
 		}
 
-		taskMap := make(map[string]*model.Task)
-		for _, t := range visibleTasks {
+		taskMap := make(map[string]*model.Task, len(activeTasks))
+		for _, t := range activeTasks {
 			taskMap[t.ID] = t
 		}
 
@@ -287,7 +287,7 @@ func (s *Server) registerTools() {
 			if t, ok := taskMap[id]; ok {
 				matched = append(matched, t)
 			} else if t, err := s.store.GetTaskByID(id); err == nil && t != nil && t.ParentID != "" {
-				if _, parentVisible := taskMap[t.ParentID]; parentVisible {
+				if _, parentActive := taskMap[t.ParentID]; parentActive {
 					matched = append(matched, t)
 				}
 			}

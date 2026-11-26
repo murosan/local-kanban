@@ -376,18 +376,133 @@ type ThemeConfig struct {
 
 const CurrentBoardConfigVersion = 2
 
+type BoardLane struct {
+	ID        string   `json:"id"         yaml:"id"`
+	ColumnIDs []string `json:"column_ids" yaml:"column_ids"`
+}
+
 type BoardConfig struct {
 	Version      int              `json:"version"`
 	Columns      []Column         `json:"columns"`
+	Lanes        []BoardLane      `json:"lanes,omitempty"`
 	CustomFields []CustomFieldDef `json:"custom_fields,omitempty"`
 	Theme        *ThemeConfig     `json:"theme,omitempty"`
 	Language     string           `json:"language,omitempty"`
 }
 
+type ColumnSettings struct {
+	ShowCards       *bool `json:"show_cards,omitempty"        yaml:"show_cards,omitempty"`
+	ShowCardDetails *bool `json:"show_card_details,omitempty" yaml:"show_card_details,omitempty"`
+}
+
+func (s *ColumnSettings) IsShowCards() bool {
+	if s == nil || s.ShowCards == nil {
+		return true
+	}
+	return *s.ShowCards
+}
+
+func (s *ColumnSettings) IsShowCardDetails() bool {
+	if s == nil || s.ShowCardDetails == nil {
+		return true
+	}
+	return *s.ShowCardDetails
+}
+
 type Column struct {
-	ID      string `json:"id"              yaml:"id"`
-	Name    string `json:"name"            yaml:"name"`
-	Visible bool   `json:"visible"         yaml:"visible"`
-	Color   string `json:"color,omitempty" yaml:"color,omitempty"`
-	Order   int    `json:"order,omitempty" yaml:"order,omitempty"`
+	ID         string          `json:"id"                    yaml:"id"`
+	Name       string          `json:"name"                  yaml:"name"`
+	Visible    bool            `json:"visible"               yaml:"visible"`
+	Archived   bool            `json:"archived,omitempty"    yaml:"archived,omitempty"`
+	ArchivedAt *time.Time      `json:"archived_at,omitempty" yaml:"archived_at,omitempty"`
+	Color      string          `json:"color,omitempty"       yaml:"color,omitempty"`
+	Order      int             `json:"order,omitempty"       yaml:"order,omitempty"`
+	Settings   *ColumnSettings `json:"settings,omitempty"    yaml:"settings,omitempty"`
+}
+
+// IsActive reports whether the column is not archived.
+func (c Column) IsActive() bool {
+	return !c.Archived
+}
+
+// IsBoardVisible reports whether the column is active and visible on the board.
+func (c Column) IsBoardVisible() bool {
+	return c.Visible && !c.Archived
+}
+
+// NormalizeBoardLanes sanitizes board lanes against the active (non-archived) columns:
+// - Removes archived, non-existent, and duplicate column IDs.
+// - Drops lanes that end up empty.
+// - Appends any active columns not present in lanes (ordered by Column.Order) as standalone lanes.
+func NormalizeBoardLanes(columns []Column, lanes []BoardLane) []BoardLane {
+	activeColumns := make([]Column, 0, len(columns))
+	activeSet := make(map[string]bool, len(columns))
+	for _, col := range columns {
+		if col.ID == "" || col.Archived {
+			continue
+		}
+		activeColumns = append(activeColumns, col)
+		activeSet[col.ID] = true
+	}
+
+	slices.SortStableFunc(activeColumns, func(a, b Column) int {
+		if a.Order < b.Order {
+			return -1
+		}
+		if a.Order > b.Order {
+			return 1
+		}
+		return 0
+	})
+
+	usedColIDs := make(map[string]bool, len(activeColumns))
+	usedLaneIDs := make(map[string]bool, len(lanes)+len(activeColumns))
+	uniqueLaneID := func(candidate string, fallbackColID string) string {
+		id := strings.TrimSpace(candidate)
+		if id == "" {
+			id = "lane-" + fallbackColID
+		}
+		if !usedLaneIDs[id] {
+			usedLaneIDs[id] = true
+			return id
+		}
+		for suffix := 2; ; suffix++ {
+			next := fmt.Sprintf("%s-%d", id, suffix)
+			if !usedLaneIDs[next] {
+				usedLaneIDs[next] = true
+				return next
+			}
+		}
+	}
+
+	normalized := make([]BoardLane, 0, len(lanes)+len(activeColumns))
+	for _, lane := range lanes {
+		colIDs := make([]string, 0, len(lane.ColumnIDs))
+		for _, colID := range lane.ColumnIDs {
+			if activeSet[colID] && !usedColIDs[colID] {
+				usedColIDs[colID] = true
+				colIDs = append(colIDs, colID)
+			}
+		}
+		if len(colIDs) == 0 {
+			continue
+		}
+		normalized = append(normalized, BoardLane{
+			ID:        uniqueLaneID(lane.ID, colIDs[0]),
+			ColumnIDs: colIDs,
+		})
+	}
+
+	for _, col := range activeColumns {
+		if usedColIDs[col.ID] {
+			continue
+		}
+		usedColIDs[col.ID] = true
+		normalized = append(normalized, BoardLane{
+			ID:        uniqueLaneID("lane-"+col.ID, col.ID),
+			ColumnIDs: []string{col.ID},
+		})
+	}
+
+	return normalized
 }

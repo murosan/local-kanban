@@ -75,12 +75,25 @@ export interface Task {
 	completed?: boolean;
 }
 
+export interface ColumnSettings {
+	show_cards?: boolean;
+	show_card_details?: boolean;
+}
+
 export interface Column {
 	id: string;
 	name: string;
 	visible?: boolean;
+	archived?: boolean;
+	archived_at?: string;
 	color?: string;
 	order?: number;
+	settings?: ColumnSettings;
+}
+
+export interface BoardLane {
+	id: string;
+	column_ids: string[];
 }
 
 export interface ThemeConfig {
@@ -94,6 +107,7 @@ export interface ThemeConfig {
 export interface BoardConfig {
 	version?: number;
 	columns: Column[];
+	lanes?: BoardLane[];
 	custom_fields?: CustomFieldDef[];
 	theme?: ThemeConfig;
 	language?: string;

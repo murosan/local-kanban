@@ -157,17 +157,30 @@ func TestMCPGetTasksFiltering(t *testing.T) {
 		Columns: []model.Column{
 			{ID: "col-todo", Name: "Todo", Visible: true},
 			{ID: "col-hidden", Name: "Hidden", Visible: false},
+			{ID: "col-archived", Name: "Archived", Visible: true, Archived: true},
 		},
 	}
 	if err := store.SaveBoardConfig(cfg); err != nil {
 		t.Fatalf("failed to save config: %v", err)
 	}
 
-	_ = store.SaveTask(&model.Task{Title: "Visible Task", ColumnID: "col-todo"})
-	_ = store.SaveTask(&model.Task{Title: "Hidden Task", ColumnID: "col-hidden"})
-	_ = store.SaveTask(&model.Task{Title: "Deleted Col Task", ColumnID: "col-deleted"})
+	_ = store.SaveTask(&model.Task{Title: "Visible Task", ColumnID: "col-todo", Rank: "0|a"})
+	_ = store.SaveTask(&model.Task{Title: "Hidden Task", ColumnID: "col-hidden", Rank: "0|b"})
+	_ = store.SaveTask(&model.Task{Title: "Archived Task", ColumnID: "col-archived", Rank: "0|c"})
+	_ = store.SaveTask(&model.Task{Title: "Deleted Col Task", ColumnID: "col-deleted", Rank: "0|d"})
 
-	mcpSrv, err := NewMCPServer(store, search.NewEngine(nil))
+	cacheDBPath := filepath.Join(tempDir, "cache.db")
+	sqliteCache, err := cache.NewSQLiteCache(cacheDBPath)
+	if err != nil {
+		t.Fatalf("failed to create sqlite cache: %v", err)
+	}
+	defer func() { _ = sqliteCache.Close() }()
+	store.SetCache(sqliteCache)
+	if err := store.SyncCache(); err != nil {
+		t.Fatalf("failed to sync cache: %v", err)
+	}
+
+	mcpSrv, err := NewMCPServer(store, search.NewEngine(sqliteCache))
 	if err != nil {
 		t.Fatalf("failed to create MCP server: %v", err)
 	}
@@ -190,6 +203,7 @@ func TestMCPGetTasksFiltering(t *testing.T) {
 	}
 	defer func() { _ = session.Close() }()
 
+	// 1. get_tasks includes visible and temporarily hidden (active) columns, excludes archived & deleted
 	res, err := session.CallTool(ctx, &mcpSDK.CallToolParams{
 		Name: "get_tasks",
 	})
@@ -201,11 +215,78 @@ func TestMCPGetTasksFiltering(t *testing.T) {
 	data, _ := json.Marshal(res.StructuredContent)
 	_ = json.Unmarshal(data, &output)
 
-	if len(output.Tasks) != 1 {
-		t.Fatalf("expected 1 task in get_tasks output, got %d", len(output.Tasks))
+	if len(output.Tasks) != 2 {
+		t.Fatalf(
+			"expected 2 active tasks in get_tasks output, got %d: %+v",
+			len(output.Tasks),
+			output.Tasks,
+		)
 	}
-	if output.Tasks[0].Title != "Visible Task" {
-		t.Errorf("expected task title 'Visible Task', got '%s'", output.Tasks[0].Title)
+	titles := map[string]bool{}
+	for _, task := range output.Tasks {
+		titles[task.Title] = true
+	}
+	if !titles["Visible Task"] || !titles["Hidden Task"] {
+		t.Errorf("expected Visible Task and Hidden Task, got %+v", titles)
+	}
+
+	// 2. get_tasks with explicit archived status returns empty
+	resArchived, err := session.CallTool(ctx, &mcpSDK.CallToolParams{
+		Name:      "get_tasks",
+		Arguments: map[string]any{"status": "col-archived"},
+	})
+	if err != nil {
+		t.Fatalf("CallTool get_tasks(col-archived) failed: %v", err)
+	}
+	var archivedOut GetTasksOutput
+	aData, _ := json.Marshal(resArchived.StructuredContent)
+	_ = json.Unmarshal(aData, &archivedOut)
+	if len(archivedOut.Tasks) != 0 {
+		t.Errorf("expected 0 tasks for archived status, got %d", len(archivedOut.Tasks))
+	}
+
+	// 3. get_tasks with explicit hidden status returns the hidden column's active task
+	resHidden, err := session.CallTool(ctx, &mcpSDK.CallToolParams{
+		Name:      "get_tasks",
+		Arguments: map[string]any{"status": "col-hidden"},
+	})
+	if err != nil {
+		t.Fatalf("CallTool get_tasks(col-hidden) failed: %v", err)
+	}
+	var hiddenOut GetTasksOutput
+	hData, _ := json.Marshal(resHidden.StructuredContent)
+	_ = json.Unmarshal(hData, &hiddenOut)
+	if len(hiddenOut.Tasks) != 1 || hiddenOut.Tasks[0].Title != "Hidden Task" {
+		t.Errorf("expected Hidden Task for col-hidden, got %+v", hiddenOut.Tasks)
+	}
+
+	// 4. search_tasks_fts finds Hidden Task and excludes Archived Task
+	resSearchHidden, err := session.CallTool(ctx, &mcpSDK.CallToolParams{
+		Name:      "search_tasks_fts",
+		Arguments: map[string]any{"query": "Hidden"},
+	})
+	if err != nil {
+		t.Fatalf("search_tasks_fts(Hidden) failed: %v", err)
+	}
+	var shOut SearchTasksOutput
+	shData, _ := json.Marshal(resSearchHidden.StructuredContent)
+	_ = json.Unmarshal(shData, &shOut)
+	if len(shOut.Tasks) != 1 || shOut.Tasks[0].Title != "Hidden Task" {
+		t.Errorf("expected search_tasks_fts to find Hidden Task, got %+v", shOut.Tasks)
+	}
+
+	resSearchArchived, err := session.CallTool(ctx, &mcpSDK.CallToolParams{
+		Name:      "search_tasks_fts",
+		Arguments: map[string]any{"query": "Archived"},
+	})
+	if err != nil {
+		t.Fatalf("search_tasks_fts(Archived) failed: %v", err)
+	}
+	var saOut SearchTasksOutput
+	saData, _ := json.Marshal(resSearchArchived.StructuredContent)
+	_ = json.Unmarshal(saData, &saOut)
+	if len(saOut.Tasks) != 0 {
+		t.Errorf("expected search_tasks_fts to exclude Archived Task, got %+v", saOut.Tasks)
 	}
 }
 

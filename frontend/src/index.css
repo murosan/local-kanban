@@ -664,6 +664,22 @@ html.is-dragging-item * {
 	padding-inline: 0;
 }
 
+.action-menu-item[role="menuitemcheckbox"]::before {
+	content: "";
+	flex: none;
+	inline-size: 1rem;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 0.75rem;
+	font-weight: 700;
+	color: var(--accent-color);
+}
+
+.action-menu-item[role="menuitemcheckbox"][aria-checked="true"]::before {
+	content: "✓";
+}
+
 @supports (position-area: block-end) {
 	.action-menu-popover[popover]:has(> [focusgroup~="menu"]) {
 		position-area: block-end span-inline-start;
